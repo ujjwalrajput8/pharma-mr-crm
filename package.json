@@ -1,0 +1,29 @@
+{
+  "name": "pharma-mr-crm",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "client": "npm run dev --prefix client",
+    "server": "npm run dev --prefix server",
+    "dev": "concurrently \"npm run client\" \"npm run server\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ujjwalrajput8/pharma-mr-crm.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ujjwalrajput8/pharma-mr-crm/issues"
+  },
+  "homepage": "https://github.com/ujjwalrajput8/pharma-mr-crm#readme",
+  "devDependencies": {
+    "concurrently": "^10.0.4"
+  }
+}
