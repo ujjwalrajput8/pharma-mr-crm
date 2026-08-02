@@ -4,19 +4,18 @@ import { useAuth } from '@/store/AuthContext';
 import { cn } from '@/utils/cn';
 
 export function Sidebar() {
-  const { canAny, user } = useAuth();
+  const { canAny } = useAuth();
   const items = NAV_ITEMS.filter((item) => canAny(item.permissions));
 
   return (
     <aside className="flex h-full w-72 shrink-0 flex-col bg-[var(--color-sidebar)] text-[var(--color-sidebar-ink)]">
       <div className="border-b border-white/10 px-5 py-6">
-        <p className="text-[11px] uppercase tracking-[0.22em] text-teal-200/80">Pharma MR</p>
-        <h1 className="mt-2 text-xl font-semibold text-white">Management System</h1>
-        <div className="mt-4 rounded-xl bg-white/5 px-3 py-2 text-sm">
-          <p className="text-teal-100/70">Signed in</p>
-          <p className="font-medium text-white">{user?.fullName}</p>
-          <p className="text-xs text-teal-100/70">{user?.role}</p>
-        </div>
+        <img
+          src="/jovance-logo-dark.png"
+          alt="Jovance Laboratories Pvt. Ltd."
+          className="h-16 w-auto max-w-full object-contain"
+        />
+        <p className="mt-3 text-xs tracking-wide text-teal-100/70 uppercase">Pharma MR CRM</p>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
@@ -41,6 +40,10 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="border-t border-white/10 px-4 py-4 text-xs text-teal-100/55">
+        © {new Date().getFullYear()} Jovance Laboratories
+      </div>
     </aside>
   );
 }

@@ -17,7 +17,7 @@ import { PasswordService } from './PasswordService';
 import { Prisma } from '../../generated/prisma/client';
 
 export interface PublicUser {
-  id: string;
+  id: number;
   email: string;
   fullName: string;
   phone: string | null;
@@ -68,12 +68,12 @@ export class UserService {
     };
   }
 
-  public async getById(id: string): Promise<PublicUser> {
+  public async getById(id: number): Promise<PublicUser> {
     const user = await this.requireMr(id);
     return this.toPublic(user);
   }
 
-  public async createMr(dto: CreateMrDto, actorId: string): Promise<PublicUser> {
+  public async createMr(dto: CreateMrDto, actorId: number): Promise<PublicUser> {
     const existing = await this.users.findByEmail(dto.email.toLowerCase());
     if (existing) {
       throw new ConflictError('A user with this email already exists');
@@ -111,7 +111,7 @@ export class UserService {
     }
   }
 
-  public async updateMr(id: string, dto: UpdateMrDto, actorId: string): Promise<PublicUser> {
+  public async updateMr(id: number, dto: UpdateMrDto, actorId: number): Promise<PublicUser> {
     await this.requireMr(id);
 
     if (dto.email) {
@@ -148,17 +148,17 @@ export class UserService {
   }
 
   public async setStatus(
-    id: string,
+    id: number,
     status: typeof UserStatuses.ACTIVE | typeof UserStatuses.INACTIVE,
-    actorId: string,
+    actorId: number,
   ): Promise<PublicUser> {
     return this.updateMr(id, { status }, actorId);
   }
 
   public async resetPassword(
-    id: string,
+    id: number,
     dto: ResetPasswordDto,
-    actorId: string,
+    actorId: number,
   ): Promise<PublicUser> {
     await this.requireMr(id);
     const passwordHash = await this.passwords.hash(dto.password);
@@ -167,7 +167,7 @@ export class UserService {
     return this.toPublic(user);
   }
 
-  public async deleteMr(id: string, actorId: string): Promise<void> {
+  public async deleteMr(id: number, actorId: number): Promise<void> {
     await this.requireMr(id);
     if (id === actorId) {
       throw new BadRequestError('You cannot delete your own account');
@@ -176,7 +176,7 @@ export class UserService {
     await this.refreshTokens.revokeAllForUser(id);
   }
 
-  private async requireMr(id: string): Promise<UserWithProfile> {
+  private async requireMr(id: number): Promise<UserWithProfile> {
     const user = await this.users.findById(id);
     if (!user) throw new NotFoundError('User not found');
     if (user.role !== AppRoles.MR) {

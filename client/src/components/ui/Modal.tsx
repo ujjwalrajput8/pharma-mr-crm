@@ -49,13 +49,13 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         className={cn(
-          'relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-[var(--color-border)] bg-white shadow-[var(--shadow-md)] animate-scale-in',
+          'relative z-10 w-full max-w-lg overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-md)] animate-scale-in',
           className,
         )}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--color-border)] px-5 py-4">
           <div>
-            <h3 className="text-lg font-semibold text-[var(--color-ink)]">{title}</h3>
+            {title ? <h3 className="text-lg font-semibold text-[var(--color-ink)]">{title}</h3> : null}
             {description ? (
               <p className="mt-1 text-sm text-[var(--color-muted)]">{description}</p>
             ) : null}

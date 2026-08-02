@@ -32,7 +32,7 @@ export class UserController {
   };
 
   public getById = async (req: Request, res: Response): Promise<void> => {
-    const user = await this.users.getById(String(req.params.id));
+    const user = await this.users.getById(Number(req.params.id));
     ApiResponse.success(res, user, 'User retrieved');
   };
 
@@ -44,26 +44,26 @@ export class UserController {
 
   public update = async (req: Request, res: Response): Promise<void> => {
     const actorId = this.requireActor(req);
-    const user = await this.users.updateMr(String(req.params.id), req.body as UpdateMrDto, actorId);
+    const user = await this.users.updateMr(Number(req.params.id), req.body as UpdateMrDto, actorId);
     ApiResponse.success(res, user, 'MR account updated');
   };
 
   public activate = async (req: Request, res: Response): Promise<void> => {
     const actorId = this.requireActor(req);
-    const user = await this.users.setStatus(String(req.params.id), UserStatuses.ACTIVE, actorId);
+    const user = await this.users.setStatus(Number(req.params.id), UserStatuses.ACTIVE, actorId);
     ApiResponse.success(res, user, 'MR account activated');
   };
 
   public deactivate = async (req: Request, res: Response): Promise<void> => {
     const actorId = this.requireActor(req);
-    const user = await this.users.setStatus(String(req.params.id), UserStatuses.INACTIVE, actorId);
+    const user = await this.users.setStatus(Number(req.params.id), UserStatuses.INACTIVE, actorId);
     ApiResponse.success(res, user, 'MR account deactivated');
   };
 
   public resetPassword = async (req: Request, res: Response): Promise<void> => {
     const actorId = this.requireActor(req);
     const user = await this.users.resetPassword(
-      String(req.params.id),
+      Number(req.params.id),
       req.body as ResetPasswordDto,
       actorId,
     );
@@ -72,11 +72,11 @@ export class UserController {
 
   public remove = async (req: Request, res: Response): Promise<void> => {
     const actorId = this.requireActor(req);
-    await this.users.deleteMr(String(req.params.id), actorId);
+    await this.users.deleteMr(Number(req.params.id), actorId);
     ApiResponse.success(res, null, 'MR account deleted');
   };
 
-  private requireActor(req: Request): string {
+  private requireActor(req: Request): number {
     if (!req.user?.id) {
       throw new UnauthorizedError('Authentication required');
     }

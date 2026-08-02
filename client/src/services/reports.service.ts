@@ -6,10 +6,23 @@ export type ReportType =
   | 'weekly'
   | 'monthly'
   | 'mr-performance'
+  | 'mr-detail'
   | 'doctor-visits'
   | 'appointments'
   | 'distributions'
-  | 'stock';
+  | 'stock'
+  | 'sales';
+
+export interface ReportFilters {
+  type: ReportType;
+  from?: string;
+  to?: string;
+  mrId?: string;
+  doctorId?: string;
+  medicineId?: string;
+  medicalStoreId?: string;
+  status?: string;
+}
 
 export interface ReportResult {
   type: ReportType;
@@ -19,12 +32,17 @@ export interface ReportResult {
 }
 
 export const reportsApi = {
-  async get(type: ReportType, from?: string, to?: string): Promise<ReportResult> {
+  async get(filters: ReportFilters): Promise<ReportResult> {
     const { data } = await api.get<ApiSuccess<ReportResult>>('/reports', {
       params: {
-        type,
-        ...(from ? { from } : {}),
-        ...(to ? { to } : {}),
+        type: filters.type,
+        ...(filters.from ? { from: filters.from } : {}),
+        ...(filters.to ? { to: filters.to } : {}),
+        ...(filters.mrId ? { mrId: filters.mrId } : {}),
+        ...(filters.doctorId ? { doctorId: filters.doctorId } : {}),
+        ...(filters.medicineId ? { medicineId: filters.medicineId } : {}),
+        ...(filters.medicalStoreId ? { medicalStoreId: filters.medicalStoreId } : {}),
+        ...(filters.status ? { status: filters.status } : {}),
       },
     });
     return data.data;

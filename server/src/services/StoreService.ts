@@ -31,22 +31,22 @@ export class StoreService {
     };
   }
 
-  public async getById(id: string) {
+  public async getById(id: number) {
     const store = await this.stores.findById(id);
     if (!store) throw new NotFoundError('Medical store not found');
     return store;
   }
 
-  public async create(dto: CreateStoreDto, actorId: string) {
+  public async create(dto: CreateStoreDto, actorId: number) {
     return this.stores.create({ ...dto, createdBy: actorId, updatedBy: actorId });
   }
 
-  public async update(id: string, dto: UpdateStoreDto, actorId: string) {
+  public async update(id: number, dto: UpdateStoreDto, actorId: number) {
     await this.getById(id);
     return this.stores.update(id, { ...dto, updatedBy: actorId });
   }
 
-  public async remove(id: string, actorId: string) {
+  public async remove(id: number, actorId: number) {
     await this.getById(id);
     await this.stores.softDelete(id, actorId);
   }

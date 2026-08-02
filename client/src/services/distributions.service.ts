@@ -2,13 +2,13 @@ import { api } from '@/api/client';
 import type { ApiSuccess } from '@/types';
 
 export interface Distribution {
-  id: string;
-  visitId: string;
-  medicineId: string;
+  id: number;
+  visitId: number;
+  medicineId: number;
   medicineName: string;
-  doctorId: string;
+  doctorId: number;
   doctorName: string;
-  mrId: string;
+  mrId: number;
   mrName: string;
   quantity: number;
   batchNumber: string | null;

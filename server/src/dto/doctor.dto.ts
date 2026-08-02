@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { idSchema } from './common.dto';
 import { RecordStatuses } from '../constants';
 
 export const createDoctorSchema = z.object({
@@ -17,7 +18,7 @@ export const createDoctorSchema = z.object({
   preferredTime: z.string().max(80).optional(),
   notes: z.string().max(2000).optional(),
   status: z.enum([RecordStatuses.ACTIVE, RecordStatuses.INACTIVE]).optional(),
-  mrId: z.string().uuid().optional(),
+  mrId: idSchema.optional(),
 });
 
 export const updateDoctorSchema = createDoctorSchema.partial();
@@ -29,7 +30,7 @@ export const listDoctorsQuerySchema = z.object({
 });
 
 export const assignMrSchema = z.object({
-  mrId: z.string().uuid(),
+  mrId: idSchema,
 });
 
 export type CreateDoctorDto = z.infer<typeof createDoctorSchema>;

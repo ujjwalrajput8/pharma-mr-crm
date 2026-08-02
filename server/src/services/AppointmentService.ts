@@ -97,7 +97,7 @@ export class AppointmentService {
     return this.toPublic(appointment);
   }
 
-  public async update(id: string, dto: UpdateAppointmentDto, actor: AuthUser) {
+  public async update(id: number, dto: UpdateAppointmentDto, actor: AuthUser) {
     const existing = await this.requireAccessible(id, actor);
 
     if (existing.status === AppointmentStatuses.COMPLETED) {
@@ -108,12 +108,19 @@ export class AppointmentService {
       throw new BadRequestError('Use complete endpoint to finish an appointment and create a visit');
     }
 
+    const dateOrTimeChanged = Boolean(dto.date || dto.time);
+    const nextStatus =
+      dto.status ??
+      (dateOrTimeChanged && existing.status === AppointmentStatuses.PENDING
+        ? AppointmentStatuses.RESCHEDULED
+        : undefined);
+
     const appointment = await this.appointments.update(id, {
       ...(dto.date ? { date: parseDateOnly(dto.date) } : {}),
       ...(dto.time ? { time: parseTime(dto.time) } : {}),
       ...(dto.purpose !== undefined ? { purpose: dto.purpose } : {}),
       ...(dto.remarks !== undefined ? { remarks: dto.remarks } : {}),
-      ...(dto.status ? { status: dto.status } : {}),
+      ...(nextStatus ? { status: nextStatus } : {}),
       ...(dto.doctorId ? { doctor: { connect: { id: dto.doctorId } } } : {}),
       ...(dto.mrId && actor.role === AppRoles.ADMIN
         ? { mr: { connect: { id: dto.mrId } } }
@@ -128,7 +135,7 @@ export class AppointmentService {
    * Mark appointment COMPLETED and create Visit (+ sample distributions).
    * Stock decreases automatically for each distributed sample.
    */
-  public async completeWithVisit(id: string, dto: CompleteAppointmentDto, actor: AuthUser) {
+  public async completeWithVisit(id: number, dto: CompleteAppointmentDto, actor: AuthUser) {
     const appointment = await this.requireAccessible(id, actor);
 
     if (appointment.status === AppointmentStatuses.CANCELLED) {
@@ -147,13 +154,22 @@ export class AppointmentService {
 
     const result = await this.prisma.$transaction(async (tx) => {
       for (const distribution of dto.distributions) {
-        const stock = await tx.stock.findUnique({ where: { medicineId: distribution.medicineId } });
-        if (!stock || stock.deletedAt) {
-          throw new NotFoundError(`Stock not found for medicine ${distribution.medicineId}`);
-        }
-        if (stock.available < distribution.quantity) {
+        const mrStock = await tx.mrStock.findUnique({
+          where: {
+            mrId_medicineId: {
+              mrId: appointment.mrId,
+              medicineId: distribution.medicineId,
+            },
+          },
+        });
+        if (!mrStock || mrStock.deletedAt) {
           throw new BadRequestError(
-            `Insufficient stock for medicine ${distribution.medicineId}. Available: ${stock.available}`,
+            `MR has no stock for medicine ${distribution.medicineId}. Admin must issue samples first.`,
+          );
+        }
+        if (mrStock.quantity < distribution.quantity) {
+          throw new BadRequestError(
+            `Insufficient MR stock for medicine ${distribution.medicineId}. Available: ${mrStock.quantity}`,
           );
         }
       }
@@ -170,6 +186,11 @@ export class AppointmentService {
         },
       });
 
+      const productRows =
+        dto.products && dto.products.length > 0
+          ? dto.products
+          : dto.medicineIds.map((medicineId) => ({ medicineId, notes: undefined as string | undefined }));
+
       const visit = await tx.visit.create({
         data: {
           appointmentId: id,
@@ -177,16 +198,20 @@ export class AppointmentService {
           mrId: appointment.mrId,
           visitDate: parseDateOnly(dto.visitDate),
           visitTime: parseTime(dto.visitTime),
+          checkInTime: dto.checkInTime ? parseTime(dto.checkInTime) : parseTime(dto.visitTime),
+          checkOutTime: dto.checkOutTime ? parseTime(dto.checkOutTime) : null,
           meetingDurationMin: dto.meetingDurationMin,
           discussionNotes: dto.discussionNotes,
           doctorFeedback: dto.doctorFeedback,
+          visitOutcome: dto.visitOutcome,
           nextFollowUp: dto.nextFollowUp ? parseDateOnly(dto.nextFollowUp) : null,
           remarks: dto.remarks,
           createdBy: actor.id,
           updatedBy: actor.id,
           products: {
-            create: dto.medicineIds.map((medicineId) => ({
-              medicineId,
+            create: productRows.map((product) => ({
+              medicineId: product.medicineId,
+              notes: product.notes,
               createdBy: actor.id,
               updatedBy: actor.id,
             })),
@@ -207,17 +232,22 @@ export class AppointmentService {
             medicineId: distribution.medicineId,
             quantity: distribution.quantity,
             batchNumber: distribution.batchNumber,
+            unit: distribution.unit,
             remarks: distribution.remarks,
             createdBy: actor.id,
             updatedBy: actor.id,
           },
         });
 
-        await tx.stock.update({
-          where: { medicineId: distribution.medicineId },
+        await tx.mrStock.update({
+          where: {
+            mrId_medicineId: {
+              mrId: appointment.mrId,
+              medicineId: distribution.medicineId,
+            },
+          },
           data: {
-            issued: { increment: distribution.quantity },
-            available: { decrement: distribution.quantity },
+            quantity: { decrement: distribution.quantity },
             updatedBy: actor.id,
           },
         });
@@ -226,9 +256,9 @@ export class AppointmentService {
           data: {
             medicineId: distribution.medicineId,
             mrId: appointment.mrId,
-            type: 'ISSUE',
+            type: 'SAMPLE',
             quantity: distribution.quantity,
-            remarks: `Sample distribution for visit ${visit.id}`,
+            remarks: `Sample given to doctor on visit ${visit.id}`,
             createdBy: actor.id,
             updatedBy: actor.id,
           },
@@ -281,7 +311,7 @@ export class AppointmentService {
     };
   }
 
-  public async remove(id: string, actor: AuthUser) {
+  public async remove(id: number, actor: AuthUser) {
     await this.requireAccessible(id, actor);
     if (actor.role === AppRoles.MR) {
       throw new ForbiddenError('Only administrators can delete appointments');
@@ -289,7 +319,7 @@ export class AppointmentService {
     await this.appointments.softDelete(id, actor.id);
   }
 
-  private async ensureDoctorAccess(doctorId: string, actor: AuthUser) {
+  private async ensureDoctorAccess(doctorId: number, actor: AuthUser) {
     const doctor = await this.doctors.findById(doctorId);
     if (!doctor) throw new NotFoundError('Doctor not found');
     if (actor.role === AppRoles.ADMIN) return;
@@ -300,7 +330,7 @@ export class AppointmentService {
     }
   }
 
-  private async requireAccessible(id: string, actor: AuthUser) {
+  private async requireAccessible(id: number, actor: AuthUser) {
     const appointment = await this.appointments.findById(id);
     if (!appointment) throw new NotFoundError('Appointment not found');
     if (actor.role === AppRoles.MR && appointment.mrId !== actor.id) {
@@ -310,9 +340,9 @@ export class AppointmentService {
   }
 
   private toPublic(appointment: {
-    id: string;
-    doctorId: string;
-    mrId: string;
+    id: number;
+    doctorId: number;
+    mrId: number;
     date: Date;
     time: Date;
     purpose?: string | null;
@@ -320,8 +350,8 @@ export class AppointmentService {
     remarks: string | null;
     createdAt: Date;
     updatedAt: Date;
-    doctor?: { id: string; fullName: string };
-    mr?: { id: string; fullName: string; email: string };
+    doctor?: { id: number; fullName: string };
+    mr?: { id: number; fullName: string; email: string };
   }) {
     return {
       id: appointment.id,

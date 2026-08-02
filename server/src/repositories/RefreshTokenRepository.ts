@@ -32,14 +32,14 @@ export class RefreshTokenRepository {
     });
   }
 
-  public revoke(id: string): Promise<RefreshToken> {
+  public revoke(id: number): Promise<RefreshToken> {
     return this.prisma.refreshToken.update({
       where: { id },
       data: { revokedAt: new Date() },
     });
   }
 
-  public revokeAllForUser(userId: string): Promise<Prisma.BatchPayload> {
+  public revokeAllForUser(userId: number): Promise<Prisma.BatchPayload> {
     return this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },

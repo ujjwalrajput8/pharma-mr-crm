@@ -26,7 +26,7 @@ export class VisitController {
 
   public remove = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
-    await this.visits.remove(String(req.params.id), actor);
+    await this.visits.remove(Number(req.params.id), actor);
     ApiResponse.success(res, null, 'Visit deleted');
   };
 

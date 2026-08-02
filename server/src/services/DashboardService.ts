@@ -19,78 +19,146 @@ export class DashboardService {
     todayStart.setUTCHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setUTCHours(23, 59, 59, 999);
-    const todayDate = new Date(todayStart.toISOString().slice(0, 10) + 'T00:00:00.000Z');
+    const todayDate = new Date(`${todayStart.toISOString().slice(0, 10)}T00:00:00.000Z`);
+    const monthStart = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth(), 1));
+    const yearStart = new Date(Date.UTC(todayDate.getUTCFullYear(), 0, 1));
+    const mrScope = actor.role === AppRoles.MR ? { mrId: actor.id } : {};
+
+    const [
+      totalMrs,
+      totalDoctors,
+      totalStores,
+      totalMedicines,
+      todaysAppointments,
+      todaysVisits,
+      pendingAppointments,
+      completedAppointments,
+      cancelledAppointments,
+      rescheduledAppointments,
+      pendingFollowUps,
+      monthlyVisits,
+      completedVisits,
+      assignedDoctors,
+      stocks,
+      distributionAgg,
+      todaysSalesAgg,
+      monthlySalesAgg,
+      yearlySalesAgg,
+      todayAttendance,
+    ] = await Promise.all([
+      this.prisma.user.count({ where: { role: AppRoles.MR, deletedAt: null } }),
+      this.prisma.doctor.count({ where: { deletedAt: null } }),
+      this.prisma.medicalStore.count({ where: { deletedAt: null } }),
+      this.prisma.medicine.count({ where: { deletedAt: null } }),
+      this.prisma.appointment.count({
+        where: { deletedAt: null, date: todayDate, ...mrScope },
+      }),
+      this.prisma.visit.count({
+        where: { deletedAt: null, visitDate: todayDate, ...mrScope },
+      }),
+      this.prisma.appointment.count({
+        where: { deletedAt: null, status: AppointmentStatuses.PENDING, ...mrScope },
+      }),
+      this.prisma.appointment.count({
+        where: { deletedAt: null, status: AppointmentStatuses.COMPLETED, ...mrScope },
+      }),
+      this.prisma.appointment.count({
+        where: { deletedAt: null, status: AppointmentStatuses.CANCELLED, ...mrScope },
+      }),
+      this.prisma.appointment.count({
+        where: { deletedAt: null, status: AppointmentStatuses.RESCHEDULED, ...mrScope },
+      }),
+      this.prisma.visit.count({
+        where: {
+          deletedAt: null,
+          nextFollowUp: { lte: todayEnd, gte: todayStart },
+          ...mrScope,
+        },
+      }),
+      this.prisma.visit.count({
+        where: { deletedAt: null, visitDate: { gte: monthStart, lte: todayEnd }, ...mrScope },
+      }),
+      this.prisma.visit.count({
+        where: { deletedAt: null, ...mrScope },
+      }),
+      actor.role === AppRoles.MR
+        ? this.prisma.doctorAssignment.count({
+            where: { deletedAt: null, mrId: actor.id, isActive: true },
+          })
+        : Promise.resolve(0),
+      this.prisma.stock.findMany({ where: { deletedAt: null } }),
+      this.prisma.medicineDistribution.aggregate({
+        where: {
+          deletedAt: null,
+          ...(actor.role === AppRoles.MR ? { mrId: actor.id } : {}),
+          distributedAt: { gte: monthStart, lte: todayEnd },
+        },
+        _sum: { quantity: true },
+      }),
+      this.prisma.sale.aggregate({
+        where: { deletedAt: null, invoiceDate: todayDate, ...mrScope },
+        _sum: { amount: true },
+      }),
+      this.prisma.sale.aggregate({
+        where: { deletedAt: null, invoiceDate: { gte: monthStart, lte: todayEnd }, ...mrScope },
+        _sum: { amount: true },
+      }),
+      this.prisma.sale.aggregate({
+        where: { deletedAt: null, invoiceDate: { gte: yearStart, lte: todayEnd }, ...mrScope },
+        _sum: { amount: true },
+      }),
+      actor.role === AppRoles.MR
+        ? this.prisma.attendance.findFirst({
+            where: { mrId: actor.id, workDate: todayDate, deletedAt: null },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    const lowStockCount = stocks.filter((s) => s.available <= s.minimumStockAlert).length;
+    const availableSampleStock = stocks.reduce((sum, s) => sum + s.available, 0);
+    const medicineDistributionQty = distributionAgg._sum.quantity ?? 0;
+    const todaysSales = Number(todaysSalesAgg._sum.amount ?? 0);
+    const monthlySales = Number(monthlySalesAgg._sum.amount ?? 0);
+    const yearlySales = Number(yearlySalesAgg._sum.amount ?? 0);
+
+    const insights =
+      actor.role === AppRoles.ADMIN
+        ? await this.buildAdminInsights(monthStart, todayEnd)
+        : await this.buildMrInsights(actor.id, monthStart, todayEnd);
 
     if (actor.role === AppRoles.ADMIN) {
-      const [
-        totalMrs,
-        totalDoctors,
-        totalStores,
-        totalMedicines,
-        todaysAppointments,
-        todaysVisits,
-        pendingAppointments,
-        stocks,
-      ] = await Promise.all([
-        this.prisma.user.count({ where: { role: AppRoles.MR, deletedAt: null } }),
-        this.prisma.doctor.count({ where: { deletedAt: null } }),
-        this.prisma.medicalStore.count({ where: { deletedAt: null } }),
-        this.prisma.medicine.count({ where: { deletedAt: null } }),
-        this.prisma.appointment.count({
-          where: { deletedAt: null, date: todayDate },
-        }),
-        this.prisma.visit.count({
-          where: { deletedAt: null, visitDate: todayDate },
-        }),
-        this.prisma.appointment.count({
-          where: { deletedAt: null, status: AppointmentStatuses.PENDING },
-        }),
-        this.prisma.stock.findMany({ where: { deletedAt: null } }),
-      ]);
-
-      const lowStockCount = stocks.filter((s) => s.available <= s.minimumStockAlert).length;
-
       return {
         role: actor.role,
         cards: {
-          totalMrs,
           totalDoctors,
-          totalStores,
-          totalMedicines,
+          totalMrs,
           todaysAppointments,
           todaysVisits,
           pendingAppointments,
+          completedAppointments,
+          cancelledAppointments,
+          rescheduledAppointments,
+          completedVisits,
+          medicineStock: availableSampleStock,
+          medicineDistribution: medicineDistributionQty,
+          monthlyVisits,
+          availableSampleStock,
+          totalStores,
+          totalMedicines,
+          pendingFollowUps,
           lowStockCount,
+          todaysSales,
+          monthlySales,
+          yearlySales,
+          companyTotalSales: yearlySales,
+        },
+        insights,
+        meta: {
+          yearStart: yearStart.toISOString().slice(0, 10),
+          monthStart: monthStart.toISOString().slice(0, 10),
         },
       };
     }
-
-    const [todaysAppointments, todaysVisits, pendingFollowUps, assignedDoctors, pendingAppointments] =
-      await Promise.all([
-        this.prisma.appointment.count({
-          where: { deletedAt: null, mrId: actor.id, date: todayDate },
-        }),
-        this.prisma.visit.count({
-          where: { deletedAt: null, mrId: actor.id, visitDate: todayDate },
-        }),
-        this.prisma.visit.count({
-          where: {
-            deletedAt: null,
-            mrId: actor.id,
-            nextFollowUp: { lte: todayEnd, gte: todayStart },
-          },
-        }),
-        this.prisma.doctorAssignment.count({
-          where: { deletedAt: null, mrId: actor.id, isActive: true },
-        }),
-        this.prisma.appointment.count({
-          where: {
-            deletedAt: null,
-            mrId: actor.id,
-            status: AppointmentStatuses.PENDING,
-          },
-        }),
-      ]);
 
     return {
       role: actor.role,
@@ -100,7 +168,151 @@ export class DashboardService {
         pendingFollowUps,
         assignedDoctors,
         pendingAppointments,
+        completedAppointments,
+        cancelledAppointments,
+        rescheduledAppointments,
+        monthlyVisits,
+        samplesRemaining: availableSampleStock,
+        completedVisits,
+        attendanceToday: todayAttendance?.checkInAt ? 1 : 0,
+        monthlyPerformance: monthlyVisits,
+        todaysSales,
+        monthlySales,
       },
+      insights,
+    };
+  }
+
+  private async buildAdminInsights(from: Date, to: Date) {
+    const [visitGroups, sampleGroups, salesByMr, salesByMedicine] = await Promise.all([
+      this.prisma.visit.groupBy({
+        by: ['mrId'],
+        where: { deletedAt: null, visitDate: { gte: from, lte: to } },
+        _count: { _all: true },
+        orderBy: { _count: { mrId: 'desc' } },
+        take: 5,
+      }),
+      this.prisma.medicineDistribution.groupBy({
+        by: ['medicineId'],
+        where: { deletedAt: null, distributedAt: { gte: from, lte: to } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 5,
+      }),
+      this.prisma.sale.groupBy({
+        by: ['mrId'],
+        where: { deletedAt: null, invoiceDate: { gte: from, lte: to } },
+        _sum: { amount: true },
+        orderBy: { _sum: { amount: 'desc' } },
+        take: 5,
+      }),
+      this.prisma.sale.groupBy({
+        by: ['medicineId'],
+        where: { deletedAt: null, invoiceDate: { gte: from, lte: to } },
+        _sum: { amount: true, quantity: true },
+        orderBy: { _sum: { amount: 'desc' } },
+        take: 5,
+      }),
+    ]);
+
+    const mrIds = [...new Set([...visitGroups.map((r) => r.mrId), ...salesByMr.map((r) => r.mrId)])];
+    const medicineIds = [
+      ...new Set([...sampleGroups.map((r) => r.medicineId), ...salesByMedicine.map((r) => r.medicineId)]),
+    ];
+    const [mrs, medicines] = await Promise.all([
+      mrIds.length
+        ? this.prisma.user.findMany({
+            where: { id: { in: mrIds } },
+            select: { id: true, fullName: true },
+          })
+        : Promise.resolve([]),
+      medicineIds.length
+        ? this.prisma.medicine.findMany({
+            where: { id: { in: medicineIds } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const mrMap = new Map(mrs.map((m) => [m.id, m.fullName]));
+    const medicineMap = new Map(medicines.map((m) => [m.id, m.name]));
+    const salesMap = new Map(salesByMr.map((r) => [r.mrId, Number(r._sum.amount ?? 0)]));
+
+    return {
+      topPerformingMrs: visitGroups.map((row) => ({
+        mrId: row.mrId,
+        fullName: mrMap.get(row.mrId) ?? 'Unknown',
+        visits: row._count._all,
+        sales: salesMap.get(row.mrId) ?? 0,
+      })),
+      topPrescribedMedicines: sampleGroups.map((row) => ({
+        medicineId: row.medicineId,
+        name: medicineMap.get(row.medicineId) ?? 'Unknown',
+        samples: row._sum.quantity ?? 0,
+      })),
+      mrWiseSales: salesByMr.map((row) => ({
+        mrId: row.mrId,
+        fullName: mrMap.get(row.mrId) ?? 'Unknown',
+        amount: Number(row._sum.amount ?? 0),
+      })),
+      medicineWiseSales: salesByMedicine.map((row) => ({
+        medicineId: row.medicineId,
+        name: medicineMap.get(row.medicineId) ?? 'Unknown',
+        amount: Number(row._sum.amount ?? 0),
+        quantity: row._sum.quantity ?? 0,
+      })),
+    };
+  }
+
+  private async buildMrInsights(mrId: number, from: Date, to: Date) {
+    const [dailyVisits, sampleTop, salesTop] = await Promise.all([
+      this.prisma.visit.groupBy({
+        by: ['visitDate'],
+        where: { deletedAt: null, mrId, visitDate: { gte: from, lte: to } },
+        _count: { _all: true },
+        orderBy: { visitDate: 'asc' },
+      }),
+      this.prisma.medicineDistribution.groupBy({
+        by: ['medicineId'],
+        where: { deletedAt: null, mrId, distributedAt: { gte: from, lte: to } },
+        _sum: { quantity: true },
+        orderBy: { _sum: { quantity: 'desc' } },
+        take: 5,
+      }),
+      this.prisma.sale.groupBy({
+        by: ['medicineId'],
+        where: { deletedAt: null, mrId, invoiceDate: { gte: from, lte: to } },
+        _sum: { amount: true },
+        orderBy: { _sum: { amount: 'desc' } },
+        take: 5,
+      }),
+    ]);
+
+    const medicineIds = [
+      ...new Set([...sampleTop.map((r) => r.medicineId), ...salesTop.map((r) => r.medicineId)]),
+    ];
+    const medicines = medicineIds.length
+      ? await this.prisma.medicine.findMany({
+          where: { id: { in: medicineIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const medicineMap = new Map(medicines.map((m) => [m.id, m.name]));
+
+    return {
+      performanceGraph: dailyVisits.map((row) => ({
+        date: row.visitDate.toISOString().slice(0, 10),
+        visits: row._count._all,
+      })),
+      topPrescribedMedicines: sampleTop.map((row) => ({
+        medicineId: row.medicineId,
+        name: medicineMap.get(row.medicineId) ?? 'Unknown',
+        samples: row._sum.quantity ?? 0,
+      })),
+      medicineWiseSales: salesTop.map((row) => ({
+        medicineId: row.medicineId,
+        name: medicineMap.get(row.medicineId) ?? 'Unknown',
+        amount: Number(row._sum.amount ?? 0),
+      })),
     };
   }
 }

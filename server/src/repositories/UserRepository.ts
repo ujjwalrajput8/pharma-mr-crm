@@ -12,7 +12,7 @@ export interface UserListParams {
 
 export type UserWithProfile = User & {
   mrProfile: {
-    id: string;
+    id: number;
     employeeCode: string;
     address: string | null;
     joiningDate: Date | null;
@@ -39,7 +39,7 @@ export class UserRepository {
     });
   }
 
-  public findById(id: string): Promise<UserWithProfile | null> {
+  public findById(id: number): Promise<UserWithProfile | null> {
     return this.prisma.user.findFirst({
       where: { id, deletedAt: null },
       include: { mrProfile: true },
@@ -53,8 +53,8 @@ export class UserRepository {
       address?: string;
       joiningDate?: Date | null;
       assignedArea?: string;
-      createdBy?: string;
-      updatedBy?: string;
+      createdBy?: number;
+      updatedBy?: number;
     };
   }): Promise<UserWithProfile> {
     return this.prisma.user.create({
@@ -72,7 +72,7 @@ export class UserRepository {
     return this.prisma.user.create({ data });
   }
 
-  public update(id: string, data: Prisma.UserUpdateInput): Promise<UserWithProfile> {
+  public update(id: number, data: Prisma.UserUpdateInput): Promise<UserWithProfile> {
     return this.prisma.user.update({
       where: { id },
       data,
@@ -80,7 +80,7 @@ export class UserRepository {
     });
   }
 
-  public async softDelete(id: string, updatedBy?: string): Promise<User> {
+  public async softDelete(id: number, updatedBy?: number): Promise<User> {
     return this.prisma.user.update({
       where: { id },
       data: {

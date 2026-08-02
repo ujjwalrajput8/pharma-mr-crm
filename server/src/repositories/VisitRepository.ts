@@ -26,7 +26,7 @@ export class VisitRepository {
     });
   }
 
-  public findById(id: string) {
+  public findById(id: number) {
     return this.prisma.visit.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -35,11 +35,14 @@ export class VisitRepository {
         products: {
           include: { medicine: { select: { id: true, name: true } } },
         },
+        distributions: {
+          include: { medicine: { select: { id: true, name: true } } },
+        },
       },
     });
   }
 
-  public softDelete(id: string, updatedBy?: string) {
+  public softDelete(id: number, updatedBy?: number) {
     return this.prisma.visit.update({
       where: { id },
       data: { deletedAt: new Date(), ...(updatedBy ? { updatedBy } : {}) },
@@ -49,8 +52,8 @@ export class VisitRepository {
   public async list(params: {
     page: number;
     limit: number;
-    mrId?: string;
-    doctorId?: string;
+    mrId?: number;
+    doctorId?: number;
   }) {
     const where: Prisma.VisitWhereInput = {
       deletedAt: null,
@@ -68,6 +71,11 @@ export class VisitRepository {
           doctor: { select: { id: true, fullName: true } },
           mr: { select: { id: true, fullName: true, email: true } },
           products: {
+            include: {
+              medicine: { select: { id: true, name: true } },
+            },
+          },
+          distributions: {
             include: { medicine: { select: { id: true, name: true } } },
           },
         },

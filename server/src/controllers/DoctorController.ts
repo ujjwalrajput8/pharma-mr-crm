@@ -31,8 +31,14 @@ export class DoctorController {
 
   public getById = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
-    const doctor = await this.doctors.getById(String(req.params.id), actor);
+    const doctor = await this.doctors.getById(Number(req.params.id), actor);
     ApiResponse.success(res, doctor, 'Doctor retrieved');
+  };
+
+  public getDetails = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const details = await this.doctors.getDetails(Number(req.params.id), actor);
+    ApiResponse.success(res, details, 'Doctor details retrieved');
   };
 
   public create = async (req: Request, res: Response): Promise<void> => {
@@ -44,7 +50,7 @@ export class DoctorController {
   public update = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
     const doctor = await this.doctors.update(
-      String(req.params.id),
+      Number(req.params.id),
       req.body as UpdateDoctorDto,
       actor,
     );
@@ -53,14 +59,14 @@ export class DoctorController {
 
   public remove = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
-    await this.doctors.remove(String(req.params.id), actor);
+    await this.doctors.remove(Number(req.params.id), actor);
     ApiResponse.success(res, null, 'Doctor deleted');
   };
 
   public assignMr = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
     const doctor = await this.doctors.assignMr(
-      String(req.params.id),
+      Number(req.params.id),
       req.body as AssignMrDto,
       actor,
     );

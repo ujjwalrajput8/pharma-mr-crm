@@ -5,8 +5,11 @@ import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { DataTable, Td } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Field';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 import { usersApi, type CreateMrPayload } from '@/services/users.service';
 
 const emptyForm: CreateMrPayload = {
@@ -22,9 +25,13 @@ const emptyForm: CreateMrPayload = {
 
 export function UsersPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateMrPayload>(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
 
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list() });
 
@@ -41,7 +48,7 @@ export function UsersPage() {
 
   const actionMutation = useMutation({
     mutationFn: async (input: {
-      id: string;
+      id: number;
       action: 'activate' | 'deactivate' | 'remove' | 'reset';
       password?: string;
     }) => {
@@ -53,6 +60,10 @@ export function UsersPage() {
     },
     onSuccess: async () => {
       setError(null);
+      setDeleteTarget(null);
+      setResetTarget(null);
+      setResetPassword('');
+      toast.success('MR updated');
       await queryClient.invalidateQueries({ queryKey: ['users'] });
     },
     onError: (err) => setError(getApiErrorMessage(err)),
@@ -129,8 +140,8 @@ export function UsersPage() {
                     variant="secondary"
                     className="!px-2.5 !py-1.5 text-xs"
                     onClick={() => {
-                      const password = window.prompt('Enter new password (min 8 chars)');
-                      if (password) actionMutation.mutate({ id: user.id, action: 'reset', password });
+                      setResetTarget({ id: user.id, name: user.fullName });
+                      setResetPassword('');
                     }}
                   >
                     Reset password
@@ -138,11 +149,7 @@ export function UsersPage() {
                   <Button
                     variant="danger"
                     className="!px-2.5 !py-1.5 text-xs"
-                    onClick={() => {
-                      if (window.confirm(`Delete ${user.fullName}?`)) {
-                        actionMutation.mutate({ id: user.id, action: 'remove' });
-                      }
-                    }}
+                    onClick={() => setDeleteTarget({ id: user.id, name: user.fullName })}
                   >
                     Delete
                   </Button>
@@ -207,11 +214,10 @@ export function UsersPage() {
             value={form.assignedArea}
             onChange={(e) => setForm((prev) => ({ ...prev, assignedArea: e.target.value }))}
           />
-          <Input
+          <DatePicker
             label="Joining date"
-            type="date"
-            value={form.joiningDate}
-            onChange={(e) => setForm((prev) => ({ ...prev, joiningDate: e.target.value }))}
+            value={form.joiningDate ?? ''}
+            onChange={(joiningDate) => setForm((prev) => ({ ...prev, joiningDate }))}
           />
           <Input
             label="Address"
@@ -219,6 +225,53 @@ export function UsersPage() {
             onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
           />
         </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        variant="delete"
+        title="Confirm Delete"
+        description={`Are you sure you want to delete MR “${deleteTarget?.name}”?`}
+        loading={actionMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() =>
+          deleteTarget && actionMutation.mutate({ id: deleteTarget.id, action: 'remove' })
+        }
+      />
+
+      <Modal
+        open={Boolean(resetTarget)}
+        onClose={() => setResetTarget(null)}
+        title="Reset Password"
+        description={`Set a new password for ${resetTarget?.name}`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setResetTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={actionMutation.isPending || resetPassword.length < 8}
+              onClick={() =>
+                resetTarget &&
+                actionMutation.mutate({
+                  id: resetTarget.id,
+                  action: 'reset',
+                  password: resetPassword,
+                })
+              }
+            >
+              {actionMutation.isPending ? 'Saving…' : 'Reset Password'}
+            </Button>
+          </>
+        }
+      >
+        <Input
+          label="New password"
+          type="password"
+          minLength={8}
+          value={resetPassword}
+          onChange={(e) => setResetPassword(e.target.value)}
+        />
       </Modal>
     </div>
   );

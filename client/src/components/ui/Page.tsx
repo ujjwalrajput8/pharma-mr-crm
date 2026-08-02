@@ -11,14 +11,16 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]">{title}</h2>
-        {description ? (
-          <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted)]">{description}</p>
-        ) : null}
+    <div className="sticky top-16 z-20 -mx-4 mb-2 border-b border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-bg)_88%,transparent)] px-4 py-4 backdrop-blur-md md:-mx-6 md:px-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]">{title}</h2>
+          {description ? (
+            <p className="mt-1 max-w-2xl text-sm text-[var(--color-muted)]">{description}</p>
+          ) : null}
+        </div>
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
   );
 }
@@ -33,7 +35,7 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-2xl border border-[var(--color-border)] bg-white shadow-[var(--shadow-sm)]',
+        'rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-sm)]',
         className,
       )}
     >

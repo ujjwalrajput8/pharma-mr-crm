@@ -28,8 +28,13 @@ export class MedicineController {
   };
 
   public getById = async (req: Request, res: Response): Promise<void> => {
-    const medicine = await this.medicines.getById(String(req.params.id));
+    const medicine = await this.medicines.getById(Number(req.params.id));
     ApiResponse.success(res, medicine, 'Medicine retrieved');
+  };
+
+  public getDetails = async (req: Request, res: Response): Promise<void> => {
+    const details = await this.medicines.getDetails(Number(req.params.id));
+    ApiResponse.success(res, details, 'Medicine details retrieved');
   };
 
   public create = async (req: Request, res: Response): Promise<void> => {
@@ -42,7 +47,7 @@ export class MedicineController {
 
   public update = async (req: Request, res: Response): Promise<void> => {
     const medicine = await this.medicines.update(
-      String(req.params.id),
+      Number(req.params.id),
       req.body as UpdateMedicineDto,
       this.requireActor(req),
     );
@@ -50,11 +55,11 @@ export class MedicineController {
   };
 
   public remove = async (req: Request, res: Response): Promise<void> => {
-    await this.medicines.remove(String(req.params.id), this.requireActor(req));
+    await this.medicines.remove(Number(req.params.id), this.requireActor(req));
     ApiResponse.success(res, null, 'Medicine deleted');
   };
 
-  private requireActor(req: Request): string {
+  private requireActor(req: Request): number {
     if (!req.user?.id) throw new UnauthorizedError('Authentication required');
     return req.user.id;
   }

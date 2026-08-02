@@ -2,16 +2,17 @@ import type { AppRole } from '../constants';
 
 /**
  * Authenticated user context attached to Express requests after JWT verification.
+ * IDs are SQL autoincrement integers.
  */
 export interface AuthUser {
-  id: string;
+  id: number;
   email: string;
   role: AppRole;
   fullName: string;
 }
 
 export interface AccessTokenPayload {
-  sub: string;
+  sub: string; // stringified numeric user id (JWT standard)
   email: string;
   role: AppRole;
   fullName: string;
@@ -32,7 +33,7 @@ export interface TokenPair {
 
 export interface LoginResult {
   user: {
-    id: string;
+    id: number;
     email: string;
     fullName: string;
     role: AppRole;

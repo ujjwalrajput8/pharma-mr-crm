@@ -42,7 +42,7 @@ export class VisitService {
     };
   }
 
-  public async remove(id: string, actor: AuthUser) {
+  public async remove(id: number, actor: AuthUser) {
     const visit = await this.visits.findById(id);
     if (!visit) throw new NotFoundError('Visit not found');
     if (actor.role === AppRoles.MR && visit.mrId !== actor.id) {
@@ -52,22 +52,32 @@ export class VisitService {
   }
 
   private toPublic(visit: {
-    id: string;
-    appointmentId?: string | null;
-    doctorId: string;
-    mrId: string;
+    id: number;
+      appointmentId?: number | null;
+    doctorId: number;
+    mrId: number;
     visitDate: Date;
     visitTime?: Date | null;
+    checkInTime?: Date | null;
+    checkOutTime?: Date | null;
     meetingDurationMin?: number | null;
     discussionNotes?: string | null;
     doctorFeedback?: string | null;
+    visitOutcome?: string | null;
     remarks: string | null;
     nextFollowUp: Date | null;
     createdAt: Date;
     updatedAt: Date;
-    doctor?: { id: string; fullName: string };
-    mr?: { id: string; fullName: string; email: string };
-    products?: Array<{ medicine: { id: string; name: string } }>;
+    doctor?: { id: number; fullName: string };
+    mr?: { id: number; fullName: string; email: string };
+    products?: Array<{ notes?: string | null; medicine: { id: number; name: string } }>;
+    distributions?: Array<{
+      id: number;
+      quantity: number;
+      batchNumber: string | null;
+      remarks: string | null;
+      medicine: { id: number; name: string };
+    }>;
   }) {
     return {
       id: visit.id,
@@ -76,14 +86,31 @@ export class VisitService {
       mrId: visit.mrId,
       visitDate: visit.visitDate.toISOString().slice(0, 10),
       visitTime: visit.visitTime ? formatTime(visit.visitTime) : null,
+      checkInTime: visit.checkInTime ? formatTime(visit.checkInTime) : null,
+      checkOutTime: visit.checkOutTime ? formatTime(visit.checkOutTime) : null,
       meetingDurationMin: visit.meetingDurationMin ?? null,
       discussionNotes: visit.discussionNotes ?? null,
       doctorFeedback: visit.doctorFeedback ?? null,
+      visitOutcome: visit.visitOutcome ?? null,
       nextFollowUp: visit.nextFollowUp ? visit.nextFollowUp.toISOString().slice(0, 10) : null,
       remarks: visit.remarks,
       doctor: visit.doctor ?? null,
       mr: visit.mr ?? null,
-      products: visit.products?.map((product) => product.medicine) ?? [],
+      products:
+        visit.products?.map((product) => ({
+          id: product.medicine.id,
+          name: product.medicine.name,
+          notes: product.notes ?? null,
+        })) ?? [],
+      distributions:
+        visit.distributions?.map((row) => ({
+          id: row.id,
+          medicineId: row.medicine.id,
+          medicineName: row.medicine.name,
+          quantity: row.quantity,
+          batchNumber: row.batchNumber,
+          remarks: row.remarks,
+        })) ?? [],
       createdAt: visit.createdAt,
       updatedAt: visit.updatedAt,
     };

@@ -18,6 +18,7 @@ const controller = DoctorController.getInstance();
 router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MR));
 
 router.get('/', validateRequest(listDoctorsQuerySchema, 'query'), asyncHandler(controller.list));
+router.get('/:id/details', asyncHandler(controller.getDetails));
 router.get('/:id', asyncHandler(controller.getById));
 
 router.post(

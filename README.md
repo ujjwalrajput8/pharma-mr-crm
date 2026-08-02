@@ -1,59 +1,44 @@
-# Pharma MR CRM
+# Pharma MR CRM — Jovance Laboratories
 
-A modern Medical Representative (MR) Management System built with React, TypeScript, Node.js, Express, Prisma, and PostgreSQL.
+Medical Representative (MR) Management System for **JOVANCE LABORATORIES PVT. LTD.**
 
-## 🚀 Tech Stack
+Built with React, TypeScript, Node.js, Express, Prisma, and PostgreSQL.
+
+## Tech Stack
 
 ### Frontend
 
-* React
-* TypeScript
-* Vite
-* React Router
+* React + TypeScript + Vite
+* React Router + TanStack Query
 * Tailwind CSS
 
 ### Backend
 
-* Node.js
-* Express.js
-* TypeScript
-* Prisma ORM
-* PostgreSQL
-* JWT Authentication
+* Node.js + Express + TypeScript
+* Prisma ORM + PostgreSQL
+* JWT Authentication (access + httpOnly refresh cookie)
 
-## 📁 Project Structure
+## Project Structure
 
 ```text
 pharma-mr-crm/
-├── client/
-├── server/
-├── shared/
-├── docs/
-└── README.md
+├── client/          # React SPA (Admin + MR, single app)
+├── server/          # Express API (Clean Architecture layers)
+├── docker/          # pgAdmin config
+├── docs/            # Setup notes
+└── docker-compose.yml
 ```
 
-## ✨ Features
+## Features
 
-* User Authentication (Admin / MR)
-* Dashboard
-* Doctor Management
-* Medical Store Management
-* Medicine Management
-* Appointment Management
-* Daily Visit Tracking
-* Medicine Distribution
-* Stock Management
-* Reports & Analytics
+* One Login / One Layout / One Sidebar / One Dashboard
+* Role-Based Access Control (Admin & MR)
+* Doctor, Store, Medicine, Appointment, Visit modules
+* Visit requires Appointment; samples only during Visit
+* Automatic stock decrement on sample distribution
+* Reports, Stock adjustments, Settings, Audit logs
 
-## 📦 Installation
-
-### Clone the repository
-
-```bash
-git clone <repository-url>
-```
-
-### Install dependencies
+## Installation
 
 ```bash
 npm install
@@ -61,12 +46,20 @@ cd client && npm install
 cd ../server && npm install
 ```
 
-### Run the project
+See [docs/SETUP.md](docs/SETUP.md) for database migrate + seed steps.
+
+## Run
 
 ```bash
+docker compose up -d
 npm run dev
 ```
 
-## 📄 License
+- Frontend: http://localhost:5173
+- Backend: http://localhost:4000/health
 
-This project is for learning and development purposes.
+Default Admin (seed): `admin@pharma-mr.local` / `Admin@12345`
+
+## License
+
+For learning and development purposes.

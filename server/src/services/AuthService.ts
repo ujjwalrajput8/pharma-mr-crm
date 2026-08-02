@@ -6,6 +6,7 @@ import { ForbiddenError, UnauthorizedError } from '../errors/AppError';
 import { RefreshTokenRepository } from '../repositories/RefreshTokenRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import type { AuthUser, LoginResult } from '../types/auth.types';
+import { AuditService } from './AuditService';
 import { PasswordService } from './PasswordService';
 import { TokenService } from './TokenService';
 
@@ -23,6 +24,7 @@ export class AuthService {
     private readonly refreshTokens = RefreshTokenRepository.getInstance(),
     private readonly passwords = PasswordService.getInstance(),
     private readonly tokens = TokenService.getInstance(),
+    private readonly audits = AuditService.getInstance(),
     private readonly config = Config.getInstance(),
   ) {}
 
@@ -56,6 +58,19 @@ export class AuthService {
     const tokens = await this.issueSession(authUser, meta);
     await this.users.update(user.id, { lastLoginAt: new Date() });
 
+    try {
+      await this.audits.log({
+        userId: user.id,
+        action: 'LOGIN',
+        entity: 'User',
+        entityId: String(user.id),
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+    } catch {
+      // Audit must not block authentication
+    }
+
     return {
       user: {
         id: user.id,
@@ -75,12 +90,18 @@ export class AuthService {
     const payload = this.tokens.verifyRefreshToken(refreshToken);
     const tokenHash = this.tokens.hashToken(refreshToken);
     const stored = await this.refreshTokens.findValidByHash(tokenHash);
+    const userId = Number(payload.sub);
 
-    if (!stored || stored.id !== payload.jti || stored.userId !== payload.sub) {
+    if (
+      !stored ||
+      stored.jti !== payload.jti ||
+      stored.userId !== userId ||
+      Number.isNaN(userId)
+    ) {
       throw new UnauthorizedError('Invalid refresh token');
     }
 
-    const user = await this.users.findById(payload.sub);
+    const user = await this.users.findById(userId);
     if (!user || user.status !== UserStatuses.ACTIVE) {
       throw new ForbiddenError('Account is inactive or not found');
     }
@@ -110,7 +131,7 @@ export class AuthService {
       const stored = await this.refreshTokens.findValidByHash(
         this.tokens.hashToken(refreshToken),
       );
-      if (stored && stored.id === payload.jti) {
+      if (stored && stored.jti === payload.jti) {
         await this.refreshTokens.revoke(stored.id);
       }
     } catch {
@@ -118,7 +139,7 @@ export class AuthService {
     }
   }
 
-  public async me(userId: string): Promise<LoginResult['user']> {
+  public async me(userId: number): Promise<LoginResult['user']> {
     const user = await this.users.findById(userId);
     if (!user || user.status !== UserStatuses.ACTIVE) {
       throw new UnauthorizedError('User not found or inactive');
@@ -140,7 +161,7 @@ export class AuthService {
   }
 
   private toAuthUser(
-    id: string,
+    id: number,
     email: string,
     role: string,
     fullName: string,
@@ -161,7 +182,7 @@ export class AuthService {
     const tokenPair = this.tokens.createTokenPair(authUser, jti);
 
     await this.refreshTokens.create({
-      id: jti,
+      jti,
       tokenHash: this.tokens.hashToken(tokenPair.refreshToken),
       expiresAt: this.resolveRefreshExpiry(),
       userAgent: meta.userAgent,

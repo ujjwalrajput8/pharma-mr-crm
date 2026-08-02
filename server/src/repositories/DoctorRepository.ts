@@ -5,7 +5,7 @@ export interface DoctorListParams {
   page: number;
   limit: number;
   search?: string;
-  mrId?: string;
+  mrId?: number;
 }
 
 /**
@@ -27,15 +27,15 @@ export class DoctorRepository {
     return this.prisma.doctor.create({ data });
   }
 
-  public update(id: string, data: Prisma.DoctorUpdateInput): Promise<Doctor> {
+  public update(id: number, data: Prisma.DoctorUpdateInput): Promise<Doctor> {
     return this.prisma.doctor.update({ where: { id }, data });
   }
 
-  public findById(id: string): Promise<Doctor | null> {
+  public findById(id: number): Promise<Doctor | null> {
     return this.prisma.doctor.findFirst({ where: { id, deletedAt: null } });
   }
 
-  public findByIdWithAssignments(id: string) {
+  public findByIdWithAssignments(id: number) {
     return this.prisma.doctor.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -51,7 +51,7 @@ export class DoctorRepository {
     });
   }
 
-  public async softDelete(id: string, updatedBy?: string): Promise<Doctor> {
+  public async softDelete(id: number, updatedBy?: number): Promise<Doctor> {
     return this.prisma.doctor.update({
       where: { id },
       data: {
@@ -111,7 +111,7 @@ export class DoctorRepository {
     return { items, total };
   }
 
-  public async assignMr(doctorId: string, mrId: string, actorId: string): Promise<void> {
+  public async assignMr(doctorId: number, mrId: number, actorId: number): Promise<void> {
     await this.prisma.doctorAssignment.updateMany({
       where: { doctorId, isActive: true, deletedAt: null },
       data: { isActive: false, unassignedAt: new Date(), updatedBy: actorId },
@@ -134,5 +134,76 @@ export class DoctorRepository {
         updatedBy: actorId,
       },
     });
+  }
+
+  /** Aggregated doctor workspace data for detail tabs. */
+  public async getDetailBundle(doctorId: number) {
+    const [
+      appointments,
+      visits,
+      distributions,
+      visitProductGroups,
+    ] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where: { doctorId, deletedAt: null },
+        orderBy: [{ date: 'desc' }, { time: 'desc' }],
+        include: {
+          mr: { select: { id: true, fullName: true, email: true } },
+        },
+      }),
+      this.prisma.visit.findMany({
+        where: { doctorId, deletedAt: null },
+        orderBy: [{ visitDate: 'desc' }, { visitTime: 'desc' }],
+        include: {
+          mr: { select: { id: true, fullName: true, email: true } },
+          appointment: { select: { id: true, date: true, time: true, purpose: true, status: true } },
+          products: {
+            where: { deletedAt: null },
+            include: { medicine: { select: { id: true, name: true, company: true } } },
+          },
+          distributions: {
+            where: { deletedAt: null },
+            include: { medicine: { select: { id: true, name: true } } },
+          },
+        },
+      }),
+      this.prisma.medicineDistribution.findMany({
+        where: { doctorId, deletedAt: null },
+        orderBy: { distributedAt: 'desc' },
+        include: {
+          medicine: { select: { id: true, name: true, company: true } },
+          mr: { select: { id: true, fullName: true } },
+          visit: { select: { id: true, visitDate: true } },
+        },
+      }),
+      this.prisma.visitProduct.groupBy({
+        by: ['medicineId'],
+        where: {
+          deletedAt: null,
+          visit: { doctorId, deletedAt: null },
+        },
+        _count: { medicineId: true },
+      }),
+    ]);
+
+    const medicineIds = visitProductGroups.map((row) => row.medicineId);
+    const medicines =
+      medicineIds.length === 0
+        ? []
+        : await this.prisma.medicine.findMany({
+            where: { id: { in: medicineIds }, deletedAt: null },
+            select: { id: true, name: true, company: true, category: true },
+          });
+
+    const medicineMap = new Map(medicines.map((m) => [m.id, m]));
+    const medicinesDiscussed = visitProductGroups.map((row) => ({
+      medicineId: row.medicineId,
+      name: medicineMap.get(row.medicineId)?.name ?? 'Unknown',
+      company: medicineMap.get(row.medicineId)?.company ?? null,
+      category: medicineMap.get(row.medicineId)?.category ?? null,
+      timesDiscussed: row._count.medicineId,
+    }));
+
+    return { appointments, visits, distributions, medicinesDiscussed };
   }
 }

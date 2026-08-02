@@ -3,6 +3,8 @@ import { RecordStatuses } from '../constants';
 
 export const createMedicineSchema = z.object({
   name: z.string().min(2).max(150),
+  brandName: z.string().max(150).optional(),
+  genericName: z.string().max(150).optional(),
   company: z.string().max(150).optional(),
   composition: z.string().max(500).optional(),
   strength: z.string().max(80).optional(),
@@ -10,6 +12,8 @@ export const createMedicineSchema = z.object({
   packSize: z.string().max(50).optional(),
   mrp: z.coerce.number().nonnegative(),
   sku: z.string().max(50).optional(),
+  batchNumber: z.string().max(60).optional(),
+  expiryDate: z.string().optional(),
   description: z.string().max(2000).optional(),
   sampleAvailable: z.boolean().optional(),
   status: z.enum([RecordStatuses.ACTIVE, RecordStatuses.INACTIVE]).optional(),

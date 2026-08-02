@@ -3,7 +3,7 @@ export type Role = 'ADMIN' | 'MR';
 export type UserStatus = 'ACTIVE' | 'INACTIVE';
 
 export interface AuthUser {
-  id: string;
+  id: number;
   email: string;
   fullName: string;
   role: Role;
@@ -43,9 +43,15 @@ export type Permission =
   | 'visits:own'
   | 'distributions:manage'
   | 'distributions:own'
+  | 'medicine-issues:manage'
+  | 'medicine-issues:own'
   | 'stock:manage'
   | 'reports:all'
   | 'reports:own'
+  | 'sales:manage'
+  | 'sales:own'
+  | 'attendance:own'
+  | 'attendance:manage'
   | 'settings:manage'
   | 'audit:view'
   | 'profile:own';

@@ -17,15 +17,15 @@ export class StoreRepository {
     return this.prisma.medicalStore.create({ data });
   }
 
-  public update(id: string, data: Prisma.MedicalStoreUpdateInput): Promise<MedicalStore> {
+  public update(id: number, data: Prisma.MedicalStoreUpdateInput): Promise<MedicalStore> {
     return this.prisma.medicalStore.update({ where: { id }, data });
   }
 
-  public findById(id: string): Promise<MedicalStore | null> {
+  public findById(id: number): Promise<MedicalStore | null> {
     return this.prisma.medicalStore.findFirst({ where: { id, deletedAt: null } });
   }
 
-  public softDelete(id: string, updatedBy?: string): Promise<MedicalStore> {
+  public softDelete(id: number, updatedBy?: number): Promise<MedicalStore> {
     return this.prisma.medicalStore.update({
       where: { id },
       data: { deletedAt: new Date(), ...(updatedBy ? { updatedBy } : {}) },

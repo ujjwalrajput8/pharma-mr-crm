@@ -37,6 +37,7 @@ export const AppointmentStatuses = {
   PENDING: 'PENDING',
   COMPLETED: 'COMPLETED',
   CANCELLED: 'CANCELLED',
+  RESCHEDULED: 'RESCHEDULED',
 } as const;
 
 export type AppointmentStatus = (typeof AppointmentStatuses)[keyof typeof AppointmentStatuses];

@@ -12,7 +12,8 @@ import {
   BarChart3,
   Settings,
   ScrollText,
-  UserRound,
+  IndianRupee,
+  Clock3,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -71,10 +72,28 @@ export const NAV_ITEMS: NavItem[] = [
     permissions: ['visits:manage', 'visits:own'],
   },
   {
-    label: 'Distribution',
+    label: 'Medicine Distribution',
     path: '/distributions',
     icon: Truck,
     permissions: ['distributions:manage', 'distributions:own'],
+  },
+  {
+    label: 'Medicine Issue',
+    path: '/medicine-issues',
+    icon: Package,
+    permissions: ['medicine-issues:manage', 'medicine-issues:own'],
+  },
+  {
+    label: 'Sales',
+    path: '/sales',
+    icon: IndianRupee,
+    permissions: ['sales:manage', 'sales:own'],
+  },
+  {
+    label: 'Attendance',
+    path: '/attendance',
+    icon: Clock3,
+    permissions: ['attendance:manage', 'attendance:own'],
   },
   {
     label: 'Stock',
@@ -99,11 +118,5 @@ export const NAV_ITEMS: NavItem[] = [
     path: '/audit-logs',
     icon: ScrollText,
     permissions: ['audit:view'],
-  },
-  {
-    label: 'Profile',
-    path: '/profile',
-    icon: UserRound,
-    permissions: ['profile:own'],
   },
 ];

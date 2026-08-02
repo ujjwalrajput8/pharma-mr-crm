@@ -38,7 +38,7 @@ export class AppointmentController {
   public update = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
     const appointment = await this.appointments.update(
-      String(req.params.id),
+      Number(req.params.id),
       req.body as UpdateAppointmentDto,
       actor,
     );
@@ -48,7 +48,7 @@ export class AppointmentController {
   public complete = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
     const result = await this.appointments.completeWithVisit(
-      String(req.params.id),
+      Number(req.params.id),
       req.body as CompleteAppointmentDto,
       actor,
     );
@@ -57,7 +57,7 @@ export class AppointmentController {
 
   public remove = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
-    await this.appointments.remove(String(req.params.id), actor);
+    await this.appointments.remove(Number(req.params.id), actor);
     ApiResponse.success(res, null, 'Appointment deleted');
   };
 

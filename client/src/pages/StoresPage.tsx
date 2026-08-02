@@ -7,6 +7,8 @@ import { DataTable, Td } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 import { storesApi, type CreateStorePayload } from '@/services/stores.service';
 
 const emptyForm: CreateStorePayload = {
@@ -20,10 +22,12 @@ const emptyForm: CreateStorePayload = {
 
 export function StoresPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateStorePayload>(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
 
   const storesQuery = useQuery({
     queryKey: ['stores', search],
@@ -43,8 +47,15 @@ export function StoresPage() {
 
   const deleteMutation = useMutation({
     mutationFn: storesApi.remove,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ['stores'] }),
-    onError: (err) => setError(getApiErrorMessage(err)),
+    onSuccess: async () => {
+      setDeleteTarget(null);
+      toast.success('Medical store deleted');
+      await queryClient.invalidateQueries({ queryKey: ['stores'] });
+    },
+    onError: (err) => {
+      setError(getApiErrorMessage(err));
+      toast.error('Delete failed', getApiErrorMessage(err));
+    },
   });
 
   function onCreate(event: FormEvent<HTMLFormElement>): void {
@@ -108,9 +119,7 @@ export function StoresPage() {
                 <Button
                   variant="danger"
                   className="!px-2.5 !py-1.5 text-xs"
-                  onClick={() => {
-                    if (window.confirm(`Delete ${store.name}?`)) deleteMutation.mutate(store.id);
-                  }}
+                  onClick={() => setDeleteTarget({ id: store.id, name: store.name })}
                 >
                   Delete
                 </Button>
@@ -171,6 +180,16 @@ export function StoresPage() {
           />
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        variant="delete"
+        title="Confirm Delete"
+        description={`Are you sure you want to delete medical store “${deleteTarget?.name}”?`}
+        loading={deleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
     </div>
   );
 }

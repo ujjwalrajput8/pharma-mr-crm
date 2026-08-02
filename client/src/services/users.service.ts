@@ -32,21 +32,21 @@ export const usersApi = {
     const { data } = await api.post<ApiSuccess<MrUser>>('/users', payload);
     return data.data;
   },
-  async activate(id: string): Promise<MrUser> {
+  async activate(id: number): Promise<MrUser> {
     const { data } = await api.post<ApiSuccess<MrUser>>(`/users/${id}/activate`);
     return data.data;
   },
-  async deactivate(id: string): Promise<MrUser> {
+  async deactivate(id: number): Promise<MrUser> {
     const { data } = await api.post<ApiSuccess<MrUser>>(`/users/${id}/deactivate`);
     return data.data;
   },
-  async resetPassword(id: string, password: string): Promise<MrUser> {
+  async resetPassword(id: number, password: string): Promise<MrUser> {
     const { data } = await api.post<ApiSuccess<MrUser>>(`/users/${id}/reset-password`, {
       password,
     });
     return data.data;
   },
-  async remove(id: string): Promise<void> {
+  async remove(id: number): Promise<void> {
     await api.delete(`/users/${id}`);
   },
 };

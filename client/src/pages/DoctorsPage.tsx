@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { DataTable, Td } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
 import { doctorsApi, type CreateDoctorPayload } from '@/services/doctors.service';
 import { usersApi } from '@/services/users.service';
@@ -20,17 +23,18 @@ const emptyForm: CreateDoctorPayload = {
   city: '',
   visitingDays: '',
   preferredTime: '',
-  mrId: '',
 };
 
 export function DoctorsPage() {
   const { can } = useAuth();
   const isAdmin = can('doctors:manage');
+  const toast = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateDoctorPayload>(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
 
   const doctorsQuery = useQuery({
     queryKey: ['doctors', search],
@@ -56,8 +60,15 @@ export function DoctorsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: doctorsApi.remove,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ['doctors'] }),
-    onError: (err) => setError(getApiErrorMessage(err)),
+    onSuccess: async () => {
+      setDeleteTarget(null);
+      toast.success('Doctor deleted');
+      await queryClient.invalidateQueries({ queryKey: ['doctors'] });
+    },
+    onError: (err) => {
+      setError(getApiErrorMessage(err));
+      toast.error('Delete failed', getApiErrorMessage(err));
+    },
   });
 
   function onCreate(event: FormEvent<HTMLFormElement>): void {
@@ -108,11 +119,7 @@ export function DoctorsPage() {
 
       <Card>
         <DataTable
-          columns={
-            isAdmin
-              ? ['Doctor', 'Specialization', 'Visiting', 'Assigned MR', 'Actions']
-              : ['Doctor', 'Specialization', 'Visiting', 'Assigned MR']
-          }
+          columns={['Doctor', 'Specialization', 'Visiting', 'Assigned MR', 'Actions']}
           loading={doctorsQuery.isLoading}
           empty={
             !doctorsQuery.isLoading && doctorsQuery.data?.length === 0 ? (
@@ -123,7 +130,9 @@ export function DoctorsPage() {
           {doctorsQuery.data?.map((doctor) => (
             <tr key={doctor.id} className="border-b border-[var(--color-border)] last:border-0">
               <Td>
-                <div className="font-medium">{doctor.fullName}</div>
+                <Link to={`/doctors/${doctor.id}`} className="font-medium text-[var(--color-primary)] hover:underline">
+                  {doctor.fullName}
+                </Link>
                 <div className="text-[var(--color-muted)]">{doctor.phone ?? '—'}</div>
               </Td>
               <Td>
@@ -137,21 +146,24 @@ export function DoctorsPage() {
                 <div className="text-[var(--color-muted)]">{doctor.preferredTime ?? ''}</div>
               </Td>
               <Td>{doctor.assignedMrs.map((mr) => mr.fullName).join(', ') || 'Unassigned'}</Td>
-              {isAdmin ? (
-                <Td>
-                  <Button
-                    variant="danger"
-                    className="!px-2.5 !py-1.5 text-xs"
-                    onClick={() => {
-                      if (window.confirm(`Delete ${doctor.fullName}?`)) {
-                        deleteMutation.mutate(doctor.id);
-                      }
-                    }}
-                  >
-                    Delete
-                  </Button>
-                </Td>
-              ) : null}
+              <Td>
+                <div className="flex flex-wrap gap-2">
+                  <Link to={`/doctors/${doctor.id}`}>
+                    <Button variant="secondary" className="!px-2.5 !py-1.5 text-xs">
+                      Open
+                    </Button>
+                  </Link>
+                  {isAdmin ? (
+                    <Button
+                      variant="danger"
+                      className="!px-2.5 !py-1.5 text-xs"
+                      onClick={() => setDeleteTarget({ id: doctor.id, name: doctor.fullName })}
+                    >
+                      Delete
+                    </Button>
+                  ) : null}
+                </div>
+              </Td>
             </tr>
           ))}
         </DataTable>
@@ -222,8 +234,13 @@ export function DoctorsPage() {
             Assign MR
             <select
               className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-white px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/20"
-              value={form.mrId}
-              onChange={(e) => setForm((prev) => ({ ...prev, mrId: e.target.value }))}
+              value={form.mrId ?? ''}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  mrId: e.target.value ? Number(e.target.value) : undefined,
+                }))
+              }
             >
               <option value="">Unassigned</option>
               {mrsQuery.data?.map((mr) => (
@@ -235,6 +252,16 @@ export function DoctorsPage() {
           </label>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        variant="delete"
+        title="Confirm Delete"
+        description={`Are you sure you want to delete doctor “${deleteTarget?.name}”?`}
+        loading={deleteMutation.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
     </div>
   );
 }

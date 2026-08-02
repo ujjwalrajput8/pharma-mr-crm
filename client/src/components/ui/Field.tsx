@@ -2,7 +2,7 @@ import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes 
 import { cn } from '@/utils/cn';
 
 const fieldClass =
-  'mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-white px-3.5 py-2.5 text-sm text-[var(--color-ink)] outline-none transition placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-teal-500/20';
+  'mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-2.5 text-sm text-[var(--color-ink)] outline-none transition placeholder:text-[var(--color-muted)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-teal-500/20';
 
 interface FieldProps {
   label: string;
@@ -13,13 +13,17 @@ export function Input({
   label,
   className,
   id,
+  type,
   ...props
 }: FieldProps & InputHTMLAttributes<HTMLInputElement>) {
+  if (type === 'date' || type === 'time' || type === 'datetime-local') {
+    throw new Error('Use DatePicker / TimePicker instead of native date/time inputs');
+  }
   const inputId = id ?? props.name ?? label;
   return (
     <label className={cn('block text-sm font-medium text-[var(--color-ink)]', className)} htmlFor={inputId}>
       {label}
-      <input id={inputId} className={fieldClass} {...props} />
+      <input id={inputId} type={type} className={fieldClass} {...props} />
     </label>
   );
 }

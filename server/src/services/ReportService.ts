@@ -1,6 +1,6 @@
 import { AppRoles } from '../constants';
 import type { ReportQueryDto } from '../dto/report.dto';
-import { ForbiddenError } from '../errors/AppError';
+import { BadRequestError, ForbiddenError } from '../errors/AppError';
 import { ReportRepository } from '../repositories/ReportRepository';
 import type { AuthUser } from '../types/auth.types';
 
@@ -42,7 +42,7 @@ function resolveRange(query: ReportQueryDto): { from: Date; to: Date; label: str
     return { from, to, label: 'Last 7 days' };
   }
 
-  if (query.type === 'monthly') {
+  if (query.type === 'monthly' || query.type === 'mr-detail') {
     const to = endOfDay(now);
     const from = startOfDay(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)));
     return { from, to, label: 'Current month' };
@@ -69,8 +69,7 @@ export class ReportService {
   }
 
   public async getReport(query: ReportQueryDto, actor: AuthUser) {
-    const scopedMrId =
-      actor.role === AppRoles.MR ? actor.id : query.mrId;
+    const scopedMrId = actor.role === AppRoles.MR ? actor.id : query.mrId;
 
     if (actor.role === AppRoles.MR && query.mrId && query.mrId !== actor.id) {
       throw new ForbiddenError('You can only view your own reports');
@@ -85,12 +84,24 @@ export class ReportService {
     }
 
     const range = resolveRange(query);
+    const filters = {
+      mrId: scopedMrId,
+      doctorId: query.doctorId,
+      medicineId: query.medicineId,
+      medicalStoreId: query.medicalStoreId,
+      status: query.status,
+    };
+    const rangeMeta = {
+      from: range.from.toISOString().slice(0, 10),
+      to: range.to.toISOString().slice(0, 10),
+      label: range.label,
+    };
 
     if (query.type === 'stock') {
       const stock = await this.reports.stockReport();
       return {
         type: query.type,
-        range: { from: range.from.toISOString().slice(0, 10), to: range.to.toISOString().slice(0, 10), label: range.label },
+        range: rangeMeta,
         summary: {
           totalMedicines: stock.length,
           lowStock: stock.filter((s) => s.isLow).length,
@@ -103,7 +114,7 @@ export class ReportService {
       const rows = await this.reports.mrPerformance(range.from, range.to, scopedMrId);
       return {
         type: query.type,
-        range: { from: range.from.toISOString().slice(0, 10), to: range.to.toISOString().slice(0, 10), label: range.label },
+        range: rangeMeta,
         summary: {
           mrs: rows.length,
           visits: rows.reduce((sum, row) => sum + row.visits, 0),
@@ -113,11 +124,24 @@ export class ReportService {
       };
     }
 
+    if (query.type === 'mr-detail') {
+      if (!scopedMrId) {
+        throw new BadRequestError('Select an MR to view MR detail report');
+      }
+      const detail = await this.reports.mrDetail(range.from, range.to, scopedMrId);
+      return {
+        type: query.type,
+        range: rangeMeta,
+        summary: detail.summary,
+        rows: detail.rows,
+      };
+    }
+
     if (query.type === 'doctor-visits') {
       const rows = await this.reports.doctorVisitReport(range.from, range.to, scopedMrId);
       return {
         type: query.type,
-        range: { from: range.from.toISOString().slice(0, 10), to: range.to.toISOString().slice(0, 10), label: range.label },
+        range: rangeMeta,
         summary: {
           doctors: rows.length,
           visits: rows.reduce((sum, row) => sum + row.visitCount, 0),
@@ -127,20 +151,20 @@ export class ReportService {
     }
 
     if (query.type === 'appointments') {
-      const stats = await this.reports.appointmentStats(range.from, range.to, scopedMrId);
+      const stats = await this.reports.appointmentStats(range.from, range.to, filters);
       return {
         type: query.type,
-        range: { from: range.from.toISOString().slice(0, 10), to: range.to.toISOString().slice(0, 10), label: range.label },
+        range: rangeMeta,
         summary: stats,
         rows: [],
       };
     }
 
     if (query.type === 'distributions') {
-      const stats = await this.reports.distributionStats(range.from, range.to, scopedMrId);
+      const stats = await this.reports.distributionStats(range.from, range.to, filters);
       return {
         type: query.type,
-        range: { from: range.from.toISOString().slice(0, 10), to: range.to.toISOString().slice(0, 10), label: range.label },
+        range: rangeMeta,
         summary: {
           rows: stats.totalRows,
           quantity: stats.totalQuantity,
@@ -149,20 +173,26 @@ export class ReportService {
       };
     }
 
+    if (query.type === 'sales') {
+      const sales = await this.reports.salesReport(range.from, range.to, filters);
+      return {
+        type: query.type,
+        range: rangeMeta,
+        summary: sales.summary,
+        rows: sales.rows,
+      };
+    }
+
     // daily / weekly / monthly — combined activity snapshot
     const [appointments, visits, distributions] = await Promise.all([
-      this.reports.appointmentStats(range.from, range.to, scopedMrId),
-      this.reports.visitStats(range.from, range.to, scopedMrId),
-      this.reports.distributionStats(range.from, range.to, scopedMrId),
+      this.reports.appointmentStats(range.from, range.to, filters),
+      this.reports.visitStats(range.from, range.to, filters),
+      this.reports.distributionStats(range.from, range.to, filters),
     ]);
 
     return {
       type: query.type,
-      range: {
-        from: range.from.toISOString().slice(0, 10),
-        to: range.to.toISOString().slice(0, 10),
-        label: range.label,
-      },
+      range: rangeMeta,
       summary: {
         appointments: appointments.total,
         appointmentsCompleted: appointments.completed,

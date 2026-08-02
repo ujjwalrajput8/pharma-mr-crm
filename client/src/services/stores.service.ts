@@ -2,7 +2,7 @@ import { api } from '@/api/client';
 import type { ApiSuccess } from '@/types';
 
 export interface MedicalStore {
-  id: string;
+  id: number;
   name: string;
   gstNumber: string | null;
   ownerName: string | null;
@@ -32,7 +32,7 @@ export const storesApi = {
     const { data } = await api.post<ApiSuccess<MedicalStore>>('/stores', payload);
     return data.data;
   },
-  async remove(id: string): Promise<void> {
+  async remove(id: number): Promise<void> {
     await api.delete(`/stores/${id}`);
   },
 };

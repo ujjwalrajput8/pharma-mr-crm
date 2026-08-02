@@ -13,7 +13,7 @@ import type { AuthUser } from '../types/auth.types';
 
 type DoctorWithAssignments = Doctor & {
   assignments?: Array<{
-    mr: { id: string; fullName: string; email: string };
+    mr: { id: number; fullName: string; email: string };
   }>;
 };
 
@@ -54,13 +54,166 @@ export class DoctorService {
     };
   }
 
-  public async getById(id: string, actor: AuthUser) {
+  public async getById(id: number, actor: AuthUser) {
     await this.requireAccessible(id, actor);
     const doctor = await this.doctors.findByIdWithAssignments(id);
     if (!doctor) {
       throw new NotFoundError('Doctor not found');
     }
     return this.toPublic(doctor as DoctorWithAssignments);
+  }
+
+  /**
+   * Full doctor workspace: profile, KPIs, timeline, and tab datasets.
+   */
+  public async getDetails(id: number, actor: AuthUser) {
+    await this.requireAccessible(id, actor);
+    const doctor = await this.doctors.findByIdWithAssignments(id);
+    if (!doctor) {
+      throw new NotFoundError('Doctor not found');
+    }
+
+    const bundle = await this.doctors.getDetailBundle(id);
+    const profile = this.toPublic(doctor as DoctorWithAssignments);
+
+    const formatTime = (value: Date): string =>
+      `${String(value.getUTCHours()).padStart(2, '0')}:${String(value.getUTCMinutes()).padStart(2, '0')}`;
+
+    const appointments = bundle.appointments.map((item) => ({
+      id: item.id,
+      date: item.date.toISOString().slice(0, 10),
+      time: formatTime(item.time),
+      purpose: item.purpose,
+      status: item.status,
+      remarks: item.remarks,
+      mr: item.mr,
+    }));
+
+    const visits = bundle.visits.map((item) => ({
+      id: item.id,
+      appointmentId: item.appointmentId,
+      visitDate: item.visitDate.toISOString().slice(0, 10),
+      visitTime: item.visitTime ? formatTime(item.visitTime) : null,
+      meetingDurationMin: item.meetingDurationMin,
+      discussionNotes: item.discussionNotes,
+      doctorFeedback: item.doctorFeedback,
+      remarks: item.remarks,
+      nextFollowUp: item.nextFollowUp ? item.nextFollowUp.toISOString().slice(0, 10) : null,
+      mr: item.mr,
+      appointment: item.appointment
+        ? {
+            id: item.appointment.id,
+            date: item.appointment.date.toISOString().slice(0, 10),
+            time: formatTime(item.appointment.time),
+            purpose: item.appointment.purpose,
+            status: item.appointment.status,
+          }
+        : null,
+      products: item.products.map((p) => ({
+        id: p.medicine.id,
+        name: p.medicine.name,
+        company: p.medicine.company,
+        notes: p.notes,
+      })),
+      samples: item.distributions.map((d) => ({
+        id: d.id,
+        medicineId: d.medicine.id,
+        medicineName: d.medicine.name,
+        quantity: d.quantity,
+        batchNumber: d.batchNumber,
+      })),
+    }));
+
+    const samples = bundle.distributions.map((item) => ({
+      id: item.id,
+      medicineId: item.medicine.id,
+      medicineName: item.medicine.name,
+      company: item.medicine.company,
+      quantity: item.quantity,
+      batchNumber: item.batchNumber,
+      remarks: item.remarks,
+      distributedAt: item.distributedAt.toISOString(),
+      visitId: item.visitId,
+      visitDate: item.visit.visitDate.toISOString().slice(0, 10),
+      mr: item.mr,
+    }));
+
+    const lastVisit = visits[0] ?? null;
+    const nextFollowUp =
+      visits
+        .map((v) => v.nextFollowUp)
+        .filter((d): d is string => Boolean(d))
+        .sort()
+        .find((d) => d >= new Date().toISOString().slice(0, 10)) ??
+      visits
+        .map((v) => v.nextFollowUp)
+        .filter((d): d is string => Boolean(d))
+        .sort()
+        .at(-1) ??
+      null;
+
+    const totalSamplesReceived = samples.reduce((sum, row) => sum + row.quantity, 0);
+
+    const timeline = [
+      ...appointments.map((item) => ({
+        id: `appointment:${item.id}`,
+        type: 'APPOINTMENT' as const,
+        at: `${item.date}T${item.time}:00.000Z`,
+        title: `Appointment · ${item.status}`,
+        summary: item.purpose ?? 'Scheduled meeting',
+        meta: { appointmentId: item.id, status: item.status, mrName: item.mr.fullName },
+      })),
+      ...visits.map((item) => ({
+        id: `visit:${item.id}`,
+        type: 'VISIT' as const,
+        at: `${item.visitDate}T${item.visitTime ?? '00:00'}:00.000Z`,
+        title: 'Visit completed',
+        summary: item.discussionNotes ?? item.doctorFeedback ?? 'Doctor visit logged',
+        meta: {
+          visitId: item.id,
+          mrName: item.mr.fullName,
+          products: item.products.length,
+          samples: item.samples.reduce((s, row) => s + row.quantity, 0),
+        },
+      })),
+      ...samples.map((item) => ({
+        id: `sample:${item.id}`,
+        type: 'SAMPLE' as const,
+        at: item.distributedAt,
+        title: `Sample · ${item.medicineName}`,
+        summary: `Qty ${item.quantity}${item.batchNumber ? ` · Batch ${item.batchNumber}` : ''}`,
+        meta: { distributionId: item.id, mrName: item.mr.fullName, quantity: item.quantity },
+      })),
+    ].sort((a, b) => (a.at < b.at ? 1 : -1));
+
+    const report = {
+      appointmentsByStatus: appointments.reduce<Record<string, number>>((acc, item) => {
+        acc[item.status] = (acc[item.status] ?? 0) + 1;
+        return acc;
+      }, {}),
+      visitsCount: visits.length,
+      medicinesDiscussedCount: bundle.medicinesDiscussed.length,
+      samplesQuantity: totalSamplesReceived,
+      sampleLines: samples.length,
+    };
+
+    return {
+      profile,
+      stats: {
+        totalAppointments: appointments.length,
+        totalVisits: visits.length,
+        totalMedicinesDiscussed: bundle.medicinesDiscussed.length,
+        totalSamplesReceived,
+        lastVisitDate: lastVisit?.visitDate ?? null,
+        nextFollowUp,
+      },
+      timeline,
+      appointments,
+      visits,
+      medicines: bundle.medicinesDiscussed,
+      samples,
+      report,
+    };
   }
 
   public async create(dto: CreateDoctorDto, actor: AuthUser) {
@@ -80,7 +233,7 @@ export class DoctorService {
     return this.getById(doctor.id, actor);
   }
 
-  public async update(id: string, dto: UpdateDoctorDto, actor: AuthUser) {
+  public async update(id: number, dto: UpdateDoctorDto, actor: AuthUser) {
     this.assertAdmin(actor);
     await this.requireAccessible(id, actor);
 
@@ -97,13 +250,13 @@ export class DoctorService {
     return this.getById(id, actor);
   }
 
-  public async remove(id: string, actor: AuthUser) {
+  public async remove(id: number, actor: AuthUser) {
     this.assertAdmin(actor);
     await this.requireAccessible(id, actor);
     await this.doctors.softDelete(id, actor.id);
   }
 
-  public async assignMr(id: string, dto: AssignMrDto, actor: AuthUser) {
+  public async assignMr(id: number, dto: AssignMrDto, actor: AuthUser) {
     this.assertAdmin(actor);
     await this.requireAccessible(id, actor);
 
@@ -116,7 +269,7 @@ export class DoctorService {
     return this.getById(id, actor);
   }
 
-  private async requireAccessible(id: string, actor: AuthUser): Promise<Doctor> {
+  private async requireAccessible(id: number, actor: AuthUser): Promise<Doctor> {
     const doctor = await this.doctors.findById(id);
     if (!doctor) {
       throw new NotFoundError('Doctor not found');

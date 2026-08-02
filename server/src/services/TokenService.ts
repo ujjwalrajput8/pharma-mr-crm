@@ -34,7 +34,7 @@ export class TokenService {
 
   public createAccessToken(user: AuthUser): string {
     const payload: AccessTokenPayload = {
-      sub: user.id,
+      sub: String(user.id),
       email: user.email,
       role: user.role,
       fullName: user.fullName,
@@ -48,9 +48,9 @@ export class TokenService {
     return jwt.sign(payload, this.config.jwtAccessSecret, options);
   }
 
-  public createRefreshToken(userId: string, jti: string): string {
+  public createRefreshToken(userId: number, jti: string): string {
     const payload: RefreshTokenPayload = {
-      sub: userId,
+      sub: String(userId),
       type: TOKEN_TYPES.REFRESH,
       jti,
     };

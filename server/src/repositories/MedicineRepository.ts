@@ -46,18 +46,18 @@ export class MedicineRepository {
     });
   }
 
-  public update(id: string, data: Prisma.MedicineUpdateInput): Promise<Medicine> {
+  public update(id: number, data: Prisma.MedicineUpdateInput): Promise<Medicine> {
     return this.prisma.medicine.update({ where: { id }, data });
   }
 
-  public findById(id: string): Promise<MedicineWithStock | null> {
+  public findById(id: number): Promise<MedicineWithStock | null> {
     return this.prisma.medicine.findFirst({
       where: { id, deletedAt: null },
       include: { stock: true },
     });
   }
 
-  public softDelete(id: string, updatedBy?: string): Promise<Medicine> {
+  public softDelete(id: number, updatedBy?: number): Promise<Medicine> {
     return this.prisma.medicine.update({
       where: { id },
       data: { deletedAt: new Date(), ...(updatedBy ? { updatedBy } : {}) },
@@ -77,9 +77,12 @@ export class MedicineRepository {
         ? {
             OR: [
               { name: { contains: params.search, mode: 'insensitive' } },
+              { brandName: { contains: params.search, mode: 'insensitive' } },
+              { genericName: { contains: params.search, mode: 'insensitive' } },
               { company: { contains: params.search, mode: 'insensitive' } },
               { composition: { contains: params.search, mode: 'insensitive' } },
               { sku: { contains: params.search, mode: 'insensitive' } },
+              { batchNumber: { contains: params.search, mode: 'insensitive' } },
             ],
           }
         : {}),
@@ -101,5 +104,67 @@ export class MedicineRepository {
 
   public countAll(): Promise<number> {
     return this.prisma.medicine.count({ where: { deletedAt: null } });
+  }
+
+  public async getDetailBundle(medicineId: number) {
+    const [distributions, byMr, byDoctor] = await Promise.all([
+      this.prisma.medicineDistribution.findMany({
+        where: { medicineId, deletedAt: null },
+        orderBy: { distributedAt: 'desc' },
+        include: {
+          doctor: { select: { id: true, fullName: true } },
+          mr: { select: { id: true, fullName: true, email: true } },
+          visit: { select: { id: true, visitDate: true } },
+        },
+      }),
+      this.prisma.medicineDistribution.groupBy({
+        by: ['mrId'],
+        where: { medicineId, deletedAt: null },
+        _sum: { quantity: true },
+        _count: { _all: true },
+      }),
+      this.prisma.medicineDistribution.groupBy({
+        by: ['doctorId'],
+        where: { medicineId, deletedAt: null },
+        _sum: { quantity: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const mrIds = byMr.map((row) => row.mrId);
+    const doctorIds = byDoctor.map((row) => row.doctorId);
+    const [mrs, doctors] = await Promise.all([
+      mrIds.length
+        ? this.prisma.user.findMany({
+            where: { id: { in: mrIds } },
+            select: { id: true, fullName: true, email: true },
+          })
+        : Promise.resolve([]),
+      doctorIds.length
+        ? this.prisma.doctor.findMany({
+            where: { id: { in: doctorIds } },
+            select: { id: true, fullName: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const mrMap = new Map(mrs.map((m) => [m.id, m]));
+    const doctorMap = new Map(doctors.map((d) => [d.id, d]));
+
+    return {
+      distributions,
+      mrWise: byMr.map((row) => ({
+        mrId: row.mrId,
+        fullName: mrMap.get(row.mrId)?.fullName ?? 'Unknown',
+        email: mrMap.get(row.mrId)?.email ?? null,
+        quantity: row._sum.quantity ?? 0,
+        issues: row._count._all,
+      })),
+      doctorWise: byDoctor.map((row) => ({
+        doctorId: row.doctorId,
+        fullName: doctorMap.get(row.doctorId)?.fullName ?? 'Unknown',
+        quantity: row._sum.quantity ?? 0,
+        issues: row._count._all,
+      })),
+    };
   }
 }

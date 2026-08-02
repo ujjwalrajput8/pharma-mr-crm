@@ -24,7 +24,7 @@ export class StoreController {
   };
 
   public getById = async (req: Request, res: Response): Promise<void> => {
-    const store = await this.stores.getById(String(req.params.id));
+    const store = await this.stores.getById(Number(req.params.id));
     ApiResponse.success(res, store, 'Store retrieved');
   };
 
@@ -35,7 +35,7 @@ export class StoreController {
 
   public update = async (req: Request, res: Response): Promise<void> => {
     const store = await this.stores.update(
-      String(req.params.id),
+      Number(req.params.id),
       req.body as UpdateStoreDto,
       this.requireActor(req),
     );
@@ -43,11 +43,11 @@ export class StoreController {
   };
 
   public remove = async (req: Request, res: Response): Promise<void> => {
-    await this.stores.remove(String(req.params.id), this.requireActor(req));
+    await this.stores.remove(Number(req.params.id), this.requireActor(req));
     ApiResponse.success(res, null, 'Store deleted');
   };
 
-  private requireActor(req: Request): string {
+  private requireActor(req: Request): number {
     if (!req.user?.id) throw new UnauthorizedError('Authentication required');
     return req.user.id;
   }

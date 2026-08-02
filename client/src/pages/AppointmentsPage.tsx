@@ -1,12 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { getApiErrorMessage } from '@/api/client';
+import { AppointmentDetailsDialog } from '@/components/appointments/AppointmentDetailsDialog';
+import { AppointmentFormDialog } from '@/components/appointments/AppointmentFormDialog';
+import { VisitCompleteDialog } from '@/components/appointments/VisitCompleteDialog';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DataTable, Td } from '@/components/ui/DataTable';
-import { Input, Select, Textarea } from '@/components/ui/Field';
-import { Modal } from '@/components/ui/Modal';
-import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { Select } from '@/components/ui/Field';
+import { Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { TableSkeleton } from '@/components/ui/Skeleton';
+import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
 import {
   appointmentsApi,
@@ -18,56 +23,47 @@ import {
 import { doctorsApi } from '@/services/doctors.service';
 import { medicinesApi } from '@/services/medicines.service';
 import { usersApi } from '@/services/users.service';
+import { formatDisplayDate, formatTime12 } from '@/utils/datetime';
 
-const statusTone: Record<AppointmentStatus, 'primary' | 'success' | 'danger'> = {
+const statusTone: Record<AppointmentStatus, 'primary' | 'success' | 'danger' | 'warning'> = {
   PENDING: 'primary',
   COMPLETED: 'success',
   CANCELLED: 'danger',
+  RESCHEDULED: 'warning',
 };
 
 export function AppointmentsPage() {
   const { can, user } = useAuth();
   const isAdmin = can('appointments:manage');
+  const toast = useToast();
   const queryClient = useQueryClient();
+
   const [open, setOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<AppointmentStatus | ''>('');
+  const [selected, setSelected] = useState<Appointment | null>(null);
   const [completeFor, setCompleteFor] = useState<Appointment | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<CreateAppointmentPayload>({
-    doctorId: '',
-    mrId: '',
-    date: '',
-    time: '10:00',
-    purpose: '',
-    remarks: '',
-  });
-  const [completeForm, setCompleteForm] = useState<CompleteAppointmentPayload>({
-    visitDate: '',
-    visitTime: '11:00',
-    meetingDurationMin: 30,
-    discussionNotes: '',
-    doctorFeedback: '',
-    nextFollowUp: '',
-    remarks: '',
-    medicineIds: [],
-    distributions: [],
-  });
+  const [cancelId, setCancelId] = useState<number | null>(null);
 
   const appointmentsQuery = useQuery({
-    queryKey: ['appointments'],
-    queryFn: () => appointmentsApi.list(),
+    queryKey: ['appointments', statusFilter],
+    queryFn: () =>
+      appointmentsApi.list({
+        limit: 100,
+        status: statusFilter || undefined,
+      }),
   });
   const doctorsQuery = useQuery({
-    queryKey: ['doctors', 'for-appointments'],
+    queryKey: ['doctors'],
     queryFn: () => doctorsApi.list(),
-    enabled: open || Boolean(completeFor),
+    enabled: open,
   });
   const mrsQuery = useQuery({
-    queryKey: ['users', 'for-appointments'],
+    queryKey: ['users'],
     queryFn: () => usersApi.list(),
     enabled: open && isAdmin,
   });
   const medicinesQuery = useQuery({
-    queryKey: ['medicines', 'for-complete'],
+    queryKey: ['medicines'],
     queryFn: () => medicinesApi.list(),
     enabled: Boolean(completeFor),
   });
@@ -76,36 +72,39 @@ export function AppointmentsPage() {
     mutationFn: appointmentsApi.create,
     onSuccess: async () => {
       setOpen(false);
-      setForm({ doctorId: '', mrId: '', date: '', time: '10:00', purpose: '', remarks: '' });
-      setError(null);
+      toast.success('Appointment created');
       await queryClient.invalidateQueries({ queryKey: ['appointments'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (err) => setError(getApiErrorMessage(err)),
+    onError: (err) => toast.error('Create failed', getApiErrorMessage(err)),
   });
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'CANCELLED' }) =>
-      appointmentsApi.updateStatus(id, status),
+  const cancelMutation = useMutation({
+    mutationFn: (id: number) => appointmentsApi.updateStatus(id, 'CANCELLED'),
     onSuccess: async () => {
+      setCancelId(null);
+      setSelected(null);
+      toast.success('Appointment cancelled');
       await queryClient.invalidateQueries({ queryKey: ['appointments'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (err) => setError(getApiErrorMessage(err)),
+    onError: (err) => toast.error('Cancel failed', getApiErrorMessage(err)),
   });
 
   const completeMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: CompleteAppointmentPayload }) =>
+    mutationFn: ({ id, payload }: { id: number; payload: CompleteAppointmentPayload }) =>
       appointmentsApi.complete(id, payload),
     onSuccess: async () => {
       setCompleteFor(null);
-      setError(null);
+      setSelected(null);
+      toast.success('Visit logged', 'Samples reduced stock automatically');
       await queryClient.invalidateQueries({ queryKey: ['appointments'] });
       await queryClient.invalidateQueries({ queryKey: ['visits'] });
       await queryClient.invalidateQueries({ queryKey: ['medicines'] });
+      await queryClient.invalidateQueries({ queryKey: ['stock'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
-    onError: (err) => setError(getApiErrorMessage(err)),
+    onError: (err) => toast.error('Complete failed', getApiErrorMessage(err)),
   });
 
   const title = useMemo(
@@ -113,40 +112,15 @@ export function AppointmentsPage() {
     [isAdmin],
   );
 
-  function onCreate(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    createMutation.mutate({
-      doctorId: form.doctorId,
-      date: form.date,
-      time: form.time,
-      purpose: form.purpose || undefined,
-      remarks: form.remarks || undefined,
-      mrId: isAdmin ? form.mrId || undefined : user?.id,
-    });
-  }
-
-  function onComplete(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    if (!completeFor) return;
-    completeMutation.mutate({
-      id: completeFor.id,
-      payload: {
-        ...completeForm,
-        discussionNotes: completeForm.discussionNotes || undefined,
-        doctorFeedback: completeForm.doctorFeedback || undefined,
-        nextFollowUp: completeForm.nextFollowUp || undefined,
-        remarks: completeForm.remarks || undefined,
-        medicineIds: completeForm.medicineIds ?? [],
-        distributions: completeForm.distributions ?? [],
-      },
-    });
+  function onCreate(payload: CreateAppointmentPayload) {
+    createMutation.mutate(payload);
   }
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={title}
-        description="Appointments are for scheduling only. Completing one creates the Visit."
+        description="Appointments schedule meetings only. Completing one opens the structured Visit form."
         actions={
           <Button onClick={() => setOpen(true)}>
             <Plus size={16} />
@@ -155,295 +129,124 @@ export function AppointmentsPage() {
         }
       />
 
-      {error ? <Alert message={error} /> : null}
+      <Card className="p-4">
+        <div className="max-w-xs">
+          <Select
+            label="Filter by status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as AppointmentStatus | '')}
+          >
+            <option value="">All statuses</option>
+            <option value="PENDING">Pending</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="CANCELLED">Cancelled</option>
+            <option value="RESCHEDULED">Rescheduled</option>
+          </Select>
+        </div>
+      </Card>
 
       <Card>
-        <DataTable
-          columns={['Date', 'Time', 'Doctor', 'Purpose', 'Status', 'Actions']}
-          loading={appointmentsQuery.isLoading}
-          empty={
-            !appointmentsQuery.isLoading && appointmentsQuery.data?.length === 0 ? (
-              <EmptyState
-                title="No appointments yet"
-                description="Schedule an appointment with a doctor."
-              />
-            ) : null
-          }
-        >
-          {appointmentsQuery.data?.map((item) => (
-            <tr key={item.id} className="border-b border-[var(--color-border)] last:border-0">
-              <Td className="font-medium">{item.date}</Td>
-              <Td>{item.time}</Td>
-              <Td>{item.doctor?.fullName ?? '—'}</Td>
-              <Td>{item.purpose ?? '—'}</Td>
-              <Td>
-                <Badge tone={statusTone[item.status]}>{item.status}</Badge>
-              </Td>
-              <Td>
-                <div className="flex flex-wrap gap-2">
-                  {item.status === 'PENDING' ? (
-                    <>
-                      <Button
-                        variant="primary"
-                        className="!px-2.5 !py-1.5 text-xs"
-                        onClick={() => {
-                          setCompleteFor(item);
-                          setCompleteForm((prev) => ({
-                            ...prev,
-                            visitDate: item.date,
-                            visitTime: item.time,
-                          }));
-                        }}
-                      >
-                        Complete + Visit
-                      </Button>
+        {appointmentsQuery.isLoading ? (
+          <TableSkeleton rows={6} />
+        ) : (
+          <DataTable
+            columns={['Date', 'Time', 'Doctor', 'MR', 'Purpose', 'Status', 'Actions']}
+            empty={
+              appointmentsQuery.data?.length === 0 ? (
+                <EmptyState
+                  title="No appointments yet"
+                  description="Schedule an appointment or pick a date on the dashboard calendar."
+                />
+              ) : null
+            }
+          >
+            {appointmentsQuery.data?.map((item) => {
+              return (
+                <tr key={item.id} className="border-b border-[var(--color-border)] last:border-0">
+                  <Td className="font-medium">{formatDisplayDate(item.date)}</Td>
+                  <Td>{formatTime12(item.time)}</Td>
+                  <Td>{item.doctor?.fullName ?? '—'}</Td>
+                  <Td>{item.mr?.fullName ?? '—'}</Td>
+                  <Td>{item.purpose ?? '—'}</Td>
+                  <Td>
+                    <Badge tone={statusTone[item.status]}>{item.status}</Badge>
+                  </Td>
+                  <Td>
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         variant="secondary"
                         className="!px-2.5 !py-1.5 text-xs"
-                        onClick={() => statusMutation.mutate({ id: item.id, status: 'CANCELLED' })}
+                        onClick={() => setSelected(item)}
                       >
-                        Cancel
+                        View
                       </Button>
-                    </>
-                  ) : null}
-                </div>
-              </Td>
-            </tr>
-          ))}
-        </DataTable>
+                      {item.status === 'PENDING' || item.status === 'RESCHEDULED' ? (
+                        <>
+                          <Button
+                            variant="primary"
+                            className="!px-2.5 !py-1.5 text-xs"
+                            onClick={() => setCompleteFor(item)}
+                          >
+                            Complete + Visit
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            className="!px-2.5 !py-1.5 text-xs"
+                            onClick={() => setCancelId(item.id)}
+                          >
+                            Cancel
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
+                  </Td>
+                </tr>
+              );
+            })}
+          </DataTable>
+        )}
       </Card>
 
-      <Modal
+      <AppointmentFormDialog
         open={open}
         onClose={() => setOpen(false)}
-        title="Schedule Appointment"
-        description="This only schedules the meeting — it does not log a visit yet."
-        className="max-w-xl"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" form="create-appointment-form" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Saving…' : 'Save Appointment'}
-            </Button>
-          </>
-        }
-      >
-        <form id="create-appointment-form" className="grid gap-3 sm:grid-cols-2" onSubmit={onCreate}>
-          <Select
-            label="Doctor"
-            required
-            className="sm:col-span-2"
-            value={form.doctorId}
-            onChange={(e) => setForm((prev) => ({ ...prev, doctorId: e.target.value }))}
-          >
-            <option value="">Select doctor</option>
-            {doctorsQuery.data?.map((doctor) => (
-              <option key={doctor.id} value={doctor.id}>
-                {doctor.fullName}
-              </option>
-            ))}
-          </Select>
-          {isAdmin ? (
-            <Select
-              label="Medical Representative"
-              required
-              className="sm:col-span-2"
-              value={form.mrId}
-              onChange={(e) => setForm((prev) => ({ ...prev, mrId: e.target.value }))}
-            >
-              <option value="">Select MR</option>
-              {mrsQuery.data?.map((mr) => (
-                <option key={mr.id} value={mr.id}>
-                  {mr.fullName}
-                </option>
-              ))}
-            </Select>
-          ) : null}
-          <Input
-            label="Date"
-            type="date"
-            required
-            value={form.date}
-            onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
-          />
-          <Input
-            label="Time"
-            type="time"
-            required
-            value={form.time}
-            onChange={(e) => setForm((prev) => ({ ...prev, time: e.target.value }))}
-          />
-          <Input
-            label="Purpose"
-            className="sm:col-span-2"
-            value={form.purpose}
-            onChange={(e) => setForm((prev) => ({ ...prev, purpose: e.target.value }))}
-          />
-          <Textarea
-            label="Remarks"
-            className="sm:col-span-2"
-            value={form.remarks}
-            onChange={(e) => setForm((prev) => ({ ...prev, remarks: e.target.value }))}
-          />
-        </form>
-      </Modal>
+        isAdmin={isAdmin}
+        currentUserId={user?.id}
+        doctors={doctorsQuery.data ?? []}
+        mrs={mrsQuery.data ?? []}
+        submitting={createMutation.isPending}
+        onSubmit={onCreate}
+      />
 
-      <Modal
+      <AppointmentDetailsDialog
+        open={Boolean(selected)}
+        appointment={selected}
+        onClose={() => setSelected(null)}
+        onCancel={() => selected && setCancelId(selected.id)}
+        onComplete={() => selected && setCompleteFor(selected)}
+      />
+
+      <VisitCompleteDialog
         open={Boolean(completeFor)}
+        appointment={completeFor}
+        medicines={medicinesQuery.data ?? []}
+        submitting={completeMutation.isPending}
         onClose={() => setCompleteFor(null)}
-        title="Complete Appointment & Log Visit"
-        description="Creates the Visit record. Sample distribution will reduce stock automatically."
-        className="max-w-2xl"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setCompleteFor(null)}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              form="complete-appointment-form"
-              disabled={completeMutation.isPending}
-            >
-              {completeMutation.isPending ? 'Saving…' : 'Complete & Save Visit'}
-            </Button>
-          </>
+        onSubmit={(payload) =>
+          completeFor && completeMutation.mutate({ id: completeFor.id, payload })
         }
-      >
-        <form id="complete-appointment-form" className="grid gap-3 sm:grid-cols-2" onSubmit={onComplete}>
-          <Input
-            label="Visit date"
-            type="date"
-            required
-            value={completeForm.visitDate}
-            onChange={(e) => setCompleteForm((prev) => ({ ...prev, visitDate: e.target.value }))}
-          />
-          <Input
-            label="Visit time"
-            type="time"
-            required
-            value={completeForm.visitTime}
-            onChange={(e) => setCompleteForm((prev) => ({ ...prev, visitTime: e.target.value }))}
-          />
-          <Input
-            label="Meeting duration (minutes)"
-            type="number"
-            min={1}
-            value={completeForm.meetingDurationMin ?? ''}
-            onChange={(e) =>
-              setCompleteForm((prev) => ({
-                ...prev,
-                meetingDurationMin: Number(e.target.value) || undefined,
-              }))
-            }
-          />
-          <Input
-            label="Next follow-up"
-            type="date"
-            value={completeForm.nextFollowUp}
-            onChange={(e) => setCompleteForm((prev) => ({ ...prev, nextFollowUp: e.target.value }))}
-          />
-          <Textarea
-            label="Discussion notes"
-            className="sm:col-span-2"
-            value={completeForm.discussionNotes}
-            onChange={(e) =>
-              setCompleteForm((prev) => ({ ...prev, discussionNotes: e.target.value }))
-            }
-          />
-          <Textarea
-            label="Doctor feedback"
-            className="sm:col-span-2"
-            value={completeForm.doctorFeedback}
-            onChange={(e) =>
-              setCompleteForm((prev) => ({ ...prev, doctorFeedback: e.target.value }))
-            }
-          />
-          <label className="block text-sm font-medium sm:col-span-2">
-            Products discussed
-            <select
-              multiple
-              className="mt-1.5 min-h-24 w-full rounded-xl border border-[var(--color-border)] bg-white px-3.5 py-2.5 text-sm"
-              value={completeForm.medicineIds}
-              onChange={(e) =>
-                setCompleteForm((prev) => ({
-                  ...prev,
-                  medicineIds: Array.from(e.target.selectedOptions).map((o) => o.value),
-                }))
-              }
-            >
-              {medicinesQuery.data?.map((medicine) => (
-                <option key={medicine.id} value={medicine.id}>
-                  {medicine.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-sm font-medium sm:col-span-2">
-            Sample distribution (medicine + qty)
-            <div className="mt-2 space-y-2">
-              {(completeForm.distributions ?? []).map((row, index) => (
-                <div key={index} className="grid grid-cols-3 gap-2">
-                  <select
-                    className="rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm"
-                    value={row.medicineId}
-                    onChange={(e) => {
-                      const next = [...(completeForm.distributions ?? [])];
-                      next[index] = { ...row, medicineId: e.target.value };
-                      setCompleteForm((prev) => ({ ...prev, distributions: next }));
-                    }}
-                  >
-                    <option value="">Medicine</option>
-                    {medicinesQuery.data?.map((medicine) => (
-                      <option key={medicine.id} value={medicine.id}>
-                        {medicine.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min={1}
-                    placeholder="Qty"
-                    className="rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm"
-                    value={row.quantity}
-                    onChange={(e) => {
-                      const next = [...(completeForm.distributions ?? [])];
-                      next[index] = { ...row, quantity: Number(e.target.value) };
-                      setCompleteForm((prev) => ({ ...prev, distributions: next }));
-                    }}
-                  />
-                  <input
-                    placeholder="Batch no."
-                    className="rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm"
-                    value={row.batchNumber ?? ''}
-                    onChange={(e) => {
-                      const next = [...(completeForm.distributions ?? [])];
-                      next[index] = { ...row, batchNumber: e.target.value };
-                      setCompleteForm((prev) => ({ ...prev, distributions: next }));
-                    }}
-                  />
-                </div>
-              ))}
-              <Button
-                variant="secondary"
-                className="!py-1.5 text-xs"
-                onClick={() =>
-                  setCompleteForm((prev) => ({
-                    ...prev,
-                    distributions: [
-                      ...(prev.distributions ?? []),
-                      { medicineId: '', quantity: 1, batchNumber: '' },
-                    ],
-                  }))
-                }
-              >
-                Add sample line
-              </Button>
-            </div>
-          </label>
-        </form>
-      </Modal>
+      />
+
+      <ConfirmDialog
+        open={Boolean(cancelId)}
+        variant="delete"
+        title="Confirm Cancel"
+        description="Are you sure you want to cancel this appointment? This action cannot be undone."
+        confirmLabel="Cancel appointment"
+        onClose={() => setCancelId(null)}
+        loading={cancelMutation.isPending}
+        onConfirm={() => cancelId && cancelMutation.mutate(cancelId)}
+      />
     </div>
   );
 }

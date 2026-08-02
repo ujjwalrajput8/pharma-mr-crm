@@ -16,9 +16,9 @@ export class DistributionRepository {
   public async list(params: {
     page: number;
     limit: number;
-    mrId?: string;
-    medicineId?: string;
-    visitId?: string;
+    mrId?: number;
+    medicineId?: number;
+    visitId?: number;
     from?: Date;
     to?: Date;
   }) {

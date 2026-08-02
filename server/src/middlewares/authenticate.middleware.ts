@@ -25,7 +25,7 @@ export async function authenticate(
     }
 
     const payload = TokenService.getInstance().verifyAccessToken(token);
-    const user = await UserRepository.getInstance().findById(payload.sub);
+    const user = await UserRepository.getInstance().findById(Number(payload.sub));
 
     if (!user || user.status !== UserStatuses.ACTIVE || user.deletedAt) {
       throw new UnauthorizedError('User not found or inactive');

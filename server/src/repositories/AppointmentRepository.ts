@@ -23,7 +23,7 @@ export class AppointmentRepository {
     });
   }
 
-  public update(id: string, data: Prisma.AppointmentUpdateInput) {
+  public update(id: number, data: Prisma.AppointmentUpdateInput) {
     return this.prisma.appointment.update({
       where: { id },
       data,
@@ -34,7 +34,7 @@ export class AppointmentRepository {
     });
   }
 
-  public findById(id: string) {
+  public findById(id: number) {
     return this.prisma.appointment.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -44,7 +44,7 @@ export class AppointmentRepository {
     });
   }
 
-  public softDelete(id: string, updatedBy?: string): Promise<Appointment> {
+  public softDelete(id: number, updatedBy?: number): Promise<Appointment> {
     return this.prisma.appointment.update({
       where: { id },
       data: { deletedAt: new Date(), ...(updatedBy ? { updatedBy } : {}) },
@@ -54,8 +54,8 @@ export class AppointmentRepository {
   public async list(params: {
     page: number;
     limit: number;
-    mrId?: string;
-    doctorId?: string;
+    mrId?: number;
+    doctorId?: number;
     status?: string;
   }) {
     const where: Prisma.AppointmentWhereInput = {
