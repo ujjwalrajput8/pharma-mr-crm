@@ -1,7 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Pharma MR CRM — BRD-aligned PostgreSQL schema
 
 generator client {
   provider = "prisma-client"
@@ -10,4 +7,454 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  MR
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AppointmentStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+enum StockMovementType {
+  ISSUE
+  RETURN
+  ADJUSTMENT
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         Role
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  mrProfile              MrProfile?
+  refreshTokens          RefreshToken[]
+  assignedDoctors        DoctorAssignment[]     @relation("MrDoctorAssignments")
+  appointmentsAsMr       Appointment[]          @relation("MrAppointments")
+  visitsAsMr             Visit[]                @relation("MrVisits")
+  distributionsAsMr      MedicineDistribution[] @relation("MrDistributions")
+  stockMovementsAsMr     StockMovement[]        @relation("MrStockMovements")
+  auditLogs              AuditLog[]
+
+  @@index([role])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+/// MR-specific profile (1:1 with User where role = MR)
+model MrProfile {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @unique @db.Uuid
+  employeeCode String    @unique
+  address      String?
+  joiningDate  DateTime? @db.Date
+  assignedArea String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([employeeCode])
+  @@index([assignedArea])
+  @@index([deletedAt])
+  @@map("mr_profiles")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  userAgent String?
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model Doctor {
+  id             String       @id @default(uuid()) @db.Uuid
+  fullName       String
+  specialization String?
+  hospital       String?
+  clinic         String?
+  email          String?
+  phone          String?
+  addressLine1   String?
+  addressLine2   String?
+  city           String?
+  state          String?
+  pincode        String?
+  visitingDays   String?
+  preferredTime  String?
+  notes          String?
+  status         RecordStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  assignments   DoctorAssignment[]
+  appointments  Appointment[]
+  visits        Visit[]
+  distributions MedicineDistribution[]
+
+  @@index([fullName])
+  @@index([city])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("doctors")
+}
+
+model DoctorAssignment {
+  id           String    @id @default(uuid()) @db.Uuid
+  doctorId     String    @db.Uuid
+  mrId         String    @db.Uuid
+  assignedAt   DateTime  @default(now())
+  unassignedAt DateTime?
+  isActive     Boolean   @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  mr     User   @relation("MrDoctorAssignments", fields: [mrId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, mrId])
+  @@index([mrId])
+  @@index([doctorId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("doctor_assignments")
+}
+
+model MedicalStore {
+  id                String       @id @default(uuid()) @db.Uuid
+  name              String
+  ownerName         String?
+  gstNumber         String?
+  drugLicenseNumber String?
+  email             String?
+  phone             String?
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  state             String?
+  pincode           String?
+  notes             String?
+  status            RecordStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  purchases MedicinePurchase[]
+
+  @@index([name])
+  @@index([gstNumber])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("medical_stores")
+}
+
+model Medicine {
+  id              String       @id @default(uuid()) @db.Uuid
+  name            String
+  company         String?
+  composition     String?
+  strength        String?
+  category        String?
+  packSize        String?
+  mrp             Decimal      @db.Decimal(12, 2)
+  sku             String?      @unique
+  description     String?
+  sampleAvailable Boolean      @default(true)
+  status          RecordStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  stock          Stock?
+  purchases      MedicinePurchase[]
+  visitProducts  VisitProduct[]
+  distributions  MedicineDistribution[]
+  stockMovements StockMovement[]
+
+  @@index([name])
+  @@index([category])
+  @@index([company])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("medicines")
+}
+
+model Stock {
+  id                 String @id @default(uuid()) @db.Uuid
+  medicineId         String @unique @db.Uuid
+  openingStock       Int    @default(0)
+  issued             Int    @default(0)
+  returned           Int    @default(0)
+  available          Int    @default(0)
+  minimumStockAlert  Int    @default(10)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  @@index([available])
+  @@index([deletedAt])
+  @@map("stocks")
+}
+
+model StockMovement {
+  id         String            @id @default(uuid()) @db.Uuid
+  medicineId String            @db.Uuid
+  mrId       String?           @db.Uuid
+  type       StockMovementType
+  quantity   Int
+  remarks    String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  mr       User?    @relation("MrStockMovements", fields: [mrId], references: [id], onDelete: SetNull)
+
+  @@index([medicineId])
+  @@index([mrId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("stock_movements")
+}
+
+model MedicinePurchase {
+  id             String   @id @default(uuid()) @db.Uuid
+  medicalStoreId String   @db.Uuid
+  medicineId     String   @db.Uuid
+  quantity       Int
+  unitPrice      Decimal  @db.Decimal(12, 2)
+  purchaseDate   DateTime
+  invoiceNumber  String?
+  remarks        String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  medicalStore MedicalStore @relation(fields: [medicalStoreId], references: [id], onDelete: Cascade)
+  medicine     Medicine     @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  @@index([medicalStoreId])
+  @@index([medicineId])
+  @@index([purchaseDate])
+  @@index([deletedAt])
+  @@map("medicine_purchases")
+}
+
+model Appointment {
+  id       String            @id @default(uuid()) @db.Uuid
+  doctorId String            @db.Uuid
+  mrId     String            @db.Uuid
+  date     DateTime          @db.Date
+  time     DateTime          @db.Time(0)
+  purpose  String?
+  status   AppointmentStatus @default(PENDING)
+  remarks  String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  mr     User   @relation("MrAppointments", fields: [mrId], references: [id], onDelete: Cascade)
+  visit  Visit?
+
+  @@index([doctorId])
+  @@index([mrId])
+  @@index([date])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("appointments")
+}
+
+model Visit {
+  id                 String    @id @default(uuid()) @db.Uuid
+  appointmentId      String    @unique @db.Uuid
+  doctorId           String    @db.Uuid
+  mrId               String    @db.Uuid
+  visitDate          DateTime  @db.Date
+  visitTime          DateTime  @db.Time(0)
+  meetingDurationMin Int?
+  discussionNotes    String?
+  doctorFeedback     String?
+  nextFollowUp       DateTime? @db.Date
+  remarks            String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  appointment   Appointment            @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  doctor        Doctor                 @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  mr            User                   @relation("MrVisits", fields: [mrId], references: [id], onDelete: Cascade)
+  products      VisitProduct[]
+  distributions MedicineDistribution[]
+
+  @@index([doctorId])
+  @@index([mrId])
+  @@index([visitDate])
+  @@index([deletedAt])
+  @@map("visits")
+}
+
+model VisitProduct {
+  id         String  @id @default(uuid()) @db.Uuid
+  visitId    String  @db.Uuid
+  medicineId String  @db.Uuid
+  notes      String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  visit    Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  @@unique([visitId, medicineId])
+  @@index([visitId])
+  @@index([medicineId])
+  @@index([deletedAt])
+  @@map("visit_products")
+}
+
+model MedicineDistribution {
+  id            String   @id @default(uuid()) @db.Uuid
+  visitId       String   @db.Uuid
+  doctorId      String   @db.Uuid
+  mrId          String   @db.Uuid
+  medicineId    String   @db.Uuid
+  batchNumber   String?
+  quantity      Int
+  distributedAt DateTime @default(now())
+  remarks       String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  visit    Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  doctor   Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  mr       User     @relation("MrDistributions", fields: [mrId], references: [id], onDelete: Cascade)
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+
+  @@index([visitId])
+  @@index([doctorId])
+  @@index([mrId])
+  @@index([medicineId])
+  @@index([distributedAt])
+  @@index([deletedAt])
+  @@map("medicine_distributions")
+}
+
+model Setting {
+  id    String @id @default(uuid()) @db.Uuid
+  key   String @unique
+  value String
+  group String @default("general")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy String?   @db.Uuid
+  updatedBy String?   @db.Uuid
+  deletedAt DateTime?
+
+  @@index([group])
+  @@index([deletedAt])
+  @@map("settings")
+}
+
+model AuditLog {
+  id        String  @id @default(uuid()) @db.Uuid
+  userId    String? @db.Uuid
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

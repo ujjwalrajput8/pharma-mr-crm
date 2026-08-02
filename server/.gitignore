@@ -3,3 +3,16 @@ node_modules
 .env
 
 /generated/prisma
+dist
+
+# Accidental emit beside sources
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+*.js.map
+prisma.config.js
+prisma.config.d.ts
+prisma.config.d.ts.map
+prisma.config.js.map
+
