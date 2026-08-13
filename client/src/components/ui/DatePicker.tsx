@@ -4,6 +4,7 @@ import { CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/utils/cn';
 import { parseIsoDate, toIsoDate } from '@/utils/datetime';
+import { fieldControlClass, fieldLabelClass } from '@/components/ui/formStyles';
 import 'react-day-picker/style.css';
 
 interface DatePickerProps {
@@ -53,10 +54,10 @@ export function DatePicker({
   }
 
   return (
-    <div ref={rootRef} className={cn('relative block text-sm font-medium text-[var(--color-ink)]', className)}>
-      <label htmlFor={id}>
+    <div ref={rootRef} className={cn('relative block', className)}>
+      <label htmlFor={id} className={cn(fieldLabelClass, 'flex items-center gap-1')}>
         {label}
-        {required ? <span className="text-[var(--color-danger)]"> *</span> : null}
+        {required ? <span className="text-[var(--color-danger)]">*</span> : null}
       </label>
       <div className="relative mt-1.5">
         <input
@@ -76,20 +77,20 @@ export function DatePicker({
             }
             if (e.key === 'Escape') setOpen(false);
           }}
-          className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-2.5 pr-10 text-sm outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-teal-500/20 disabled:opacity-60"
+          className={cn(fieldControlClass, 'pr-9')}
         />
         <button
           type="button"
           disabled={disabled}
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-[var(--color-muted)]"
+          className="absolute inset-y-0 right-0 flex items-center px-2.5 text-[var(--color-muted)]"
           onClick={() => setOpen((v) => !v)}
           aria-label="Open calendar"
         >
-          <CalendarDays size={16} />
+          <CalendarDays size={15} />
         </button>
       </div>
       {open ? (
-        <div className="absolute z-50 mt-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-md)] animate-scale-in">
+        <div className="absolute z-50 mt-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2.5 shadow-[var(--shadow-md)] animate-scale-in">
           <DayPicker
             mode="single"
             selected={selected}
@@ -104,7 +105,7 @@ export function DatePicker({
               <div className="mt-2 flex justify-between gap-2 border-t border-[var(--color-border)] pt-2 text-xs">
                 <button
                   type="button"
-                  className="rounded-lg px-2 py-1 text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
+                  className="rounded-md px-2 py-1 text-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
                   onClick={() => {
                     const iso = toIsoDate(new Date());
                     onChange(iso);

@@ -46,21 +46,23 @@ export function AppointmentDetailsDialog({
       className="max-w-xl"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" size="sm" onClick={onClose}>
             Close
           </Button>
           {canAct && onReschedule ? (
-            <Button variant="secondary" onClick={onReschedule}>
+            <Button variant="soft" size="sm" onClick={onReschedule}>
               Reschedule
             </Button>
           ) : null}
           {canAct && onCancel ? (
-            <Button variant="danger" onClick={onCancel}>
+            <Button variant="danger" size="sm" onClick={onCancel}>
               Cancel
             </Button>
           ) : null}
           {canAct && onComplete ? (
-            <Button onClick={onComplete}>Complete + Visit</Button>
+            <Button size="sm" onClick={onComplete}>
+              Complete + Visit
+            </Button>
           ) : null}
         </>
       }

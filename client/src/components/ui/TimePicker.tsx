@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Clock } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { formatTime12, parseTime12To24 } from '@/utils/datetime';
+import { fieldControlClass, fieldLabelClass } from '@/components/ui/formStyles';
 
 interface TimePickerProps {
   label: string;
@@ -42,14 +43,13 @@ export function TimePicker({
   }, []);
 
   const parts = useMemo(() => {
-    const match = /^(\d{2}):(\d{2})$/.exec(value);
-    if (!match) return { hour12: '10', minute: '00', period: 'AM' as const };
-    let h = Number(match[1]);
-    const minute = match[2]!;
-    const period = h >= 12 ? 'PM' : 'AM';
-    h = h % 12;
-    if (h === 0) h = 12;
-    return { hour12: String(h).padStart(2, '0'), minute, period: period as 'AM' | 'PM' };
+    const formatted = formatTime12(value || '10:00');
+    const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(formatted);
+    return {
+      hour12: match?.[1]?.padStart(2, '0') ?? '10',
+      minute: match?.[2] ?? '00',
+      period: (match?.[3]?.toUpperCase() as 'AM' | 'PM') ?? 'AM',
+    };
   }, [value]);
 
   function apply(hour12: string, minute: string, period: 'AM' | 'PM') {
@@ -68,10 +68,10 @@ export function TimePicker({
   }
 
   return (
-    <div ref={rootRef} className={cn('relative block text-sm font-medium text-[var(--color-ink)]', className)}>
-      <label htmlFor={id}>
+    <div ref={rootRef} className={cn('relative block', className)}>
+      <label htmlFor={id} className={cn(fieldLabelClass, 'flex items-center gap-1')}>
         {label}
-        {required ? <span className="text-[var(--color-danger)]"> *</span> : null}
+        {required ? <span className="text-[var(--color-danger)]">*</span> : null}
       </label>
       <div className="relative mt-1.5">
         <input
@@ -91,29 +91,30 @@ export function TimePicker({
             }
             if (e.key === 'Escape') setOpen(false);
           }}
-          className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3.5 py-2.5 pr-10 text-sm outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-teal-500/20 disabled:opacity-60"
+          className={cn(fieldControlClass, 'pr-9')}
         />
         <button
           type="button"
           disabled={disabled}
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-[var(--color-muted)]"
+          className="absolute inset-y-0 right-0 flex items-center px-2.5 text-[var(--color-muted)]"
           onClick={() => setOpen((v) => !v)}
           aria-label="Open time picker"
         >
-          <Clock size={16} />
+          <Clock size={15} />
         </button>
       </div>
       {open ? (
-        <div className="absolute z-50 mt-2 w-72 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-md)] animate-scale-in">
-          <div className="grid grid-cols-3 gap-2">
-            <div className="max-h-40 overflow-y-auto rounded-xl border border-[var(--color-border)]">
+        <div className="absolute z-50 mt-1.5 w-64 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2.5 shadow-[var(--shadow-md)] animate-scale-in">
+          <div className="grid grid-cols-3 gap-1.5">
+            <div className="max-h-36 overflow-y-auto rounded-lg border border-[var(--color-border)]">
               {HOURS.map((h) => (
                 <button
                   key={h}
                   type="button"
                   className={cn(
-                    'block w-full px-2 py-1.5 text-left text-sm hover:bg-[var(--color-primary-soft)]',
-                    parts.hour12 === h && 'bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary)]',
+                    'block w-full px-2 py-1 text-left text-xs hover:bg-[var(--color-primary-soft)]',
+                    parts.hour12 === h &&
+                      'bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary)]',
                   )}
                   onClick={() => apply(h, parts.minute, parts.period)}
                 >
@@ -121,14 +122,15 @@ export function TimePicker({
                 </button>
               ))}
             </div>
-            <div className="max-h-40 overflow-y-auto rounded-xl border border-[var(--color-border)]">
+            <div className="max-h-36 overflow-y-auto rounded-lg border border-[var(--color-border)]">
               {MINUTES.map((m) => (
                 <button
                   key={m}
                   type="button"
                   className={cn(
-                    'block w-full px-2 py-1.5 text-left text-sm hover:bg-[var(--color-primary-soft)]',
-                    parts.minute === m && 'bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary)]',
+                    'block w-full px-2 py-1 text-left text-xs hover:bg-[var(--color-primary-soft)]',
+                    parts.minute === m &&
+                      'bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary)]',
                   )}
                   onClick={() => apply(parts.hour12, m, parts.period)}
                 >
@@ -136,14 +138,15 @@ export function TimePicker({
                 </button>
               ))}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {(['AM', 'PM'] as const).map((p) => (
                 <button
                   key={p}
                   type="button"
                   className={cn(
-                    'block w-full rounded-xl border border-[var(--color-border)] px-2 py-2 text-sm hover:bg-[var(--color-primary-soft)]',
-                    parts.period === p && 'border-[var(--color-primary)] bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary)]',
+                    'block w-full rounded-lg border border-[var(--color-border)] px-2 py-1.5 text-xs hover:bg-[var(--color-primary-soft)]',
+                    parts.period === p &&
+                      'border-[var(--color-primary)] bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary)]',
                   )}
                   onClick={() => apply(parts.hour12, parts.minute, p)}
                 >
@@ -152,7 +155,7 @@ export function TimePicker({
               ))}
               <button
                 type="button"
-                className="w-full rounded-xl bg-[var(--color-primary)] px-2 py-2 text-sm text-white"
+                className="w-full rounded-lg bg-[var(--color-primary)] px-2 py-1.5 text-xs text-white"
                 onClick={() => setOpen(false)}
               >
                 Done

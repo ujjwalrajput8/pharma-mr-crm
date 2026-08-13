@@ -38,15 +38,15 @@ export function ConfirmDialog({
       title=""
       className="max-w-md overflow-hidden !p-0"
       footer={
-        <div className="flex w-full flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="secondary" onClick={onClose} disabled={loading} className="w-full sm:w-auto">
+        <div className="flex w-full flex-wrap items-center justify-end gap-1.5">
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={loading}>
             {cancelLabel}
           </Button>
           <Button
-            variant={isLogout ? 'primary' : 'danger'}
+            variant={isLogout ? 'primary' : 'destructive'}
+            size="sm"
             onClick={onConfirm}
             disabled={loading}
-            className="w-full sm:w-auto"
           >
             {loading ? 'Please wait…' : resolvedConfirm}
           </Button>

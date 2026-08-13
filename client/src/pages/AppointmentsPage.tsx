@@ -278,9 +278,9 @@ export function AppointmentsPage() {
                     </>
                   ) : null}
                   <Td>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-1">
                       <Button
-                        variant="secondary"
+                        variant="ghost"
                         size="sm"
                         onClick={() => setSelected(item)}
                       >
@@ -289,7 +289,7 @@ export function AppointmentsPage() {
                       {item.status === 'PENDING' || item.status === 'RESCHEDULED' ? (
                         <>
                           <Button
-                            variant="secondary"
+                            variant="soft"
                             size="sm"
                             onClick={() => setRescheduleFor(item)}
                           >
@@ -300,7 +300,7 @@ export function AppointmentsPage() {
                             size="sm"
                             onClick={() => setCompleteFor(item)}
                           >
-                            Complete + Visit
+                            Complete
                           </Button>
                           <Button
                             variant="ghost"

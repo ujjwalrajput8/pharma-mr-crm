@@ -66,10 +66,10 @@ export function AppointmentRescheduleDialog({
       className="max-w-lg"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" form="reschedule-form" disabled={submitting}>
+          <Button type="submit" form="reschedule-form" size="sm" disabled={submitting}>
             {submitting ? 'Saving…' : 'Save new schedule'}
           </Button>
         </>

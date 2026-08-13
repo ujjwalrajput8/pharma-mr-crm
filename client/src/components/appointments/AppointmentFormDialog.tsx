@@ -117,10 +117,10 @@ export function AppointmentFormDialog({
       className="max-w-3xl"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" form="appointment-form" disabled={submitting}>
+          <Button type="submit" form="appointment-form" size="sm" disabled={submitting}>
             {submitting ? 'Saving…' : editing ? 'Update' : 'Save Appointment'}
           </Button>
         </>

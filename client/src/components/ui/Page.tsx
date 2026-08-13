@@ -12,19 +12,19 @@ export function PageHeader({
 }) {
   return (
     <div className="mb-1">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-xl font-semibold tracking-tight text-[var(--color-ink)]">{title}</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-[var(--color-ink)] sm:text-xl">
+            {title}
+          </h2>
           {description ? (
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--color-muted)]">
+            <p className="mt-1 max-w-2xl text-xs leading-relaxed text-[var(--color-muted)] sm:text-sm">
               {description}
             </p>
           ) : null}
         </div>
         {actions ? (
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end [&_button]:w-full sm:[&_button]:w-auto">
-            {actions}
-          </div>
+          <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">{actions}</div>
         ) : null}
       </div>
     </div>
@@ -90,7 +90,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[11px] font-semibold tracking-wide uppercase',
+        'inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold tracking-wide uppercase',
         tones[tone],
       )}
     >
