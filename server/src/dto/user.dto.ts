@@ -32,7 +32,7 @@ export const listUsersQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
   search: z.string().optional(),
   status: z.enum([UserStatuses.ACTIVE, UserStatuses.INACTIVE]).optional(),
-  role: z.enum([AppRoles.ADMIN, AppRoles.MR]).optional(),
+  role: z.enum([AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR]).optional(),
 });
 
 export type CreateMrDto = z.infer<typeof createMrSchema>;

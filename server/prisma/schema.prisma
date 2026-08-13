@@ -1,4 +1,5 @@
-// Pharma MR CRM — SFA schema (SQL autoincrement IDs)
+// Pharma MR Field Force — PostgreSQL schema
+// Core bet: append-only stock_txns (mutable qty columns are NOT source of truth)
 
 generator client {
   provider = "prisma-client"
@@ -9,8 +10,11 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
 enum Role {
   ADMIN
+  MANAGER
   MR
 }
 
@@ -24,19 +28,94 @@ enum RecordStatus {
   INACTIVE
 }
 
+enum TerritoryType {
+  STATE
+  DISTRICT
+  HQ
+  BEAT
+}
+
+enum DoctorCategory {
+  A
+  B
+  C
+}
+
+enum ChemistType {
+  CHEMIST
+  STOCKIST
+}
+
 enum AppointmentStatus {
+  REQUESTED
+  CONFIRMED
   PENDING
   COMPLETED
+  VISITED
+  NO_SHOW
   CANCELLED
   RESCHEDULED
 }
 
-enum StockMovementType {
-  ISSUE
-  RETURN
-  ADJUSTMENT
-  SAMPLE
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  LEAVE
+  HOLIDAY
+  OFFICE
+  JOINT_WORK
+  FLAGGED
 }
+
+enum TourPlanStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  LOCKED
+}
+
+enum WorkType {
+  FIELD
+  OFFICE
+  JOINT_WORK
+  LEAVE
+  HOLIDAY
+}
+
+/// Append-only ledger transaction types
+enum StockTxnType {
+  OPENING
+  RECEIPT
+  TRANSFER
+  ISSUE
+  SAMPLE_GIVEN
+  GIFT_GIVEN
+  SALE
+  RETURN
+  EXPIRY_WRITEOFF
+  ADJUSTMENT
+  LOST
+}
+
+enum HolderType {
+  WAREHOUSE
+  USER
+  DOCTOR
+  CHEMIST
+}
+
+enum StockRefType {
+  ISSUE
+  VISIT
+  RETURN
+  COUNT
+  SALE
+  MANUAL
+}
+
+// ─── Users & hierarchy ────────────────────────────────────────────────────────
 
 model User {
   id           Int        @id @default(autoincrement())
@@ -46,6 +125,8 @@ model User {
   phone        String?
   role         Role
   status       UserStatus @default(ACTIVE)
+  managerId    Int?
+  territoryId  Int?
   lastLoginAt  DateTime?
 
   createdAt DateTime  @default(now())
@@ -54,21 +135,33 @@ model User {
   updatedBy Int?
   deletedAt DateTime?
 
-  mrProfile           MrProfile?
-  refreshTokens       RefreshToken[]
-  assignedDoctors     DoctorAssignment[]     @relation("MrDoctorAssignments")
-  appointmentsAsMr    Appointment[]          @relation("MrAppointments")
-  visitsAsMr          Visit[]                @relation("MrVisits")
-  distributionsAsMr   MedicineDistribution[] @relation("MrDistributions")
-  stockMovementsAsMr  StockMovement[]        @relation("MrStockMovements")
-  salesAsMr           Sale[]                 @relation("MrSales")
-  attendances         Attendance[]           @relation("MrAttendance")
-  medicineIssuesAsMr  MedicineIssue[]        @relation("MrMedicineIssues")
-  mrStocks            MrStock[]              @relation("MrStocks")
-  auditLogs           AuditLog[]
+  manager    User?      @relation("UserHierarchy", fields: [managerId], references: [id], onDelete: SetNull)
+  reports    User[]     @relation("UserHierarchy")
+  territory  Territory? @relation(fields: [territoryId], references: [id], onDelete: SetNull)
+  mrProfile  MrProfile?
+  refreshTokens RefreshToken[]
+  userPermissions UserPermission[]
+
+  permissionsCustomized Boolean @default(false)
+
+  assignedDoctors    DoctorAssignment[] @relation("MrDoctorAssignments")
+  appointmentsAsMr   Appointment[]      @relation("MrAppointments")
+  appointmentsAssigned Appointment[]    @relation("AppointmentAssigner")
+  visitsAsMr         Visit[]            @relation("MrVisits")
+  attendances        Attendance[]       @relation("UserAttendance")
+  approvedAttendances Attendance[]      @relation("AttendanceApprover")
+  tourPlans          TourPlan[]         @relation("MrTourPlans")
+  approvedTourPlans  TourPlan[]         @relation("TourPlanApprover")
+  jointTourDays      TourPlanDay[]      @relation("JointWorkUser")
+  salesAsMr          Sale[]             @relation("MrSales")
+  stockTxnsCreated   StockTxn[]         @relation("StockTxnCreator")
+  stockCounts        StockCount[]
+  auditLogs          AuditLog[]
 
   @@index([role])
   @@index([status])
+  @@index([managerId])
+  @@index([territoryId])
   @@index([deletedAt])
   @@map("users")
 }
@@ -115,10 +208,42 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+model Territory {
+  id       Int           @id @default(autoincrement())
+  name     String
+  type     TerritoryType
+  parentId Int?
+  status   RecordStatus  @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy Int?
+  updatedBy Int?
+  deletedAt DateTime?
+
+  parent   Territory?  @relation("TerritoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Territory[] @relation("TerritoryTree")
+  users    User[]
+  doctors  Doctor[]
+  chemists MedicalStore[]
+  tourPlanDays TourPlanDay[]
+
+  @@index([parentId])
+  @@index([type])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("territories")
+}
+
+// ─── Masters ─────────────────────────────────────────────────────────────────
+
 model Doctor {
-  id             Int          @id @default(autoincrement())
+  id             Int             @id @default(autoincrement())
   fullName       String
   specialization String?
+  degree         String?
+  regNo          String?
+  category       DoctorCategory  @default(B)
   hospital       String?
   clinic         String?
   email          String?
@@ -128,10 +253,17 @@ model Doctor {
   city           String?
   state          String?
   pincode        String?
+  latitude       Float?
+  longitude      Float?
+  territoryId    Int?
+  visitFreqPm    Int?
   visitingDays   String?
   preferredTime  String?
+  birthday       DateTime?       @db.Date
+  anniversary    DateTime?       @db.Date
   notes          String?
-  status         RecordStatus @default(ACTIVE)
+  status         RecordStatus    @default(ACTIVE)
+  approvedBy     Int?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -139,14 +271,17 @@ model Doctor {
   updatedBy Int?
   deletedAt DateTime?
 
+  territory     Territory?         @relation(fields: [territoryId], references: [id], onDelete: SetNull)
   assignments   DoctorAssignment[]
   appointments  Appointment[]
   visits        Visit[]
-  distributions MedicineDistribution[]
   sales         Sale[]
+  tourPlanCalls TourPlanCall[]
 
   @@index([fullName])
   @@index([city])
+  @@index([category])
+  @@index([territoryId])
   @@index([status])
   @@index([deletedAt])
   @@map("doctors")
@@ -180,6 +315,7 @@ model DoctorAssignment {
 model MedicalStore {
   id                Int          @id @default(autoincrement())
   name              String
+  type              ChemistType  @default(CHEMIST)
   ownerName         String?
   gstNumber         String?
   drugLicenseNumber String?
@@ -190,6 +326,9 @@ model MedicalStore {
   city              String?
   state             String?
   pincode           String?
+  latitude          Float?
+  longitude         Float?
+  territoryId       Int?
   notes             String?
   status            RecordStatus @default(ACTIVE)
 
@@ -199,11 +338,14 @@ model MedicalStore {
   updatedBy Int?
   deletedAt DateTime?
 
-  purchases MedicinePurchase[]
-  sales     Sale[]
+  territory     Territory?     @relation(fields: [territoryId], references: [id], onDelete: SetNull)
+  sales         Sale[]
+  tourPlanCalls TourPlanCall[]
 
   @@index([name])
+  @@index([type])
   @@index([gstNumber])
+  @@index([territoryId])
   @@index([status])
   @@index([deletedAt])
   @@map("medical_stores")
@@ -212,6 +354,7 @@ model MedicalStore {
 model Medicine {
   id              Int          @id @default(autoincrement())
   name            String
+  code            String?      @unique
   brandName       String?
   genericName     String?
   company         String?
@@ -220,9 +363,9 @@ model Medicine {
   category        String?
   packSize        String?
   mrp             Decimal      @db.Decimal(12, 2)
+  ptr             Decimal?     @db.Decimal(12, 2)
+  pts             Decimal?     @db.Decimal(12, 2)
   sku             String?      @unique
-  batchNumber     String?
-  expiryDate      DateTime?    @db.Date
   description     String?
   sampleAvailable Boolean      @default(true)
   status          RecordStatus @default(ACTIVE)
@@ -233,14 +376,12 @@ model Medicine {
   updatedBy Int?
   deletedAt DateTime?
 
-  stock          Stock?
-  purchases      MedicinePurchase[]
-  visitProducts  VisitProduct[]
-  distributions  MedicineDistribution[]
-  stockMovements StockMovement[]
-  sales          Sale[]
-  medicineIssues MedicineIssue[]
-  mrStocks       MrStock[]
+  batches           Batch[]
+  visitProducts     VisitProduct[]
+  stockTxns         StockTxn[]
+  stockBalances     StockBalance[]
+  stockCountItems   StockCountItem[]
+  sales             Sale[]
 
   @@index([name])
   @@index([category])
@@ -250,36 +391,13 @@ model Medicine {
   @@map("medicines")
 }
 
-/// Company warehouse stock
-model Stock {
-  id                Int @id @default(autoincrement())
-  medicineId        Int @unique
-  openingStock      Int @default(0)
-  issued            Int @default(0)
-  returned          Int @default(0)
-  available         Int @default(0)
-  minimumStockAlert Int @default(10)
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  createdBy Int?
-  updatedBy Int?
-  deletedAt DateTime?
-
-  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
-
-  @@index([available])
-  @@index([deletedAt])
-  @@map("stocks")
-}
-
-/// Per-MR sample bag stock (increased by MedicineIssue, reduced by Sample Distribution)
-model MrStock {
-  id         Int     @id @default(autoincrement())
-  mrId       Int
+model Batch {
+  id         Int          @id @default(autoincrement())
   medicineId Int
-  quantity   Int     @default(0)
-  batchNumber String?
+  batchNo    String
+  mfgDate    DateTime?    @db.Date
+  expiryDate DateTime?    @db.Date
+  status     RecordStatus @default(ACTIVE)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -287,76 +405,84 @@ model MrStock {
   updatedBy Int?
   deletedAt DateTime?
 
-  mr       User     @relation("MrStocks", fields: [mrId], references: [id], onDelete: Cascade)
-  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  medicine        Medicine         @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  stockTxns       StockTxn[]
+  stockBalances   StockBalance[]
+  stockCountItems StockCountItem[]
 
-  @@unique([mrId, medicineId])
-  @@index([mrId])
+  @@unique([medicineId, batchNo])
   @@index([medicineId])
+  @@index([expiryDate])
+  @@index([status])
   @@index([deletedAt])
-  @@map("mr_stocks")
+  @@map("batches")
 }
 
-/// Admin issues company medicine samples to an MR
-model MedicineIssue {
-  id          Int      @id @default(autoincrement())
-  mrId        Int
-  medicineId  Int
-  quantity    Int
-  batchNumber String?
-  issueDate   DateTime @db.Date
-  remarks     String?
+// ─── Stock ledger (append-only) ───────────────────────────────────────────────
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  createdBy Int?
-  updatedBy Int?
-  deletedAt DateTime?
-
-  mr       User     @relation("MrMedicineIssues", fields: [mrId], references: [id], onDelete: Cascade)
-  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
-
-  @@index([mrId])
-  @@index([medicineId])
-  @@index([issueDate])
-  @@index([deletedAt])
-  @@map("medicine_issues")
-}
-
-model StockMovement {
-  id         Int               @id @default(autoincrement())
-  medicineId Int
-  mrId       Int?
-  type       StockMovementType
-  quantity   Int
-  remarks    String?
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  createdBy Int?
-  updatedBy Int?
-  deletedAt DateTime?
-
-  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
-  mr       User?    @relation("MrStockMovements", fields: [mrId], references: [id], onDelete: SetNull)
-
-  @@index([medicineId])
-  @@index([mrId])
-  @@index([type])
-  @@index([createdAt])
-  @@index([deletedAt])
-  @@map("stock_movements")
-}
-
-model MedicinePurchase {
-  id             Int      @id @default(autoincrement())
-  medicalStoreId Int
+/// Source of truth for all stock movement. Never UPDATE qty / DELETE rows in app logic.
+model StockTxn {
+  id             Int          @id @default(autoincrement())
+  txnNo          String       @unique
+  txnType        StockTxnType
+  txnDate        DateTime     @db.Date
   medicineId     Int
-  quantity       Int
-  unitPrice      Decimal  @db.Decimal(12, 2)
-  purchaseDate   DateTime
-  invoiceNumber  String?
-  remarks        String?
+  batchId        Int
+  qty            Int
+  fromHolderType HolderType?
+  fromHolderId   Int?
+  toHolderType   HolderType?
+  toHolderId     Int?
+  refType        StockRefType?
+  refId          Int?
+  note           String?
+  clientUuid     String?      @unique
+
+  createdAt DateTime @default(now())
+  createdBy Int?
+
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Restrict)
+  batch    Batch    @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  creator  User?    @relation("StockTxnCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([txnType])
+  @@index([txnDate])
+  @@index([medicineId])
+  @@index([batchId])
+  @@index([fromHolderType, fromHolderId])
+  @@index([toHolderType, toHolderId])
+  @@index([refType, refId])
+  @@index([createdAt])
+  @@map("stock_txns")
+}
+
+/// Derived rollup — rebuildable from stock_txns. Screens read this; audit reads ledger.
+model StockBalance {
+  id           Int        @id @default(autoincrement())
+  holderType   HolderType
+  holderId     Int
+  medicineId   Int
+  batchId      Int
+  qty          Int        @default(0)
+  updatedAt    DateTime   @updatedAt
+
+  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  batch    Batch    @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([holderType, holderId, medicineId, batchId])
+  @@index([holderType, holderId])
+  @@index([medicineId])
+  @@index([batchId])
+  @@index([qty])
+  @@map("stock_balances")
+}
+
+model StockCount {
+  id        Int            @id @default(autoincrement())
+  userId    Int
+  countDate DateTime       @db.Date
+  status    TourPlanStatus @default(DRAFT)
+  remark    String?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -364,25 +490,148 @@ model MedicinePurchase {
   updatedBy Int?
   deletedAt DateTime?
 
-  medicalStore MedicalStore @relation(fields: [medicalStoreId], references: [id], onDelete: Cascade)
-  medicine     Medicine     @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items StockCountItem[]
 
-  @@index([medicalStoreId])
-  @@index([medicineId])
-  @@index([purchaseDate])
+  @@index([userId])
+  @@index([countDate])
   @@index([deletedAt])
-  @@map("medicine_purchases")
+  @@map("stock_counts")
+}
+
+model StockCountItem {
+  id          Int @id @default(autoincrement())
+  countId     Int
+  medicineId  Int
+  batchId     Int
+  systemQty   Int
+  physicalQty Int
+  diff        Int
+
+  count    StockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  medicine Medicine   @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  batch    Batch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@unique([countId, medicineId, batchId])
+  @@index([countId])
+  @@map("stock_count_items")
+}
+
+// ─── Field activity ───────────────────────────────────────────────────────────
+
+model Attendance {
+  id              Int              @id @default(autoincrement())
+  userId          Int
+  attDate         DateTime         @db.Date
+  checkInAt       DateTime?
+  checkOutAt      DateTime?
+  workingMins     Int?
+  inLat           Float?
+  inLng           Float?
+  accuracyM       Float?
+  isMockLocation  Boolean          @default(false)
+  deviceAt        DateTime?
+  serverAt        DateTime?
+  photoUrl        String?
+  status          AttendanceStatus @default(PRESENT)
+  flagReason      String?
+  approvedById    Int?
+  locationNote    String?
+  remarks         String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy Int?
+  updatedBy Int?
+  deletedAt DateTime?
+
+  user       User  @relation("UserAttendance", fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy User? @relation("AttendanceApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, attDate])
+  @@index([userId])
+  @@index([attDate])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("attendances")
+}
+
+model TourPlan {
+  id          Int            @id @default(autoincrement())
+  userId      Int
+  planMonth   DateTime       @db.Date
+  status      TourPlanStatus @default(DRAFT)
+  submittedAt DateTime?
+  approvedById Int?
+  actedAt     DateTime?
+  remark      String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy Int?
+  updatedBy Int?
+  deletedAt DateTime?
+
+  user       User          @relation("MrTourPlans", fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy User?         @relation("TourPlanApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  days       TourPlanDay[]
+
+  @@unique([userId, planMonth])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("tour_plans")
+}
+
+model TourPlanDay {
+  id               Int      @id @default(autoincrement())
+  tourPlanId       Int
+  planDate         DateTime @db.Date
+  territoryId      Int?
+  workType         WorkType @default(FIELD)
+  jointWithUserId  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tourPlan  TourPlan       @relation(fields: [tourPlanId], references: [id], onDelete: Cascade)
+  territory Territory?     @relation(fields: [territoryId], references: [id], onDelete: SetNull)
+  jointWith User?          @relation("JointWorkUser", fields: [jointWithUserId], references: [id], onDelete: SetNull)
+  calls     TourPlanCall[]
+
+  @@unique([tourPlanId, planDate])
+  @@index([planDate])
+  @@map("tour_plan_days")
+}
+
+model TourPlanCall {
+  id            Int  @id @default(autoincrement())
+  tourPlanDayId Int
+  doctorId      Int?
+  chemistId     Int?
+
+  tourPlanDay TourPlanDay  @relation(fields: [tourPlanDayId], references: [id], onDelete: Cascade)
+  doctor      Doctor?      @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  chemist     MedicalStore? @relation(fields: [chemistId], references: [id], onDelete: Cascade)
+
+  @@index([tourPlanDayId])
+  @@index([doctorId])
+  @@index([chemistId])
+  @@map("tour_plan_calls")
 }
 
 model Appointment {
-  id       Int               @id @default(autoincrement())
-  doctorId Int
-  mrId     Int
-  date     DateTime          @db.Date
-  time     DateTime          @db.Time(0)
-  purpose  String?
-  status   AppointmentStatus @default(PENDING)
-  remarks  String?
+  id           Int               @id @default(autoincrement())
+  doctorId     Int
+  mrId         Int
+  /// Who assigned this appointment to the MR (Admin/Manager). Null when MR self-booked.
+  assignedById Int?
+  date         DateTime          @db.Date
+  time         DateTime          @db.Time(0)
+  slotEnd      DateTime?         @db.Time(0)
+  purpose      String?
+  status       AppointmentStatus @default(PENDING)
+  remarks      String?
+  rescheduleOf Int?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -390,12 +639,16 @@ model Appointment {
   updatedBy Int?
   deletedAt DateTime?
 
-  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  mr     User   @relation("MrAppointments", fields: [mrId], references: [id], onDelete: Cascade)
-  visit  Visit?
+  doctor           Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  mr               User          @relation("MrAppointments", fields: [mrId], references: [id], onDelete: Cascade)
+  assignedBy       User?         @relation("AppointmentAssigner", fields: [assignedById], references: [id], onDelete: SetNull)
+  rescheduleOfAppt Appointment?  @relation("AppointmentReschedule", fields: [rescheduleOf], references: [id], onDelete: SetNull)
+  reschedules      Appointment[] @relation("AppointmentReschedule")
+  visit            Visit?
 
   @@index([doctorId])
   @@index([mrId])
+  @@index([assignedById])
   @@index([date])
   @@index([status])
   @@index([deletedAt])
@@ -403,20 +656,28 @@ model Appointment {
 }
 
 model Visit {
-  id                 Int       @id @default(autoincrement())
-  appointmentId      Int       @unique
-  doctorId           Int
-  mrId               Int
-  visitDate          DateTime  @db.Date
-  visitTime          DateTime  @db.Time(0)
-  checkInTime        DateTime? @db.Time(0)
-  checkOutTime       DateTime? @db.Time(0)
-  meetingDurationMin Int?
-  discussionNotes    String?
-  doctorFeedback     String?
-  visitOutcome       String?
-  nextFollowUp       DateTime? @db.Date
-  remarks            String?
+  id                  Int       @id @default(autoincrement())
+  appointmentId       Int?      @unique
+  doctorId            Int?
+  chemistId           Int?
+  mrId                Int
+  visitDate           DateTime  @db.Date
+  visitTime           DateTime  @db.Time(0)
+  checkInTime         DateTime? @db.Time(0)
+  checkOutTime        DateTime? @db.Time(0)
+  meetingDurationMin  Int?
+  inLat               Float?
+  inLng               Float?
+  distanceFromClinicM Int?
+  discussionNotes     String?
+  doctorFeedback      String?
+  visitOutcome        String?
+  nextFollowUp        DateTime? @db.Date
+  photoUrl            String?
+  remarks             String?
+  clientUuid          String?   @unique
+  lockedAt            DateTime?
+  approvedById        Int?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -424,11 +685,10 @@ model Visit {
   updatedBy Int?
   deletedAt DateTime?
 
-  appointment   Appointment            @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  doctor        Doctor                 @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  mr            User                   @relation("MrVisits", fields: [mrId], references: [id], onDelete: Cascade)
-  products      VisitProduct[]
-  distributions MedicineDistribution[]
+  appointment Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  doctor      Doctor?        @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  mr          User           @relation("MrVisits", fields: [mrId], references: [id], onDelete: Cascade)
+  products    VisitProduct[]
 
   @@index([doctorId])
   @@index([mrId])
@@ -437,11 +697,15 @@ model Visit {
   @@map("visits")
 }
 
+/// Products detailed during visit — samples live ONLY in stock_txns (refType=VISIT)
 model VisitProduct {
-  id         Int     @id @default(autoincrement())
-  visitId    Int
-  medicineId Int
-  notes      String?
+  id                  Int     @id @default(autoincrement())
+  visitId             Int
+  medicineId          Int
+  detailSeq           Int     @default(1)
+  interestLevel       String?
+  prescriptionExpected Boolean @default(false)
+  notes               String?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -459,75 +723,7 @@ model VisitProduct {
   @@map("visit_products")
 }
 
-model MedicineDistribution {
-  id            Int      @id @default(autoincrement())
-  visitId       Int
-  doctorId      Int
-  mrId          Int
-  medicineId    Int
-  batchNumber   String?
-  quantity      Int
-  unit          String?
-  distributedAt DateTime @default(now())
-  remarks       String?
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  createdBy Int?
-  updatedBy Int?
-  deletedAt DateTime?
-
-  visit    Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
-  doctor   Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  mr       User     @relation("MrDistributions", fields: [mrId], references: [id], onDelete: Cascade)
-  medicine Medicine @relation(fields: [medicineId], references: [id], onDelete: Cascade)
-
-  @@index([visitId])
-  @@index([doctorId])
-  @@index([mrId])
-  @@index([medicineId])
-  @@index([distributedAt])
-  @@index([deletedAt])
-  @@map("medicine_distributions")
-}
-
-model Setting {
-  id    Int    @id @default(autoincrement())
-  key   String @unique
-  value String
-  group String @default("general")
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  createdBy Int?
-  updatedBy Int?
-  deletedAt DateTime?
-
-  @@index([group])
-  @@index([deletedAt])
-  @@map("settings")
-}
-
-model AuditLog {
-  id        Int     @id @default(autoincrement())
-  userId    Int?
-  action    String
-  entity    String
-  entityId  String?
-  metadata  Json?
-  ipAddress String?
-  userAgent String?
-
-  createdAt DateTime @default(now())
-
-  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-  @@index([entity, entityId])
-  @@index([action])
-  @@index([createdAt])
-  @@map("audit_logs")
-}
+// ─── Commercial ───────────────────────────────────────────────────────────────
 
 model Sale {
   id             Int      @id @default(autoincrement())
@@ -561,17 +757,13 @@ model Sale {
   @@map("sales")
 }
 
-model Attendance {
-  id           Int       @id @default(autoincrement())
-  mrId         Int
-  workDate     DateTime  @db.Date
-  checkInAt    DateTime?
-  checkOutAt   DateTime?
-  workingMins  Int?
-  latitude     Float?
-  longitude    Float?
-  locationNote String?
-  remarks      String?
+// ─── System ───────────────────────────────────────────────────────────────────
+
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+  group String @default("general")
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -579,11 +771,81 @@ model Attendance {
   updatedBy Int?
   deletedAt DateTime?
 
-  mr User @relation("MrAttendance", fields: [mrId], references: [id], onDelete: Cascade)
-
-  @@unique([mrId, workDate])
-  @@index([mrId])
-  @@index([workDate])
+  @@index([group])
   @@index([deletedAt])
-  @@map("attendances")
+  @@map("settings")
+}
+
+model AuditLog {
+  id        Int     @id @default(autoincrement())
+  userId    Int?
+  action    String
+  entity    String
+  entityId  String?
+  before    Json?
+  after     Json?
+  metadata  Json?
+  ipAddress String?
+  userAgent String?
+  reason    String?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Warehouse {
+  id     Int          @id @default(autoincrement())
+  name   String
+  code   String       @unique
+  city   String?
+  status RecordStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy Int?
+  updatedBy Int?
+  deletedAt DateTime?
+
+  @@index([status])
+  @@index([deletedAt])
+  @@map("warehouses")
+}
+
+/// Default permissions for a role (seeded). Managers can be customized per user.
+model RolePermission {
+  id         Int    @id @default(autoincrement())
+  role       Role
+  permission String
+
+  createdAt DateTime @default(now())
+
+  @@unique([role, permission])
+  @@index([role])
+  @@map("role_permissions")
+}
+
+/// Per-user permission set when permissionsCustomized = true (Admin-managed for Managers).
+model UserPermission {
+  id         Int     @id @default(autoincrement())
+  userId     Int
+  permission String
+  allowed    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy Int?
+  updatedBy Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permission])
+  @@index([userId])
+  @@map("user_permissions")
 }

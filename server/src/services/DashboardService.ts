@@ -1,17 +1,56 @@
-import { AppRoles, AppointmentStatuses } from '../constants';
+import { AppRoles, AppointmentStatuses, HolderTypes, StockTxnTypes } from '../constants';
 import { PrismaService } from '../prisma/PrismaService';
+import { SettingRepository } from '../repositories/SettingRepository';
+import { UserRepository } from '../repositories/UserRepository';
 import type { AuthUser } from '../types/auth.types';
+
+const DEFAULT_WAREHOUSE_SETTING = 'stock.default_warehouse_id';
 
 export class DashboardService {
   private static instance: DashboardService | null = null;
 
-  private constructor(private readonly prisma = PrismaService.getClient()) {}
+  private constructor(
+    private readonly prisma = PrismaService.getClient(),
+    private readonly settings = SettingRepository.getInstance(),
+    private readonly users = UserRepository.getInstance(),
+  ) {}
 
   public static getInstance(): DashboardService {
     if (!DashboardService.instance) {
       DashboardService.instance = new DashboardService();
     }
     return DashboardService.instance;
+  }
+
+  private async getDefaultWarehouseId(): Promise<number | null> {
+    const setting = await this.settings.findByKey(DEFAULT_WAREHOUSE_SETTING);
+    if (!setting) return null;
+    const warehouseId = Number(setting.value);
+    return Number.isInteger(warehouseId) && warehouseId > 0 ? warehouseId : null;
+  }
+
+  /** Empty = all (Admin). Single or in-list for MR / Manager. */
+  private async resolveMrScope(actor: AuthUser): Promise<{ mrId?: number } | { mrId: { in: number[] } } | Record<string, never>> {
+    if (actor.role === AppRoles.MR) return { mrId: actor.id };
+    if (actor.role === AppRoles.MANAGER) {
+      const teamIds = await this.users.listReportIds(actor.id);
+      return { mrId: { in: [actor.id, ...teamIds] } };
+    }
+    return {};
+  }
+
+  private async resolveSampleHolderScope(actor: AuthUser) {
+    if (actor.role === AppRoles.MR) {
+      return { fromHolderType: HolderTypes.USER, fromHolderId: actor.id };
+    }
+    if (actor.role === AppRoles.MANAGER) {
+      const teamIds = await this.users.listReportIds(actor.id);
+      return {
+        fromHolderType: HolderTypes.USER,
+        fromHolderId: { in: [actor.id, ...teamIds] },
+      };
+    }
+    return {};
   }
 
   public async getSummary(actor: AuthUser) {
@@ -22,7 +61,15 @@ export class DashboardService {
     const todayDate = new Date(`${todayStart.toISOString().slice(0, 10)}T00:00:00.000Z`);
     const monthStart = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth(), 1));
     const yearStart = new Date(Date.UTC(todayDate.getUTCFullYear(), 0, 1));
-    const mrScope = actor.role === AppRoles.MR ? { mrId: actor.id } : {};
+    const mrScope = await this.resolveMrScope(actor);
+    const warehouseId = await this.getDefaultWarehouseId();
+    const sampleHolderScope = await this.resolveSampleHolderScope(actor);
+
+    const sampleWhere = {
+      txnType: StockTxnTypes.SAMPLE_GIVEN,
+      ...sampleHolderScope,
+      txnDate: { gte: monthStart, lte: todayEnd },
+    };
 
     const [
       totalMrs,
@@ -39,7 +86,7 @@ export class DashboardService {
       monthlyVisits,
       completedVisits,
       assignedDoctors,
-      stocks,
+      warehouseStockAgg,
       distributionAgg,
       todaysSalesAgg,
       monthlySalesAgg,
@@ -86,14 +133,18 @@ export class DashboardService {
             where: { deletedAt: null, mrId: actor.id, isActive: true },
           })
         : Promise.resolve(0),
-      this.prisma.stock.findMany({ where: { deletedAt: null } }),
-      this.prisma.medicineDistribution.aggregate({
-        where: {
-          deletedAt: null,
-          ...(actor.role === AppRoles.MR ? { mrId: actor.id } : {}),
-          distributedAt: { gte: monthStart, lte: todayEnd },
-        },
-        _sum: { quantity: true },
+      warehouseId
+        ? this.prisma.stockBalance.aggregate({
+            where: {
+              holderType: HolderTypes.WAREHOUSE,
+              holderId: warehouseId,
+            },
+            _sum: { qty: true },
+          })
+        : Promise.resolve({ _sum: { qty: 0 } }),
+      this.prisma.stockTxn.aggregate({
+        where: sampleWhere,
+        _sum: { qty: true },
       }),
       this.prisma.sale.aggregate({
         where: { deletedAt: null, invoiceDate: todayDate, ...mrScope },
@@ -109,14 +160,24 @@ export class DashboardService {
       }),
       actor.role === AppRoles.MR
         ? this.prisma.attendance.findFirst({
-            where: { mrId: actor.id, workDate: todayDate, deletedAt: null },
+            where: { userId: actor.id, attDate: todayDate, deletedAt: null },
           })
         : Promise.resolve(null),
     ]);
 
-    const lowStockCount = stocks.filter((s) => s.available <= s.minimumStockAlert).length;
-    const availableSampleStock = stocks.reduce((sum, s) => sum + s.available, 0);
-    const medicineDistributionQty = distributionAgg._sum.quantity ?? 0;
+    const lowStockCount =
+      warehouseId == null
+        ? 0
+        : await this.prisma.stockBalance
+            .groupBy({
+              by: ['medicineId'],
+              where: { holderType: HolderTypes.WAREHOUSE, holderId: warehouseId },
+              _sum: { qty: true },
+            })
+            .then((rows) => rows.filter((row) => (row._sum.qty ?? 0) <= 10).length);
+
+    const availableSampleStock = warehouseStockAgg._sum.qty ?? 0;
+    const medicineDistributionQty = distributionAgg._sum.qty ?? 0;
     const todaysSales = Number(todaysSalesAgg._sum.amount ?? 0);
     const monthlySales = Number(monthlySalesAgg._sum.amount ?? 0);
     const yearlySales = Number(yearlySalesAgg._sum.amount ?? 0);
@@ -124,14 +185,19 @@ export class DashboardService {
     const insights =
       actor.role === AppRoles.ADMIN
         ? await this.buildAdminInsights(monthStart, todayEnd)
-        : await this.buildMrInsights(actor.id, monthStart, todayEnd);
+        : actor.role === AppRoles.MANAGER
+          ? await this.buildAdminInsights(monthStart, todayEnd)
+          : await this.buildMrInsights(actor.id, monthStart, todayEnd);
 
-    if (actor.role === AppRoles.ADMIN) {
+    if (actor.role === AppRoles.ADMIN || actor.role === AppRoles.MANAGER) {
       return {
         role: actor.role,
         cards: {
           totalDoctors,
-          totalMrs,
+          totalMrs:
+            actor.role === AppRoles.MANAGER
+              ? (await this.users.listReportIds(actor.id)).length
+              : totalMrs,
           todaysAppointments,
           todaysVisits,
           pendingAppointments,
@@ -192,11 +258,11 @@ export class DashboardService {
         orderBy: { _count: { mrId: 'desc' } },
         take: 5,
       }),
-      this.prisma.medicineDistribution.groupBy({
+      this.prisma.stockTxn.groupBy({
         by: ['medicineId'],
-        where: { deletedAt: null, distributedAt: { gte: from, lte: to } },
-        _sum: { quantity: true },
-        orderBy: { _sum: { quantity: 'desc' } },
+        where: { txnType: StockTxnTypes.SAMPLE_GIVEN, txnDate: { gte: from, lte: to } },
+        _sum: { qty: true },
+        orderBy: { _sum: { qty: 'desc' } },
         take: 5,
       }),
       this.prisma.sale.groupBy({
@@ -247,7 +313,7 @@ export class DashboardService {
       topPrescribedMedicines: sampleGroups.map((row) => ({
         medicineId: row.medicineId,
         name: medicineMap.get(row.medicineId) ?? 'Unknown',
-        samples: row._sum.quantity ?? 0,
+        samples: row._sum.qty ?? 0,
       })),
       mrWiseSales: salesByMr.map((row) => ({
         mrId: row.mrId,
@@ -271,11 +337,16 @@ export class DashboardService {
         _count: { _all: true },
         orderBy: { visitDate: 'asc' },
       }),
-      this.prisma.medicineDistribution.groupBy({
+      this.prisma.stockTxn.groupBy({
         by: ['medicineId'],
-        where: { deletedAt: null, mrId, distributedAt: { gte: from, lte: to } },
-        _sum: { quantity: true },
-        orderBy: { _sum: { quantity: 'desc' } },
+        where: {
+          txnType: StockTxnTypes.SAMPLE_GIVEN,
+          fromHolderType: HolderTypes.USER,
+          fromHolderId: mrId,
+          txnDate: { gte: from, lte: to },
+        },
+        _sum: { qty: true },
+        orderBy: { _sum: { qty: 'desc' } },
         take: 5,
       }),
       this.prisma.sale.groupBy({
@@ -306,7 +377,7 @@ export class DashboardService {
       topPrescribedMedicines: sampleTop.map((row) => ({
         medicineId: row.medicineId,
         name: medicineMap.get(row.medicineId) ?? 'Unknown',
-        samples: row._sum.quantity ?? 0,
+        samples: row._sum.qty ?? 0,
       })),
       medicineWiseSales: salesTop.map((row) => ({
         medicineId: row.medicineId,

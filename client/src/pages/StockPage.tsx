@@ -141,7 +141,7 @@ export function StockPage() {
               <Td>
                 <Button
                   variant="secondary"
-                  className="!px-2.5 !py-1.5 text-xs"
+                  size="sm"
                   onClick={() => {
                     setError(null);
                     setAdjustFor(row);

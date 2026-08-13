@@ -15,7 +15,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 const router = Router();
 const controller = DoctorController.getInstance();
 
-router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MR));
+router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR));
 
 router.get('/', validateRequest(listDoctorsQuerySchema, 'query'), asyncHandler(controller.list));
 router.get('/:id/details', asyncHandler(controller.getDetails));

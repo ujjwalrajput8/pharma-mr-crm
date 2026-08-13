@@ -94,33 +94,34 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
   return (
     <>
-      <header className="z-30 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
-        <div className="flex h-16 items-center gap-3 px-4 md:px-6">
+      <header className="z-30 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur-sm">
+        <div className="flex h-14 items-center gap-3 px-4 md:px-5">
           <Button
             variant="secondary"
-            className="!px-2.5 !py-2 lg:hidden"
+            size="icon-sm"
+            className="lg:hidden"
             onClick={onToggleSidebar}
             aria-label="Toggle navigation"
           >
-            <Menu size={18} />
+            <Menu size={16} />
           </Button>
 
           <div className="hidden min-w-0 items-center gap-3 md:flex">
-          <img
-            src="/jovance-logo.png"
-            alt=""
-            className="h-9 w-auto object-contain [[data-theme=dark]_&]:hidden"
-          />
-          <img
-            src="/jovance-logo-dark.png"
-            alt=""
-            className="hidden h-9 w-auto object-contain [[data-theme=dark]_&]:block"
-          />
+            <img
+              src="/jovance-logo.png"
+              alt=""
+              className="h-8 w-auto object-contain [[data-theme=dark]_&]:hidden"
+            />
+            <img
+              src="/jovance-logo-dark.png"
+              alt=""
+              className="hidden h-8 w-auto object-contain [[data-theme=dark]_&]:block"
+            />
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-[var(--color-ink)]">
+              <p className="truncate text-sm font-semibold tracking-tight text-[var(--color-ink)]">
                 JOVANCE LABORATORIES
               </p>
-              <nav className="flex items-center gap-1 text-xs text-[var(--color-muted)]">
+              <nav className="flex items-center gap-1 text-[11px] text-[var(--color-muted)]">
                 <Link to="/dashboard" className="hover:text-[var(--color-primary)]">
                   Home
                 </Link>
@@ -132,45 +133,43 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
           <form onSubmit={onSearchSubmit} className="relative mx-auto hidden max-w-md flex-1 lg:block">
             <Search
-              size={16}
+              size={15}
               className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[var(--color-muted)]"
             />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search doctors, medicines, appointments…"
-              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] py-2.5 pr-3 pl-9 text-sm outline-none focus:ring-2 focus:ring-[var(--color-primary)]/25"
+              placeholder="Search doctors, products, appointments…"
+              className="w-full rounded-[var(--radius-sm)] border border-[var(--color-border-strong)] bg-[var(--color-bg)] py-2 pr-3 pl-9 text-sm outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/15"
             />
           </form>
 
-          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <div className="ml-auto flex items-center gap-1.5">
             <div className="relative" ref={notifRef}>
               <Button
                 variant="secondary"
-                className="!px-2.5 !py-2"
+                size="icon-sm"
                 aria-label="Notifications"
                 onClick={() => {
                   setNotifOpen((o) => !o);
                   setMenuOpen(false);
                 }}
               >
-                <Bell size={16} />
+                <Bell size={15} />
               </Button>
               {notifOpen ? (
-                <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-md)]">
-                  <p className="mb-2 text-sm font-semibold">Notifications</p>
-                  <ul className="space-y-2 text-sm">
-                    <li className="rounded-xl bg-[var(--color-bg)] px-3 py-2">
+                <div className="absolute right-0 mt-2 w-72 overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-md)]">
+                  <p className="border-b border-[var(--color-border)] px-3 py-2 text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                    Notifications
+                  </p>
+                  <ul className="divide-y divide-[var(--color-border)] text-sm">
+                    <li className="px-3 py-2.5">
                       <p className="font-medium">Pending follow-ups</p>
-                      <p className="text-xs text-[var(--color-muted)]">
-                        Check Visits for doctors due today.
-                      </p>
+                      <p className="text-xs text-[var(--color-muted)]">Check Visits for doctors due today.</p>
                     </li>
-                    <li className="rounded-xl bg-[var(--color-bg)] px-3 py-2">
+                    <li className="px-3 py-2.5">
                       <p className="font-medium">Stock alerts</p>
-                      <p className="text-xs text-[var(--color-muted)]">
-                        Review low stock medicines in Stock module.
-                      </p>
+                      <p className="text-xs text-[var(--color-muted)]">Review low stock in Stock module.</p>
                     </li>
                   </ul>
                 </div>
@@ -179,11 +178,11 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
             <Button
               variant="secondary"
-              className="!px-2.5 !py-2"
+              size="icon-sm"
               onClick={toggle}
               aria-label="Toggle theme"
             >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+              {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
             </Button>
 
             <div className="relative" ref={menuRef}>
@@ -193,23 +192,22 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                   setMenuOpen((o) => !o);
                   setNotifOpen(false);
                 }}
-                className="flex items-center gap-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1.5 pr-2.5 pl-1.5 transition hover:shadow-[var(--shadow-sm)]"
+                className="flex items-center gap-2 rounded-[var(--radius-sm)] border border-[var(--color-border-strong)] bg-[var(--color-surface)] py-1 pr-2 pl-1 transition hover:bg-[var(--color-bg)]"
               >
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--color-primary)] text-sm font-semibold text-white">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] bg-[var(--color-primary)] text-[11px] font-semibold text-white">
                   {initials(user?.fullName)}
                 </span>
                 <span className="hidden text-left sm:block">
-                  <span className="block max-w-[9rem] truncate text-sm font-semibold text-[var(--color-ink)]">
+                  <span className="block max-w-[8rem] truncate text-xs font-semibold text-[var(--color-ink)]">
                     {user?.fullName}
                   </span>
-                  <span className="block text-[11px] text-[var(--color-muted)]">{user?.email}</span>
                 </span>
                 <Badge tone="primary">{user?.role}</Badge>
-                <ChevronDown size={14} className="text-[var(--color-muted)]" />
+                <ChevronDown size={13} className="text-[var(--color-muted)]" />
               </button>
 
               {menuOpen ? (
-                <div className="absolute right-0 mt-2 w-60 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-[var(--shadow-md)]">
+                <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-[var(--shadow-md)]">
                   <div className="border-b border-[var(--color-border)] px-3 py-2">
                     <p className="text-sm font-semibold">{user?.fullName}</p>
                     <p className="text-xs text-[var(--color-muted)]">{user?.email}</p>

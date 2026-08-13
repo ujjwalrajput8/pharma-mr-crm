@@ -6,10 +6,15 @@ import type {
   UpdateAppointmentDto,
 } from '../dto/appointment.dto';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../errors/AppError';
-import { AppointmentRepository } from '../repositories/AppointmentRepository';
+import {
+  AppointmentRepository,
+  type AppointmentWithRelations,
+} from '../repositories/AppointmentRepository';
 import { DoctorRepository } from '../repositories/DoctorRepository';
+import { StockTxnRepository } from '../repositories/StockTxnRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import { PrismaService } from '../prisma/PrismaService';
+import { StockLedgerService } from './StockLedgerService';
 import type { AuthUser } from '../types/auth.types';
 
 function parseDateOnly(value: string): Date {
@@ -28,9 +33,8 @@ function formatTime(value: Date): string {
 }
 
 /**
- * AppointmentService
- * Scheduling only until completed. Completing an appointment creates the Visit
- * (and optional sample distributions with stock decrement) in one transaction.
+ * AppointmentService — role-scoped scheduling.
+ * MR: own only · Manager: team + self · Admin: all (can assign to any MR).
  */
 export class AppointmentService {
   private static instance: AppointmentService | null = null;
@@ -39,6 +43,8 @@ export class AppointmentService {
     private readonly appointments = AppointmentRepository.getInstance(),
     private readonly doctors = DoctorRepository.getInstance(),
     private readonly users = UserRepository.getInstance(),
+    private readonly stockTxns = StockTxnRepository.getInstance(),
+    private readonly ledger = StockLedgerService.getInstance(),
     private readonly prisma = PrismaService.getClient(),
   ) {}
 
@@ -49,17 +55,57 @@ export class AppointmentService {
     return AppointmentService.instance;
   }
 
+  public async listAssignableMrs(actor: AuthUser) {
+    if (actor.role === AppRoles.MR) {
+      return [
+        {
+          id: actor.id,
+          fullName: actor.fullName,
+          email: actor.email,
+          role: actor.role,
+        },
+      ];
+    }
+
+    if (actor.role === AppRoles.MANAGER) {
+      const reportIds = await this.users.listReportIds(actor.id);
+      const team = await this.users.findManyByIds(reportIds);
+      const mrs = team.filter((u) => u.role === AppRoles.MR);
+      return [
+        { id: actor.id, fullName: actor.fullName, email: actor.email, role: actor.role },
+        ...mrs.map((u) => ({
+          id: u.id,
+          fullName: u.fullName,
+          email: u.email,
+          role: u.role,
+        })),
+      ];
+    }
+
+    const { items } = await this.users.list({ page: 1, limit: 100, role: AppRoles.MR });
+    return items.map((u) => ({
+      id: u.id,
+      fullName: u.fullName,
+      email: u.email,
+      role: u.role,
+    }));
+  }
+
   public async list(query: ListAppointmentsQueryDto, actor: AuthUser) {
+    const scope = await this.resolveListScope(actor, query.mrId);
+
     const { items, total } = await this.appointments.list({
       page: query.page,
       limit: query.limit,
       status: query.status,
       doctorId: query.doctorId,
-      mrId: actor.role === AppRoles.MR ? actor.id : undefined,
+      ...scope,
     });
 
+    const publics = await this.toPublicMany(items);
+
     return {
-      items: items.map((item) => this.toPublic(item)),
+      items: publics,
       meta: {
         page: query.page,
         limit: query.limit,
@@ -70,17 +116,11 @@ export class AppointmentService {
   }
 
   public async create(dto: CreateAppointmentDto, actor: AuthUser) {
-    const mrId = actor.role === AppRoles.MR ? actor.id : dto.mrId;
-    if (!mrId) throw new ForbiddenError('MR is required for appointment');
+    const mrId = await this.resolveTargetMrId(dto.mrId, actor);
+    await this.ensureDoctorAccess(dto.doctorId, actor, mrId);
 
-    await this.ensureDoctorAccess(dto.doctorId, actor);
-
-    if (actor.role === AppRoles.ADMIN) {
-      const mr = await this.users.findById(mrId);
-      if (!mr || mr.role !== AppRoles.MR) {
-        throw new NotFoundError('Medical Representative not found');
-      }
-    }
+    const isSelfBooking = mrId === actor.id;
+    const assignedById = isSelfBooking ? null : actor.id;
 
     const appointment = await this.appointments.create({
       date: parseDateOnly(dto.date),
@@ -92,9 +132,12 @@ export class AppointmentService {
       updatedBy: actor.id,
       doctor: { connect: { id: dto.doctorId } },
       mr: { connect: { id: mrId } },
+      ...(assignedById
+        ? { assignedBy: { connect: { id: assignedById } } }
+        : {}),
     });
 
-    return this.toPublic(appointment);
+    return this.toPublicOne(appointment);
   }
 
   public async update(id: number, dto: UpdateAppointmentDto, actor: AuthUser) {
@@ -103,15 +146,29 @@ export class AppointmentService {
     if (existing.status === AppointmentStatuses.COMPLETED) {
       throw new BadRequestError('Completed appointments cannot be edited');
     }
+    if (existing.status === AppointmentStatuses.CANCELLED) {
+      throw new BadRequestError('Cancelled appointments cannot be rescheduled — create a new one');
+    }
 
     if (dto.status === AppointmentStatuses.COMPLETED) {
       throw new BadRequestError('Use complete endpoint to finish an appointment and create a visit');
     }
 
+    let nextMrId: number | undefined;
+    if (dto.mrId != null && actor.role !== AppRoles.MR) {
+      nextMrId = await this.resolveTargetMrId(dto.mrId, actor);
+    }
+
+    if (dto.doctorId) {
+      await this.ensureDoctorAccess(dto.doctorId, actor, nextMrId ?? existing.mrId);
+    }
+
     const dateOrTimeChanged = Boolean(dto.date || dto.time);
     const nextStatus =
       dto.status ??
-      (dateOrTimeChanged && existing.status === AppointmentStatuses.PENDING
+      (dateOrTimeChanged &&
+      (existing.status === AppointmentStatuses.PENDING ||
+        existing.status === AppointmentStatuses.RESCHEDULED)
         ? AppointmentStatuses.RESCHEDULED
         : undefined);
 
@@ -122,19 +179,39 @@ export class AppointmentService {
       ...(dto.remarks !== undefined ? { remarks: dto.remarks } : {}),
       ...(nextStatus ? { status: nextStatus } : {}),
       ...(dto.doctorId ? { doctor: { connect: { id: dto.doctorId } } } : {}),
-      ...(dto.mrId && actor.role === AppRoles.ADMIN
-        ? { mr: { connect: { id: dto.mrId } } }
+      ...(nextMrId
+        ? {
+            mr: { connect: { id: nextMrId } },
+            assignedBy:
+              nextMrId === actor.id
+                ? { disconnect: true }
+                : { connect: { id: actor.id } },
+          }
         : {}),
       updatedBy: actor.id,
     });
 
-    return this.toPublic(appointment);
+    return this.toPublicOne(appointment);
   }
 
-  /**
-   * Mark appointment COMPLETED and create Visit (+ sample distributions).
-   * Stock decreases automatically for each distributed sample.
-   */
+  /** Convenience: change date/time → status RESCHEDULED */
+  public async reschedule(
+    id: number,
+    input: { date: string; time: string; remarks?: string },
+    actor: AuthUser,
+  ) {
+    return this.update(
+      id,
+      {
+        date: input.date,
+        time: input.time,
+        ...(input.remarks !== undefined ? { remarks: input.remarks } : {}),
+        status: AppointmentStatuses.RESCHEDULED,
+      },
+      actor,
+    );
+  }
+
   public async completeWithVisit(id: number, dto: CompleteAppointmentDto, actor: AuthUser) {
     const appointment = await this.requireAccessible(id, actor);
 
@@ -152,28 +229,30 @@ export class AppointmentService {
       throw new ConflictError('A visit already exists for this appointment');
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      for (const distribution of dto.distributions) {
-        const mrStock = await tx.mrStock.findUnique({
-          where: {
-            mrId_medicineId: {
-              mrId: appointment.mrId,
-              medicineId: distribution.medicineId,
-            },
-          },
-        });
-        if (!mrStock || mrStock.deletedAt) {
-          throw new BadRequestError(
-            `MR has no stock for medicine ${distribution.medicineId}. Admin must issue samples first.`,
-          );
-        }
-        if (mrStock.quantity < distribution.quantity) {
-          throw new BadRequestError(
-            `Insufficient MR stock for medicine ${distribution.medicineId}. Available: ${mrStock.quantity}`,
-          );
-        }
+    const resolvedDistributions: Array<{
+      medicineId: number;
+      quantity: number;
+      batchNumber?: string;
+      remarks?: string;
+      batchId: number;
+      batchNo: string;
+    }> = [];
+    for (const distribution of dto.distributions) {
+      const batch = await this.stockTxns.resolveBatchForMrSample({
+        mrId: appointment.mrId,
+        medicineId: distribution.medicineId,
+        batchNumber: distribution.batchNumber,
+        requiredQty: distribution.quantity,
+      });
+      if (!batch) {
+        throw new BadRequestError(
+          `Insufficient MR stock for medicine ${distribution.medicineId}. Admin must issue samples first.`,
+        );
       }
+      resolvedDistributions.push({ ...distribution, batchId: batch.batchId, batchNo: batch.batchNo });
+    }
 
+    const result = await this.prisma.$transaction(async (tx) => {
       const updatedAppointment = await tx.appointment.update({
         where: { id },
         data: {
@@ -183,6 +262,7 @@ export class AppointmentService {
         include: {
           doctor: { select: { id: true, fullName: true } },
           mr: { select: { id: true, fullName: true, email: true } },
+          assignedBy: { select: { id: true, fullName: true, email: true, role: true } },
         },
       });
 
@@ -219,49 +299,29 @@ export class AppointmentService {
         },
         include: {
           products: { include: { medicine: { select: { id: true, name: true } } } },
-          distributions: true,
         },
       });
 
-      for (const distribution of dto.distributions) {
-        await tx.medicineDistribution.create({
-          data: {
-            visitId: visit.id,
-            doctorId: appointment.doctorId,
-            mrId: appointment.mrId,
-            medicineId: distribution.medicineId,
-            quantity: distribution.quantity,
-            batchNumber: distribution.batchNumber,
-            unit: distribution.unit,
-            remarks: distribution.remarks,
-            createdBy: actor.id,
-            updatedBy: actor.id,
-          },
+      const sampleTxns = [];
+      for (const distribution of resolvedDistributions) {
+        const txn = await this.ledger.giveSample({
+          mrId: appointment.mrId,
+          doctorId: appointment.doctorId,
+          medicineId: distribution.medicineId,
+          batchId: distribution.batchId,
+          qty: distribution.quantity,
+          visitId: visit.id,
+          txnDate: parseDateOnly(dto.visitDate),
+          note: distribution.remarks,
+          createdBy: actor.id,
+          client: tx,
         });
-
-        await tx.mrStock.update({
-          where: {
-            mrId_medicineId: {
-              mrId: appointment.mrId,
-              medicineId: distribution.medicineId,
-            },
-          },
-          data: {
-            quantity: { decrement: distribution.quantity },
-            updatedBy: actor.id,
-          },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            medicineId: distribution.medicineId,
-            mrId: appointment.mrId,
-            type: 'SAMPLE',
-            quantity: distribution.quantity,
-            remarks: `Sample given to doctor on visit ${visit.id}`,
-            createdBy: actor.id,
-            updatedBy: actor.id,
-          },
+        sampleTxns.push({
+          id: txn.id,
+          medicineId: distribution.medicineId,
+          quantity: distribution.quantity,
+          batchNumber: distribution.batchNo,
+          remarks: distribution.remarks,
         });
       }
 
@@ -269,19 +329,26 @@ export class AppointmentService {
         where: { id: visit.id },
         include: {
           products: { include: { medicine: { select: { id: true, name: true } } } },
-          distributions: {
-            include: { medicine: { select: { id: true, name: true } } },
-          },
           doctor: { select: { id: true, fullName: true } },
           mr: { select: { id: true, fullName: true, email: true } },
         },
       });
 
-      return { appointment: updatedAppointment, visit: fullVisit };
+      return { appointment: updatedAppointment, visit: fullVisit, sampleTxns };
     });
 
+    const medicineIds = [...new Set(result.sampleTxns.map((row) => row.medicineId))];
+    const medicines =
+      medicineIds.length === 0
+        ? []
+        : await this.prisma.medicine.findMany({
+            where: { id: { in: medicineIds } },
+            select: { id: true, name: true },
+          });
+    const medicineMap = new Map(medicines.map((m) => [m.id, m.name]));
+
     return {
-      appointment: this.toPublic(result.appointment),
+      appointment: await this.toPublicOne(result.appointment),
       visit: {
         id: result.visit.id,
         appointmentId: result.visit.appointmentId,
@@ -299,13 +366,13 @@ export class AppointmentService {
         doctor: result.visit.doctor,
         mr: result.visit.mr,
         products: result.visit.products.map((p) => p.medicine),
-        distributions: result.visit.distributions.map((d) => ({
+        distributions: result.sampleTxns.map((d) => ({
           id: d.id,
           medicineId: d.medicineId,
-          medicineName: d.medicine.name,
+          medicineName: medicineMap.get(d.medicineId) ?? 'Unknown',
           quantity: d.quantity,
           batchNumber: d.batchNumber,
-          remarks: d.remarks,
+          remarks: d.remarks ?? null,
         })),
       },
     };
@@ -313,18 +380,74 @@ export class AppointmentService {
 
   public async remove(id: number, actor: AuthUser) {
     await this.requireAccessible(id, actor);
-    if (actor.role === AppRoles.MR) {
+    if (actor.role !== AppRoles.ADMIN) {
       throw new ForbiddenError('Only administrators can delete appointments');
     }
     await this.appointments.softDelete(id, actor.id);
   }
 
-  private async ensureDoctorAccess(doctorId: number, actor: AuthUser) {
+  private async resolveListScope(
+    actor: AuthUser,
+    filterMrId?: number,
+  ): Promise<{ mrId?: number; mrIds?: number[] }> {
+    if (actor.role === AppRoles.MR) {
+      return { mrId: actor.id };
+    }
+
+    if (actor.role === AppRoles.MANAGER) {
+      const teamIds = await this.users.listReportIds(actor.id);
+      const allowed = [actor.id, ...teamIds];
+      if (filterMrId != null) {
+        if (!allowed.includes(filterMrId)) {
+          throw new ForbiddenError('You can only view appointments for your team');
+        }
+        return { mrId: filterMrId };
+      }
+      return { mrIds: allowed };
+    }
+
+    // Admin
+    if (filterMrId != null) return { mrId: filterMrId };
+    return {};
+  }
+
+  private async resolveTargetMrId(requestedMrId: number | undefined, actor: AuthUser): Promise<number> {
+    if (actor.role === AppRoles.MR) {
+      if (requestedMrId != null && requestedMrId !== actor.id) {
+        throw new ForbiddenError('You can only create appointments for yourself');
+      }
+      return actor.id;
+    }
+
+    if (actor.role === AppRoles.MANAGER) {
+      const mrId = requestedMrId ?? actor.id;
+      if (mrId === actor.id) return mrId;
+      const teamIds = await this.users.listReportIds(actor.id);
+      if (!teamIds.includes(mrId)) {
+        throw new ForbiddenError('You can only assign appointments to your team MRs');
+      }
+      const mr = await this.users.findById(mrId);
+      if (!mr || mr.role !== AppRoles.MR) {
+        throw new NotFoundError('Medical Representative not found');
+      }
+      return mrId;
+    }
+
+    // Admin
+    if (!requestedMrId) throw new BadRequestError('MR is required for appointment');
+    const mr = await this.users.findById(requestedMrId);
+    if (!mr || mr.role !== AppRoles.MR) {
+      throw new NotFoundError('Medical Representative not found');
+    }
+    return requestedMrId;
+  }
+
+  private async ensureDoctorAccess(doctorId: number, actor: AuthUser, targetMrId: number) {
     const doctor = await this.doctors.findById(doctorId);
     if (!doctor) throw new NotFoundError('Doctor not found');
-    if (actor.role === AppRoles.ADMIN) return;
+    if (actor.role === AppRoles.ADMIN || actor.role === AppRoles.MANAGER) return;
 
-    const assigned = await this.doctors.list({ page: 1, limit: 1000, mrId: actor.id });
+    const assigned = await this.doctors.list({ page: 1, limit: 1000, mrId: targetMrId });
     if (!assigned.items.some((item) => item.id === doctorId)) {
       throw new ForbiddenError('Doctor is not assigned to you');
     }
@@ -333,30 +456,68 @@ export class AppointmentService {
   private async requireAccessible(id: number, actor: AuthUser) {
     const appointment = await this.appointments.findById(id);
     if (!appointment) throw new NotFoundError('Appointment not found');
+
     if (actor.role === AppRoles.MR && appointment.mrId !== actor.id) {
       throw new ForbiddenError('You do not have access to this appointment');
     }
+
+    if (actor.role === AppRoles.MANAGER) {
+      const teamIds = await this.users.listReportIds(actor.id);
+      const allowed = new Set([actor.id, ...teamIds]);
+      if (!allowed.has(appointment.mrId)) {
+        throw new ForbiddenError('You do not have access to this appointment');
+      }
+    }
+
     return appointment;
   }
 
-  private toPublic(appointment: {
-    id: number;
-    doctorId: number;
-    mrId: number;
-    date: Date;
-    time: Date;
-    purpose?: string | null;
-    status: string;
-    remarks: string | null;
-    createdAt: Date;
-    updatedAt: Date;
-    doctor?: { id: number; fullName: string };
-    mr?: { id: number; fullName: string; email: string };
-  }) {
+  private async toPublicMany(items: AppointmentWithRelations[]) {
+    const creatorIds = [
+      ...new Set(items.map((item) => item.createdBy).filter((id): id is number => id != null)),
+    ];
+    const creators = await this.users.findManyByIds(creatorIds);
+    const creatorMap = new Map(creators.map((u) => [u.id, u]));
+    return items.map((item) => this.mapPublic(item, creatorMap));
+  }
+
+  private async toPublicOne(
+    appointment: AppointmentWithRelations | (AppointmentWithRelations & { createdBy: number | null }),
+  ) {
+    const creatorIds = appointment.createdBy != null ? [appointment.createdBy] : [];
+    const creators = await this.users.findManyByIds(creatorIds);
+    const creatorMap = new Map(creators.map((u) => [u.id, u]));
+    return this.mapPublic(appointment, creatorMap);
+  }
+
+  private mapPublic(
+    appointment: {
+      id: number;
+      doctorId: number;
+      mrId: number;
+      assignedById?: number | null;
+      date: Date;
+      time: Date;
+      purpose?: string | null;
+      status: string;
+      remarks: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+      createdBy?: number | null;
+      doctor?: { id: number; fullName: string } | null;
+      mr?: { id: number; fullName: string; email: string } | null;
+      assignedBy?: { id: number; fullName: string; email: string; role: string } | null;
+    },
+    creatorMap: Map<number, { id: number; fullName: string; email: string; role: string }>,
+  ) {
+    const createdByUser =
+      appointment.createdBy != null ? (creatorMap.get(appointment.createdBy) ?? null) : null;
+
     return {
       id: appointment.id,
       doctorId: appointment.doctorId,
       mrId: appointment.mrId,
+      assignedById: appointment.assignedById ?? null,
       date: appointment.date.toISOString().slice(0, 10),
       time: formatTime(appointment.time),
       purpose: appointment.purpose ?? null,
@@ -364,6 +525,22 @@ export class AppointmentService {
       remarks: appointment.remarks,
       doctor: appointment.doctor ?? null,
       mr: appointment.mr ?? null,
+      createdBy: createdByUser
+        ? {
+            id: createdByUser.id,
+            fullName: createdByUser.fullName,
+            email: createdByUser.email,
+            role: createdByUser.role,
+          }
+        : null,
+      assignedBy: appointment.assignedBy
+        ? {
+            id: appointment.assignedBy.id,
+            fullName: appointment.assignedBy.fullName,
+            email: appointment.assignedBy.email,
+            role: appointment.assignedBy.role,
+          }
+        : null,
       createdAt: appointment.createdAt,
       updatedAt: appointment.updatedAt,
     };

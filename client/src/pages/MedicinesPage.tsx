@@ -175,13 +175,13 @@ export function MedicinesPage() {
               <Td>
                 <div className="flex flex-wrap gap-2">
                   <Link to={`/medicines/${medicine.id}`}>
-                    <Button variant="secondary" className="!px-2.5 !py-1.5 text-xs">
+                    <Button variant="secondary" size="sm">
                       Details
                     </Button>
                   </Link>
                   <Button
                     variant="danger"
-                    className="!px-2.5 !py-1.5 text-xs"
+                    size="sm"
                     onClick={() => setDeleteTarget({ id: medicine.id, name: medicine.name })}
                   >
                     Delete

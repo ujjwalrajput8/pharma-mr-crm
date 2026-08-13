@@ -21,6 +21,7 @@ export type HttpStatusCode = (typeof HttpStatus)[keyof typeof HttpStatus];
 
 export const AppRoles = {
   ADMIN: 'ADMIN',
+  MANAGER: 'MANAGER',
   MR: 'MR',
 } as const;
 
@@ -34,8 +35,12 @@ export const UserStatuses = {
 export type UserStatus = (typeof UserStatuses)[keyof typeof UserStatuses];
 
 export const AppointmentStatuses = {
+  REQUESTED: 'REQUESTED',
+  CONFIRMED: 'CONFIRMED',
   PENDING: 'PENDING',
   COMPLETED: 'COMPLETED',
+  VISITED: 'VISITED',
+  NO_SHOW: 'NO_SHOW',
   CANCELLED: 'CANCELLED',
   RESCHEDULED: 'RESCHEDULED',
 } as const;
@@ -48,6 +53,44 @@ export const RecordStatuses = {
 } as const;
 
 export type RecordStatus = (typeof RecordStatuses)[keyof typeof RecordStatuses];
+
+export const StockTxnTypes = {
+  OPENING: 'OPENING',
+  RECEIPT: 'RECEIPT',
+  TRANSFER: 'TRANSFER',
+  ISSUE: 'ISSUE',
+  SAMPLE_GIVEN: 'SAMPLE_GIVEN',
+  GIFT_GIVEN: 'GIFT_GIVEN',
+  SALE: 'SALE',
+  RETURN: 'RETURN',
+  EXPIRY_WRITEOFF: 'EXPIRY_WRITEOFF',
+  ADJUSTMENT: 'ADJUSTMENT',
+  LOST: 'LOST',
+} as const;
+
+export type StockTxnType = (typeof StockTxnTypes)[keyof typeof StockTxnTypes];
+
+export const HolderTypes = {
+  WAREHOUSE: 'WAREHOUSE',
+  USER: 'USER',
+  DOCTOR: 'DOCTOR',
+  CHEMIST: 'CHEMIST',
+} as const;
+
+export type HolderType = (typeof HolderTypes)[keyof typeof HolderTypes];
+
+export const AttendanceStatuses = {
+  PRESENT: 'PRESENT',
+  LATE: 'LATE',
+  ABSENT: 'ABSENT',
+  LEAVE: 'LEAVE',
+  HOLIDAY: 'HOLIDAY',
+  OFFICE: 'OFFICE',
+  JOINT_WORK: 'JOINT_WORK',
+  FLAGGED: 'FLAGGED',
+} as const;
+
+export type AttendanceStatus = (typeof AttendanceStatuses)[keyof typeof AttendanceStatuses];
 
 export const TOKEN_TYPES = {
   ACCESS: 'access',

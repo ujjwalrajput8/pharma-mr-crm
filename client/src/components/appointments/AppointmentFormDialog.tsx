@@ -5,7 +5,12 @@ import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { TimePicker } from '@/components/ui/TimePicker';
-import type { Appointment, AppointmentStatus, CreateAppointmentPayload } from '@/services/appointments.service';
+import type {
+  Appointment,
+  AppointmentStatus,
+  AssignableMr,
+  CreateAppointmentPayload,
+} from '@/services/appointments.service';
 import {
   packAppointmentRemarks,
   unpackAppointmentRemarks,
@@ -19,21 +24,16 @@ interface DoctorOption {
   city?: string | null;
 }
 
-interface MrOption {
-  id: number;
-  fullName: string;
-  email: string;
-}
-
 interface AppointmentFormDialogProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (payload: CreateAppointmentPayload) => void;
   submitting?: boolean;
-  isAdmin: boolean;
+  /** Admin / Manager can pick MR to assign */
+  canAssignMr: boolean;
   currentUserId?: number;
   doctors: DoctorOption[];
-  mrs: MrOption[];
+  mrs: AssignableMr[];
   initialDate?: string;
   initialTime?: string;
   editing?: Appointment | null;
@@ -44,7 +44,7 @@ export function AppointmentFormDialog({
   onClose,
   onSubmit,
   submitting,
-  isAdmin,
+  canAssignMr,
   currentUserId,
   doctors,
   mrs,
@@ -78,7 +78,7 @@ export function AppointmentFormDialog({
       return;
     }
     setDoctorId('');
-    setMrId(isAdmin ? '' : String(currentUserId ?? ''));
+    setMrId(canAssignMr ? '' : String(currentUserId ?? ''));
     setDate(initialDate);
     setTime(initialTime);
     setPurpose('');
@@ -86,17 +86,20 @@ export function AppointmentFormDialog({
     setPriority('MEDIUM');
     setStatus('PENDING');
     setRemarks('');
-  }, [open, editing, initialDate, initialTime, isAdmin, currentUserId]);
+  }, [open, editing, initialDate, initialTime, canAssignMr, currentUserId]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     onSubmit({
       doctorId: Number(doctorId),
-      mrId: isAdmin ? (mrId ? Number(mrId) : undefined) : currentUserId,
+      mrId: canAssignMr ? (mrId ? Number(mrId) : undefined) : currentUserId,
       date,
       time,
       purpose: purpose.trim() || undefined,
-      remarks: packAppointmentRemarks(remarks.trim(), { location: location.trim() || undefined, priority }),
+      remarks: packAppointmentRemarks(remarks.trim(), {
+        location: location.trim() || undefined,
+        priority,
+      }),
       status: status === 'PENDING' ? undefined : status,
     });
   }
@@ -106,7 +109,11 @@ export function AppointmentFormDialog({
       open={open}
       onClose={onClose}
       title={editing ? 'Edit Appointment' : 'Create Appointment'}
-      description="Schedule a meeting only — visit logging happens on completion."
+      description={
+        canAssignMr
+          ? 'Assign to an MR (or yourself). Created by / Assigned by is tracked automatically.'
+          : 'Schedule your meeting — visit logging happens on completion.'
+      }
       className="max-w-3xl"
       footer={
         <>
@@ -133,14 +140,18 @@ export function AppointmentFormDialog({
           }))}
         />
 
-        {isAdmin ? (
+        {canAssignMr ? (
           <SearchableSelect
-            label="Medical Representative"
+            label="Assign to (MR / self)"
             required
             className="sm:col-span-2"
             value={mrId}
             onChange={setMrId}
-            options={mrs.map((m) => ({ value: String(m.id), label: m.fullName, meta: m.email }))}
+            options={mrs.map((m) => ({
+              value: String(m.id),
+              label: m.fullName,
+              meta: `${m.role} · ${m.email}`,
+            }))}
           />
         ) : (
           <Input

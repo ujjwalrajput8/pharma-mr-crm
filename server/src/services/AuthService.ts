@@ -8,6 +8,7 @@ import { UserRepository } from '../repositories/UserRepository';
 import type { AuthUser, LoginResult } from '../types/auth.types';
 import { AuditService } from './AuditService';
 import { PasswordService } from './PasswordService';
+import { PermissionService } from './PermissionService';
 import { TokenService } from './TokenService';
 
 /**
@@ -25,6 +26,7 @@ export class AuthService {
     private readonly passwords = PasswordService.getInstance(),
     private readonly tokens = TokenService.getInstance(),
     private readonly audits = AuditService.getInstance(),
+    private readonly permissions = PermissionService.getInstance(),
     private readonly config = Config.getInstance(),
   ) {}
 
@@ -57,6 +59,7 @@ export class AuthService {
     const authUser = this.toAuthUser(user.id, user.email, user.role, user.fullName);
     const tokens = await this.issueSession(authUser, meta);
     await this.users.update(user.id, { lastLoginAt: new Date() });
+    const permissions = await this.permissions.resolveForUser(user.id);
 
     try {
       await this.audits.log({
@@ -78,6 +81,7 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role as AppRole,
         status: user.status,
+        permissions,
       },
       tokens,
     };
@@ -110,6 +114,7 @@ export class AuthService {
 
     const authUser = this.toAuthUser(user.id, user.email, user.role, user.fullName);
     const tokens = await this.issueSession(authUser, meta);
+    const permissions = await this.permissions.resolveForUser(user.id);
 
     return {
       user: {
@@ -118,6 +123,7 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role as AppRole,
         status: user.status,
+        permissions,
       },
       tokens,
     };
@@ -145,12 +151,15 @@ export class AuthService {
       throw new UnauthorizedError('User not found or inactive');
     }
 
+    const permissions = await this.permissions.resolveForUser(user.id);
+
     return {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
       role: user.role as AppRole,
       status: user.status,
+      permissions,
     };
   }
 

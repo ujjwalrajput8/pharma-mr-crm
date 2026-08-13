@@ -8,7 +8,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 const router = Router();
 const controller = DashboardController.getInstance();
 
-router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MR));
+router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR));
 router.get('/summary', asyncHandler(controller.summary));
 
 export default router;

@@ -22,6 +22,12 @@ import { SalesPage } from '@/pages/SalesPage';
 import { AttendancePage } from '@/pages/AttendancePage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { AuditLogsPage } from '@/pages/AuditLogsPage';
+import { MyDayPage } from '@/pages/MyDayPage';
+import { ApprovalsPage } from '@/pages/ApprovalsPage';
+import { TourPlanPage } from '@/pages/TourPlanPage';
+import { MyStockPage } from '@/pages/MyStockPage';
+import { LedgerPage } from '@/pages/LedgerPage';
+import { ManagerPermissionsPage } from '@/pages/ManagerPermissionsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -56,10 +62,63 @@ export default function App() {
                 />
 
                 <Route
+                  path="/my-day"
+                  element={
+                    <RequirePermission permissions={['myday:own']}>
+                      <MyDayPage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/approvals"
+                  element={
+                    <RequirePermission permissions={['approvals:team']}>
+                      <ApprovalsPage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/tour-plan"
+                  element={
+                    <RequirePermission permissions={['tour-plan:manage', 'tour-plan:own']}>
+                      <TourPlanPage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/my-stock"
+                  element={
+                    <RequirePermission permissions={['mystock:own']}>
+                      <MyStockPage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/ledger"
+                  element={
+                    <RequirePermission permissions={['ledger:view']}>
+                      <LedgerPage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
                   path="/users"
                   element={
                     <RequirePermission permissions={['users:manage']}>
                       <UsersPage />
+                    </RequirePermission>
+                  }
+                />
+                <Route
+                  path="/manager-permissions"
+                  element={
+                    <RequirePermission permissions={['users:manage']}>
+                      <ManagerPermissionsPage />
                     </RequirePermission>
                   }
                 />

@@ -1,5 +1,10 @@
 import type { Request, Response } from 'express';
-import type { CheckInDto, CheckOutDto, ListAttendanceQueryDto } from '../dto/attendance.dto';
+import type {
+  CheckInDto,
+  CheckOutDto,
+  ListAttendanceQueryDto,
+  ManageAttendanceDto,
+} from '../dto/attendance.dto';
 import { UnauthorizedError } from '../errors/AppError';
 import { AttendanceService } from '../services/AttendanceService';
 import { ApiResponse } from '../utils/ApiResponse';
@@ -36,5 +41,17 @@ export class AttendanceController {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const row = await this.attendance.checkOut(req.body as CheckOutDto, req.user);
     ApiResponse.success(res, row, 'Checked out');
+  };
+
+  public manage = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const row = await this.attendance.manage(req.body as ManageAttendanceDto, req.user);
+    ApiResponse.success(res, row, 'Attendance updated');
+  };
+
+  public fieldUsers = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const rows = await this.attendance.fieldUsers(req.user);
+    ApiResponse.success(res, rows, 'Field users');
   };
 }

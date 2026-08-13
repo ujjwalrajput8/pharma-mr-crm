@@ -151,7 +151,7 @@ export function UsersPage() {
                   {user.status === 'ACTIVE' ? (
                     <Button
                       variant="secondary"
-                      className="!px-2.5 !py-1.5 text-xs"
+                      size="sm"
                       onClick={() => actionMutation.mutate({ id: user.id, action: 'deactivate' })}
                     >
                       Deactivate
@@ -159,7 +159,7 @@ export function UsersPage() {
                   ) : (
                     <Button
                       variant="secondary"
-                      className="!px-2.5 !py-1.5 text-xs"
+                      size="sm"
                       onClick={() => actionMutation.mutate({ id: user.id, action: 'activate' })}
                     >
                       Activate
@@ -167,7 +167,7 @@ export function UsersPage() {
                   )}
                   <Button
                     variant="secondary"
-                    className="!px-2.5 !py-1.5 text-xs"
+                    size="sm"
                     onClick={() => {
                       setResetTarget({ id: user.id, name: user.fullName });
                       setResetPassword('');
@@ -177,7 +177,7 @@ export function UsersPage() {
                   </Button>
                   <Button
                     variant="danger"
-                    className="!px-2.5 !py-1.5 text-xs"
+                    size="sm"
                     onClick={() => setDeleteTarget({ id: user.id, name: user.fullName })}
                   >
                     Delete

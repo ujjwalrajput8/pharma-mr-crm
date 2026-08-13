@@ -2,11 +2,34 @@ import 'dotenv/config';
 import bcrypt from 'bcrypt';
 import { PrismaClient } from '../generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import {
+  DEFAULT_ADMIN_PERMISSIONS,
+  DEFAULT_MANAGER_PERMISSIONS,
+  DEFAULT_MR_PERMISSIONS,
+} from '../src/constants/permissions';
 
 /**
- * Realistic Indian Pharma CRM demo seed.
- * Creates connected Admin → MR → Doctor → Appointment → Visit → Samples → Sales data.
+ * Field Force demo seed — Admin → Manager → MRs, batches, append-only stock_txns.
  */
+
+async function seedRolePermissions(prisma: PrismaClient): Promise<void> {
+  const rows: { role: 'ADMIN' | 'MANAGER' | 'MR'; permission: string }[] = [
+    ...DEFAULT_ADMIN_PERMISSIONS.map((permission) => ({ role: 'ADMIN' as const, permission })),
+    ...DEFAULT_MANAGER_PERMISSIONS.map((permission) => ({
+      role: 'MANAGER' as const,
+      permission,
+    })),
+    ...DEFAULT_MR_PERMISSIONS.map((permission) => ({ role: 'MR' as const, permission })),
+  ];
+
+  for (const row of rows) {
+    await prisma.rolePermission.upsert({
+      where: { role_permission: { role: row.role, permission: row.permission } },
+      create: row,
+      update: {},
+    });
+  }
+}
 
 function dateOnly(offsetDays: number): Date {
   const d = new Date();
@@ -19,6 +42,11 @@ function timeAt(hours: number, minutes = 0): Date {
   return new Date(Date.UTC(1970, 0, 1, hours, minutes, 0));
 }
 
+function monthStart(): Date {
+  const d = new Date();
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error('DATABASE_URL is required for seeding');
@@ -26,46 +54,89 @@ async function main(): Promise<void> {
   const adapter = new PrismaPg({ connectionString });
   const prisma = new PrismaClient({ adapter });
   const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS ?? 12);
-  const passwordHash = await bcrypt.hash('Admin@12345', saltRounds);
-  const mrPasswordHash = await bcrypt.hash('Mr@12345', saltRounds);
+  const adminHash = await bcrypt.hash('Admin@12345', saltRounds);
+  const managerHash = await bcrypt.hash('Manager@12345', saltRounds);
+  const mrHash = await bcrypt.hash('Mr@12345', saltRounds);
+
+  let txnSeq = 1;
+  const nextTxnNo = (): string => `TXN-${String(txnSeq++).padStart(6, '0')}`;
 
   try {
-    console.log('Seeding JOVANCE Pharma MR CRM demo data…');
+    console.log('Seeding Field Force demo…');
 
-    // Clean transactional tables for idempotent demo reseed (keep order for FKs)
     await prisma.$executeRawUnsafe(`
       TRUNCATE TABLE
-        medicine_distributions,
+        stock_count_items,
+        stock_counts,
+        stock_balances,
+        stock_txns,
         visit_products,
         visits,
         appointments,
-        medicine_issues,
-        mr_stocks,
-        stock_movements,
-        sales,
+        tour_plan_calls,
+        tour_plan_days,
+        tour_plans,
         attendances,
+        sales,
         doctor_assignments,
-        medicine_purchases,
-        stocks,
+        batches,
         medicines,
         medical_stores,
         doctors,
+        warehouses,
         mr_profiles,
         refresh_tokens,
         audit_logs,
         users,
+        territories,
         settings
       RESTART IDENTITY CASCADE;
     `);
 
+    const state = await prisma.territory.create({
+      data: { name: 'Gujarat', type: 'STATE', status: 'ACTIVE' },
+    });
+    const district = await prisma.territory.create({
+      data: { name: 'Ahmedabad', type: 'DISTRICT', parentId: state.id, status: 'ACTIVE' },
+    });
+    const hq = await prisma.territory.create({
+      data: { name: 'Ahmedabad HQ', type: 'HQ', parentId: district.id, status: 'ACTIVE' },
+    });
+    const beatCentral = await prisma.territory.create({
+      data: { name: 'Ahmedabad Central', type: 'BEAT', parentId: hq.id, status: 'ACTIVE' },
+    });
+    const beatWest = await prisma.territory.create({
+      data: { name: 'Ahmedabad West', type: 'BEAT', parentId: hq.id, status: 'ACTIVE' },
+    });
+
+    const warehouse = await prisma.warehouse.create({
+      data: { name: 'JOVANCE Central Warehouse', code: 'WH-AHM-01', city: 'Ahmedabad', status: 'ACTIVE' },
+    });
+
     const admin = await prisma.user.create({
       data: {
         email: process.env.ADMIN_EMAIL ?? 'admin@pharma-mr.local',
-        passwordHash,
+        passwordHash: adminHash,
         fullName: process.env.ADMIN_NAME ?? 'Suresh Mehta',
         phone: '9876500001',
         role: 'ADMIN',
         status: 'ACTIVE',
+        territoryId: hq.id,
+      },
+    });
+
+    const manager = await prisma.user.create({
+      data: {
+        email: 'asm.west@jovance.local',
+        passwordHash: managerHash,
+        fullName: 'Ankit Shah (ASM)',
+        phone: '9876500010',
+        role: 'MANAGER',
+        status: 'ACTIVE',
+        managerId: admin.id,
+        territoryId: hq.id,
+        createdBy: admin.id,
+        updatedBy: admin.id,
       },
     });
 
@@ -73,16 +144,14 @@ async function main(): Promise<void> {
       data: [
         { key: 'company.name', value: 'JOVANCE LABORATORIES PVT. LTD.', group: 'branding' },
         { key: 'company.shortName', value: 'JOVANCE', group: 'branding' },
-        { key: 'company.city', value: 'Ahmedabad', group: 'branding' },
+        { key: 'stock.default_warehouse_id', value: String(warehouse.id), group: 'stock' },
       ],
     });
 
     const mrDefs = [
-      { fullName: 'Rahul Sharma', email: 'rahul.mr@jovance.local', code: 'MR-AHM-01', area: 'Ahmedabad Central', phone: '9876510001' },
-      { fullName: 'Priya Patel', email: 'priya.mr@jovance.local', code: 'MR-AHM-02', area: 'Ahmedabad West', phone: '9876510002' },
-      { fullName: 'Amit Kumar', email: 'amit.mr@jovance.local', code: 'MR-SUR-01', area: 'Surat', phone: '9876510003' },
-      { fullName: 'Neha Desai', email: 'neha.mr@jovance.local', code: 'MR-VAD-01', area: 'Vadodara', phone: '9876510004' },
-      { fullName: 'Vikram Singh', email: 'vikram.mr@jovance.local', code: 'MR-RAJ-01', area: 'Rajkot', phone: '9876510005' },
+      { fullName: 'Rahul Sharma', email: 'rahul.mr@jovance.local', code: 'MR-AHM-01', area: 'Ahmedabad Central', beatId: beatCentral.id, phone: '9876510001' },
+      { fullName: 'Priya Patel', email: 'priya.mr@jovance.local', code: 'MR-AHM-02', area: 'Ahmedabad West', beatId: beatWest.id, phone: '9876510002' },
+      { fullName: 'Amit Kumar', email: 'amit.mr@jovance.local', code: 'MR-SUR-01', area: 'Surat', beatId: beatCentral.id, phone: '9876510003' },
     ];
 
     const mrs = [];
@@ -90,11 +159,13 @@ async function main(): Promise<void> {
       const user = await prisma.user.create({
         data: {
           email: mr.email,
-          passwordHash: mrPasswordHash,
+          passwordHash: mrHash,
           fullName: mr.fullName,
           phone: mr.phone,
           role: 'MR',
           status: 'ACTIVE',
+          managerId: manager.id,
+          territoryId: mr.beatId,
           createdBy: admin.id,
           updatedBy: admin.id,
           mrProfile: {
@@ -112,35 +183,12 @@ async function main(): Promise<void> {
       mrs.push(user);
     }
 
-    const hospitals = [
-      'Civil Hospital',
-      'Apollo Hospitals',
-      'Sterling Hospital',
-      'HCG Cancer Centre',
-      'Zydus Hospital',
-      'Shalby Hospital',
-      'KD Hospital',
-      'CIMS Hospital',
-    ];
-    const specializations = [
-      'Cardiology',
-      'General Medicine',
-      'Orthopaedics',
-      'Pediatrics',
-      'Dermatology',
-      'Diabetology',
-      'Gynecology',
-      'ENT',
-      'Neurology',
-      'Pulmonology',
-    ];
-    const cities = ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Gandhinagar'];
     const doctorNames = [
-      'Dr. Anil Shah', 'Dr. Meera Joshi', 'Dr. Rakesh Trivedi', 'Dr. Kavita Iyer', 'Dr. Sandeep Rao',
-      'Dr. Pooja Nair', 'Dr. Harshad Bhatt', 'Dr. Sunita Reddy', 'Dr. Manoj Gupta', 'Dr. Asha Verma',
-      'Dr. Nikhil Parekh', 'Dr. Ritu Malhotra', 'Dr. Deepak Chauhan', 'Dr. Shalini Menon', 'Dr. Yogesh Solanki',
-      'Dr. Farah Khan', 'Dr. Girish Dave', 'Dr. Latika Jain', 'Dr. Pratik Oza', 'Dr. Nidhi Kapoor',
+      'Dr. Anil Shah', 'Dr. Meera Joshi', 'Dr. Rakesh Trivedi', 'Dr. Kavita Iyer',
+      'Dr. Sandeep Rao', 'Dr. Pooja Nair', 'Dr. Harshad Bhatt', 'Dr. Sunita Reddy',
     ];
+    const specializations = ['Cardiology', 'General Medicine', 'Orthopaedics', 'Pediatrics', 'Dermatology', 'Diabetology', 'ENT', 'Neurology'];
+    const categories = ['A', 'B', 'C'] as const;
 
     const doctors = [];
     for (let i = 0; i < doctorNames.length; i++) {
@@ -148,13 +196,17 @@ async function main(): Promise<void> {
         data: {
           fullName: doctorNames[i]!,
           specialization: specializations[i % specializations.length],
-          hospital: hospitals[i % hospitals.length],
+          category: categories[i % categories.length],
+          hospital: 'Civil Hospital',
           clinic: `${doctorNames[i]!.replace('Dr. ', '')} Clinic`,
           phone: `98${String(76520000 + i).padStart(8, '0')}`,
-          city: cities[i % cities.length],
+          city: 'Ahmedabad',
+          territoryId: i % 2 === 0 ? beatCentral.id : beatWest.id,
+          visitFreqPm: 2 + (i % 3),
           visitingDays: 'Mon, Wed, Fri',
           preferredTime: '10:00-13:00',
           status: 'ACTIVE',
+          approvedBy: manager.id,
           createdBy: admin.id,
           updatedBy: admin.id,
         },
@@ -172,73 +224,37 @@ async function main(): Promise<void> {
       });
     }
 
-    const storeDefs = [
-      { name: 'Shree Medical Stores', city: 'Ahmedabad', owner: 'Jignesh Patel' },
-      { name: 'Apollo Pharmacy Satellite', city: 'Ahmedabad', owner: 'Apollo Retail' },
-      { name: 'MedPlus Paldi', city: 'Ahmedabad', owner: 'MedPlus' },
-      { name: 'Wellness Forever CG Road', city: 'Ahmedabad', owner: 'Wellness Forever' },
-      { name: 'Surat Chemist Hub', city: 'Surat', owner: 'Kiran Shah' },
-      { name: 'Ring Road Medical', city: 'Surat', owner: 'Bhavna Desai' },
-      { name: 'Alkapuri Pharma', city: 'Vadodara', owner: 'Rajesh Mehta' },
-      { name: 'Race Course Medicals', city: 'Vadodara', owner: 'Nilesh Rana' },
-      { name: 'Kalavad Road Pharmacy', city: 'Rajkot', owner: 'Hardik Joshi' },
-      { name: 'Gandhinagar Jan Aushadhi', city: 'Gandhinagar', owner: 'Co-op Society' },
-    ];
-    const stores = [];
-    for (let i = 0; i < storeDefs.length; i++) {
-      const s = storeDefs[i]!;
-      stores.push(
-        await prisma.medicalStore.create({
-          data: {
-            name: s.name,
-            ownerName: s.owner,
-            city: s.city,
-            phone: `79${String(4000000 + i).padStart(7, '0')}`,
-            gstNumber: `24AABC${1000 + i}L1Z${i % 9}`,
-            drugLicenseNumber: `GJ-DL-${2000 + i}`,
-            status: 'ACTIVE',
-            createdBy: admin.id,
-            updatedBy: admin.id,
-          },
-        }),
-      );
-    }
+    const store = await prisma.medicalStore.create({
+      data: {
+        name: 'Shree Medical Stores',
+        type: 'CHEMIST',
+        ownerName: 'Jignesh Patel',
+        city: 'Ahmedabad',
+        phone: '794000001',
+        gstNumber: '24AABC1001L1Z1',
+        drugLicenseNumber: 'GJ-DL-2001',
+        territoryId: beatCentral.id,
+        status: 'ACTIVE',
+        createdBy: admin.id,
+        updatedBy: admin.id,
+      },
+    });
 
     const medicineDefs = [
-      { name: 'Jovance Cefixime', brand: 'CefiJov', generic: 'Cefixime', strength: '200mg', category: 'Antibiotic', mrp: 185 },
-      { name: 'Jovance Azithromycin', brand: 'AziJov', generic: 'Azithromycin', strength: '500mg', category: 'Antibiotic', mrp: 120 },
+      { name: 'Zincoboom 500', brand: 'Zincoboom', generic: 'Zinc Acetate', strength: '500mg', category: 'Nutraceutical', mrp: 185 },
+      { name: 'Calciplus Softgel', brand: 'Calciplus', generic: 'Calcium + D3', strength: 'OD', category: 'Nutraceutical', mrp: 175 },
+      { name: 'Neurovit Forte', brand: 'Neurovit', generic: 'Methylcobalamin', strength: '1500mcg', category: 'Neuro', mrp: 210 },
       { name: 'Jovance Pantoprazole', brand: 'PantoJov', generic: 'Pantoprazole', strength: '40mg', category: 'Gastro', mrp: 95 },
-      { name: 'Jovance Domperidone', brand: 'DomJov', generic: 'Domperidone', strength: '10mg', category: 'Gastro', mrp: 68 },
-      { name: 'Jovance Metformin', brand: 'MetJov', generic: 'Metformin', strength: '500mg', category: 'Diabetes', mrp: 75 },
-      { name: 'Jovance Glimepiride', brand: 'GlimJov', generic: 'Glimepiride', strength: '2mg', category: 'Diabetes', mrp: 110 },
-      { name: 'Jovance Amlodipine', brand: 'AmloJov', generic: 'Amlodipine', strength: '5mg', category: 'Cardiac', mrp: 88 },
-      { name: 'Jovance Telmisartan', brand: 'TelmiJov', generic: 'Telmisartan', strength: '40mg', category: 'Cardiac', mrp: 145 },
-      { name: 'Jovance Atorvastatin', brand: 'AtorJov', generic: 'Atorvastatin', strength: '10mg', category: 'Cardiac', mrp: 160 },
-      { name: 'Jovance Paracetamol', brand: 'ParaJov', generic: 'Paracetamol', strength: '650mg', category: 'Analgesic', mrp: 35 },
-      { name: 'Jovance Aceclofenac', brand: 'AceJov', generic: 'Aceclofenac', strength: '100mg', category: 'Analgesic', mrp: 72 },
-      { name: 'Jovance Diclofenac Gel', brand: 'DicloJov', generic: 'Diclofenac', strength: '1%', category: 'Analgesic', mrp: 95 },
-      { name: 'Jovance Montelukast', brand: 'MontJov', generic: 'Montelukast', strength: '10mg', category: 'Respiratory', mrp: 130 },
-      { name: 'Jovance Levocetirizine', brand: 'LevoJov', generic: 'Levocetirizine', strength: '5mg', category: 'Respiratory', mrp: 55 },
-      { name: 'Jovance Amoxicillin-Clav', brand: 'ClavJov', generic: 'Amoxicillin + Clavulanate', strength: '625mg', category: 'Antibiotic', mrp: 210 },
-      { name: 'Jovance Ondansetron', brand: 'OndanJov', generic: 'Ondansetron', strength: '4mg', category: 'Gastro', mrp: 48 },
-      { name: 'Jovance Multivitamin', brand: 'VitaJov', generic: 'Multivitamins', strength: 'OD', category: 'Nutraceutical', mrp: 220 },
-      { name: 'Jovance Calcium-D3', brand: 'CalciJov', generic: 'Calcium + Vitamin D3', strength: '500mg', category: 'Nutraceutical', mrp: 175 },
-      { name: 'Jovance Iron Folate', brand: 'FerroJov', generic: 'Ferrous Ascorbate + Folic Acid', strength: 'OD', category: 'Nutraceutical', mrp: 140 },
-      { name: 'Jovance Rabeprazole', brand: 'RabeJov', generic: 'Rabeprazole', strength: '20mg', category: 'Gastro', mrp: 105 },
-      { name: 'Jovance Cefpodoxime', brand: 'CefpoJov', generic: 'Cefpodoxime', strength: '200mg', category: 'Antibiotic', mrp: 195 },
-      { name: 'Jovance Losartan', brand: 'LosaJov', generic: 'Losartan', strength: '50mg', category: 'Cardiac', mrp: 98 },
-      { name: 'Jovance Clopidogrel', brand: 'ClopiJov', generic: 'Clopidogrel', strength: '75mg', category: 'Cardiac', mrp: 155 },
-      { name: 'Jovance Gabapentin', brand: 'GabaJov', generic: 'Gabapentin', strength: '300mg', category: 'Neuro', mrp: 180 },
-      { name: 'Jovance Pregabalin', brand: 'PregaJov', generic: 'Pregabalin', strength: '75mg', category: 'Neuro', mrp: 210 },
+      { name: 'Jovance Cefixime', brand: 'CefiJov', generic: 'Cefixime', strength: '200mg', category: 'Antibiotic', mrp: 185 },
     ];
 
     const medicines = [];
     for (let i = 0; i < medicineDefs.length; i++) {
       const m = medicineDefs[i]!;
-      const opening = 400 + i * 20;
       const medicine = await prisma.medicine.create({
         data: {
           name: m.name,
+          code: `JOV-${1000 + i}`,
           brandName: m.brand,
           genericName: m.generic,
           company: 'JOVANCE LABORATORIES PVT. LTD.',
@@ -247,222 +263,288 @@ async function main(): Promise<void> {
           category: m.category,
           packSize: '10x10',
           mrp: m.mrp,
-          sku: `JOV-${1000 + i}`,
-          batchNumber: `B2026${String(i + 1).padStart(3, '0')}`,
-          expiryDate: dateOnly(365 + i * 10),
+          sku: `SKU-${1000 + i}`,
           sampleAvailable: true,
           status: 'ACTIVE',
           createdBy: admin.id,
           updatedBy: admin.id,
-          stock: {
-            create: {
-              openingStock: opening,
-              issued: 0,
-              returned: 0,
-              available: opening,
-              minimumStockAlert: 40,
-              createdBy: admin.id,
-              updatedBy: admin.id,
-            },
+        },
+      });
+      const batch = await prisma.batch.create({
+        data: {
+          medicineId: medicine.id,
+          batchNo: `B2026${String(i + 1).padStart(3, '0')}`,
+          mfgDate: dateOnly(-180),
+          expiryDate: dateOnly(300 + i * 30),
+          status: 'ACTIVE',
+          createdBy: admin.id,
+          updatedBy: admin.id,
+        },
+      });
+      medicines.push({ medicine, batch });
+
+      // Warehouse opening
+      const openingQty = 1000;
+      await prisma.stockTxn.create({
+        data: {
+          txnNo: nextTxnNo(),
+          txnType: 'OPENING',
+          txnDate: dateOnly(-60),
+          medicineId: medicine.id,
+          batchId: batch.id,
+          qty: openingQty,
+          toHolderType: 'WAREHOUSE',
+          toHolderId: warehouse.id,
+          refType: 'MANUAL',
+          note: 'Opening stock',
+          createdBy: admin.id,
+        },
+      });
+      await prisma.stockBalance.create({
+        data: {
+          holderType: 'WAREHOUSE',
+          holderId: warehouse.id,
+          medicineId: medicine.id,
+          batchId: batch.id,
+          qty: openingQty,
+        },
+      });
+
+      // Transfer to manager
+      const transferQty = 200;
+      await prisma.stockTxn.create({
+        data: {
+          txnNo: nextTxnNo(),
+          txnType: 'TRANSFER',
+          txnDate: dateOnly(-30),
+          medicineId: medicine.id,
+          batchId: batch.id,
+          qty: transferQty,
+          fromHolderType: 'WAREHOUSE',
+          fromHolderId: warehouse.id,
+          toHolderType: 'USER',
+          toHolderId: manager.id,
+          refType: 'MANUAL',
+          note: 'ASM area stock',
+          createdBy: admin.id,
+        },
+      });
+      await prisma.stockBalance.update({
+        where: {
+          holderType_holderId_medicineId_batchId: {
+            holderType: 'WAREHOUSE',
+            holderId: warehouse.id,
+            medicineId: medicine.id,
+            batchId: batch.id,
           },
         },
-        include: { stock: true },
+        data: { qty: { decrement: transferQty } },
       });
-      medicines.push(medicine);
+      await prisma.stockBalance.create({
+        data: {
+          holderType: 'USER',
+          holderId: manager.id,
+          medicineId: medicine.id,
+          batchId: batch.id,
+          qty: transferQty,
+        },
+      });
     }
 
-    // Issue samples to each MR (company stock ↓, MR stock ↑)
+    // ISSUE to each MR from manager bag
     for (const mr of mrs) {
-      for (let i = 0; i < 10; i++) {
-        const medicine = medicines[i]!;
-        const qty = 20 + (i % 5) * 5;
-        await prisma.medicineIssue.create({
+      for (let i = 0; i < medicines.length; i++) {
+        const { medicine, batch } = medicines[i]!;
+        const qty = 30 + i * 5;
+        await prisma.stockTxn.create({
           data: {
-            mrId: mr.id,
+            txnNo: nextTxnNo(),
+            txnType: 'ISSUE',
+            txnDate: dateOnly(-20 + i),
             medicineId: medicine.id,
-            quantity: qty,
-            batchNumber: medicine.batchNumber,
-            issueDate: dateOnly(-20 + i),
-            remarks: 'Field sample allocation',
-            createdBy: admin.id,
-            updatedBy: admin.id,
+            batchId: batch.id,
+            qty,
+            fromHolderType: 'USER',
+            fromHolderId: manager.id,
+            toHolderType: 'USER',
+            toHolderId: mr.id,
+            refType: 'ISSUE',
+            note: 'Field sample allocation',
+            createdBy: manager.id,
           },
         });
-        await prisma.stock.update({
-          where: { medicineId: medicine.id },
-          data: {
-            issued: { increment: qty },
-            available: { decrement: qty },
-            updatedBy: admin.id,
+        await prisma.stockBalance.update({
+          where: {
+            holderType_holderId_medicineId_batchId: {
+              holderType: 'USER',
+              holderId: manager.id,
+              medicineId: medicine.id,
+              batchId: batch.id,
+            },
           },
+          data: { qty: { decrement: qty } },
         });
-        await prisma.mrStock.upsert({
-          where: { mrId_medicineId: { mrId: mr.id, medicineId: medicine.id } },
-          create: {
-            mrId: mr.id,
-            medicineId: medicine.id,
-            quantity: qty,
-            batchNumber: medicine.batchNumber,
-            createdBy: admin.id,
-            updatedBy: admin.id,
-          },
-          update: {
-            quantity: { increment: qty },
-            updatedBy: admin.id,
-          },
-        });
-        await prisma.stockMovement.create({
+        await prisma.stockBalance.create({
           data: {
+            holderType: 'USER',
+            holderId: mr.id,
             medicineId: medicine.id,
-            mrId: mr.id,
-            type: 'ISSUE',
-            quantity: qty,
-            remarks: 'Seed issue to MR',
-            createdBy: admin.id,
-            updatedBy: admin.id,
+            batchId: batch.id,
+            qty,
           },
         });
       }
     }
 
-    // 50 appointments: 40 completed, 10 pending, 5 cancelled (+ extras mix)
-    const appointments = [];
-    for (let i = 0; i < 55; i++) {
+    // Tour plan for first MR (approved)
+    const plan = await prisma.tourPlan.create({
+      data: {
+        userId: mrs[0]!.id,
+        planMonth: monthStart(),
+        status: 'APPROVED',
+        submittedAt: dateOnly(-5),
+        approvedById: manager.id,
+        actedAt: dateOnly(-4),
+        createdBy: mrs[0]!.id,
+        updatedBy: manager.id,
+      },
+    });
+    const day = await prisma.tourPlanDay.create({
+      data: {
+        tourPlanId: plan.id,
+        planDate: dateOnly(0),
+        territoryId: beatCentral.id,
+        workType: 'FIELD',
+      },
+    });
+    await prisma.tourPlanCall.create({
+      data: { tourPlanDayId: day.id, doctorId: doctors[0]!.id },
+    });
+    await prisma.tourPlanCall.create({
+      data: { tourPlanDayId: day.id, doctorId: doctors[1]!.id },
+    });
+
+    // Appointments + visits + SAMPLE_GIVEN ledger rows
+    for (let i = 0; i < 12; i++) {
       const doctor = doctors[i % doctors.length]!;
       const assignment = await prisma.doctorAssignment.findFirst({
         where: { doctorId: doctor.id, isActive: true },
       });
       const mrId = assignment?.mrId ?? mrs[0]!.id;
-      let status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED' = 'COMPLETED';
-      if (i < 5) status = 'CANCELLED';
-      else if (i < 15) status = 'PENDING';
-      else if (i === 16) status = 'RESCHEDULED';
-      else status = 'COMPLETED';
-
-      const dayOffset = status === 'PENDING' ? (i % 7) : -((i % 40) + 1);
+      const status = i < 3 ? 'PENDING' : 'COMPLETED';
       const appt = await prisma.appointment.create({
         data: {
           doctorId: doctor.id,
           mrId,
-          date: dateOnly(dayOffset),
-          time: timeAt(9 + (i % 7), (i % 2) * 30),
-          purpose: i % 2 === 0 ? 'Product detailing' : 'Sample & follow-up',
+          date: dateOnly(status === 'PENDING' ? i : -(i + 1)),
+          time: timeAt(10 + (i % 5), 0),
+          purpose: 'Product detailing',
           status,
-          remarks: 'Seeded appointment',
           createdBy: mrId,
           updatedBy: mrId,
         },
       });
-      appointments.push(appt);
-    }
 
-    const completed = appointments.filter((a) => a.status === 'COMPLETED').slice(0, 40);
-    let productCount = 0;
-    let sampleCount = 0;
-    let followUpCount = 0;
-
-    for (let i = 0; i < completed.length; i++) {
-      const appt = completed[i]!;
-      const checkIn = timeAt(10 + (i % 5), 0);
-      const checkOut = timeAt(10 + (i % 5), 30 + (i % 3) * 10);
-      const hasFollowUp = i < 60 && i % 2 === 0;
-      if (hasFollowUp) followUpCount += 1;
+      if (status !== 'COMPLETED') continue;
 
       const visit = await prisma.visit.create({
         data: {
           appointmentId: appt.id,
-          doctorId: appt.doctorId,
-          mrId: appt.mrId,
+          doctorId: doctor.id,
+          mrId,
           visitDate: appt.date,
-          visitTime: checkIn,
-          checkInTime: checkIn,
-          checkOutTime: checkOut,
-          meetingDurationMin: 30 + (i % 3) * 10,
-          discussionNotes: 'Discussed efficacy, dosage and patient compliance.',
-          doctorFeedback: i % 3 === 0 ? 'Interested in samples for OPD' : 'Will trial for 2 weeks',
-          visitOutcome: i % 4 === 0 ? 'Positive' : 'Follow-up needed',
-          nextFollowUp: hasFollowUp ? dateOnly((i % 10) + 1) : null,
-          remarks: 'Seeded visit',
-          createdBy: appt.mrId,
-          updatedBy: appt.mrId,
+          visitTime: timeAt(10 + (i % 5), 0),
+          checkInTime: timeAt(10 + (i % 5), 0),
+          checkOutTime: timeAt(10 + (i % 5), 35),
+          meetingDurationMin: 35,
+          discussionNotes: 'Discussed dosage and compliance.',
+          doctorFeedback: 'Interested in OPD samples',
+          nextFollowUp: dateOnly(7),
+          clientUuid: `seed-visit-${i}`,
+          createdBy: mrId,
+          updatedBy: mrId,
         },
       });
 
-      // 2–3 products discussed
-      const productMeds = [medicines[i % medicines.length]!, medicines[(i + 3) % medicines.length]!];
-      for (const med of productMeds) {
-        await prisma.visitProduct.create({
-          data: {
-            visitId: visit.id,
-            medicineId: med.id,
-            notes: 'Interest: MEDIUM · Prescription expected',
-            createdBy: appt.mrId,
-            updatedBy: appt.mrId,
-          },
-        });
-        productCount += 1;
-      }
+      const { medicine, batch } = medicines[i % medicines.length]!;
+      await prisma.visitProduct.create({
+        data: {
+          visitId: visit.id,
+          medicineId: medicine.id,
+          detailSeq: 1,
+          interestLevel: 'MEDIUM',
+          prescriptionExpected: true,
+          notes: 'Detailed',
+          createdBy: mrId,
+          updatedBy: mrId,
+        },
+      });
 
-      // Sample distribution (reduce MR stock if available)
-      for (let s = 0; s < 2; s++) {
-        const med = medicines[(i + s) % 10]!;
-        const qty = 2 + (s % 2);
-        const mrStock = await prisma.mrStock.findUnique({
-          where: { mrId_medicineId: { mrId: appt.mrId, medicineId: med.id } },
-        });
-        if (!mrStock || mrStock.quantity < qty) continue;
-
-        await prisma.medicineDistribution.create({
+      const sampleQty = 4;
+      const bal = await prisma.stockBalance.findUnique({
+        where: {
+          holderType_holderId_medicineId_batchId: {
+            holderType: 'USER',
+            holderId: mrId,
+            medicineId: medicine.id,
+            batchId: batch.id,
+          },
+        },
+      });
+      if (bal && bal.qty >= sampleQty) {
+        await prisma.stockTxn.create({
           data: {
-            visitId: visit.id,
-            doctorId: appt.doctorId,
-            mrId: appt.mrId,
-            medicineId: med.id,
-            quantity: qty,
-            batchNumber: med.batchNumber,
-            unit: 'Strips',
-            remarks: 'OPD sample',
-            distributedAt: appt.date,
-            createdBy: appt.mrId,
-            updatedBy: appt.mrId,
+            txnNo: nextTxnNo(),
+            txnType: 'SAMPLE_GIVEN',
+            txnDate: visit.visitDate,
+            medicineId: medicine.id,
+            batchId: batch.id,
+            qty: sampleQty,
+            fromHolderType: 'USER',
+            fromHolderId: mrId,
+            toHolderType: 'DOCTOR',
+            toHolderId: doctor.id,
+            refType: 'VISIT',
+            refId: visit.id,
+            note: 'OPD sample',
+            createdBy: mrId,
           },
         });
-        await prisma.mrStock.update({
-          where: { mrId_medicineId: { mrId: appt.mrId, medicineId: med.id } },
-          data: { quantity: { decrement: qty }, updatedBy: appt.mrId },
-        });
-        await prisma.stockMovement.create({
-          data: {
-            medicineId: med.id,
-            mrId: appt.mrId,
-            type: 'SAMPLE',
-            quantity: qty,
-            remarks: `Sample on visit ${visit.id}`,
-            createdBy: appt.mrId,
-            updatedBy: appt.mrId,
+        await prisma.stockBalance.update({
+          where: {
+            holderType_holderId_medicineId_batchId: {
+              holderType: 'USER',
+              holderId: mrId,
+              medicineId: medicine.id,
+              batchId: batch.id,
+            },
           },
+          data: { qty: { decrement: sampleQty } },
         });
-        sampleCount += 1;
       }
     }
 
-    // Attendance: ~30 days per MR
+    // Attendance
     for (const mr of mrs) {
-      for (let d = 1; d <= 30; d++) {
-        const workDate = dateOnly(-d);
-        const checkInAt = new Date(workDate);
-        checkInAt.setUTCHours(9, 10 + (d % 20), 0, 0);
-        const checkOutAt = new Date(workDate);
-        checkOutAt.setUTCHours(18, 5 + (d % 15), 0, 0);
-        const workingMins = Math.round((checkOutAt.getTime() - checkInAt.getTime()) / 60000);
+      for (let d = 1; d <= 10; d++) {
+        const attDate = dateOnly(-d);
+        const checkInAt = new Date(attDate);
+        checkInAt.setUTCHours(9, 15, 0, 0);
+        const checkOutAt = new Date(attDate);
+        checkOutAt.setUTCHours(18, 0, 0, 0);
         await prisma.attendance.create({
           data: {
-            mrId: mr.id,
-            workDate,
+            userId: mr.id,
+            attDate,
             checkInAt,
             checkOutAt,
-            workingMins,
-            locationNote: 'Field territory',
+            workingMins: 525,
+            inLat: 23.0225,
+            inLng: 72.5714,
+            accuracyM: 25,
+            isMockLocation: false,
+            serverAt: checkInAt,
+            status: 'PRESENT',
             createdBy: mr.id,
             updatedBy: mr.id,
           },
@@ -470,41 +552,28 @@ async function main(): Promise<void> {
       }
     }
 
-    // 40 sales entries
-    for (let i = 0; i < 40; i++) {
-      const mr = mrs[i % mrs.length]!;
-      const medicine = medicines[i % medicines.length]!;
-      const doctor = doctors[i % doctors.length]!;
-      const store = stores[i % stores.length]!;
-      const qty = 5 + (i % 10);
-      await prisma.sale.create({
-        data: {
-          mrId: mr.id,
-          medicineId: medicine.id,
-          doctorId: i % 2 === 0 ? doctor.id : null,
-          medicalStoreId: i % 2 === 1 ? store.id : store.id,
-          quantity: qty,
-          amount: Number(medicine.mrp) * qty * 0.85,
-          invoiceDate: dateOnly(-(i % 28)),
-          invoiceNumber: `INV-2026-${1000 + i}`,
-          remarks: 'Retail / clinic sale',
-          createdBy: mr.id,
-          updatedBy: mr.id,
-        },
-      });
-    }
+    await prisma.sale.create({
+      data: {
+        mrId: mrs[0]!.id,
+        medicineId: medicines[0]!.medicine.id,
+        medicalStoreId: store.id,
+        quantity: 10,
+        amount: Number(medicines[0]!.medicine.mrp) * 10 * 0.85,
+        invoiceDate: dateOnly(-2),
+        invoiceNumber: 'INV-2026-1001',
+        createdBy: mrs[0]!.id,
+        updatedBy: mrs[0]!.id,
+      },
+    });
+
+    await seedRolePermissions(prisma);
 
     console.log('Seed complete:');
-    console.log(`  Admin: ${admin.email} / Admin@12345`);
-    console.log(`  MRs: ${mrs.length} (password Mr@12345) e.g. ${mrs[0]!.email}`);
-    console.log(`  Doctors: ${doctors.length}`);
-    console.log(`  Stores: ${stores.length}`);
-    console.log(`  Medicines: ${medicines.length}`);
-    console.log(`  Appointments: ${appointments.length}`);
-    console.log(`  Completed visits: ${completed.length}`);
-    console.log(`  Products discussed: ${productCount}`);
-    console.log(`  Sample distributions: ${sampleCount}`);
-    console.log(`  Follow-ups: ${followUpCount}`);
+    console.log(`  Admin:   ${admin.email} / Admin@12345`);
+    console.log(`  Manager: ${manager.email} / Manager@12345`);
+    console.log(`  MR:      ${mrs[0]!.email} / Mr@12345`);
+    console.log(`  Territories / warehouse / batches / stock_txns seeded`);
+    console.log(`  Role default permissions seeded`);
   } finally {
     await prisma.$disconnect();
   }

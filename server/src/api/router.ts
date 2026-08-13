@@ -24,6 +24,7 @@ export function createApiRouter(): Router {
     'auth',
     'dashboard',
     'users',
+    'permissions',
     'doctors',
     'stores',
     'medicines',

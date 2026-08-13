@@ -33,6 +33,7 @@ export const listAppointmentsQuerySchema = z.object({
     ])
     .optional(),
   doctorId: idSchema.optional(),
+  mrId: idSchema.optional(),
 });
 
 export const completeAppointmentSchema = z.object({
@@ -68,7 +69,14 @@ export const completeAppointmentSchema = z.object({
     .default([]),
 });
 
+export const rescheduleAppointmentSchema = z.object({
+  date: z.string().min(1),
+  time: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM'),
+  remarks: z.string().max(2000).optional(),
+});
+
 export type CreateAppointmentDto = z.infer<typeof createAppointmentSchema>;
 export type UpdateAppointmentDto = z.infer<typeof updateAppointmentSchema>;
 export type ListAppointmentsQueryDto = z.infer<typeof listAppointmentsQuerySchema>;
 export type CompleteAppointmentDto = z.infer<typeof completeAppointmentSchema>;
+export type RescheduleAppointmentDto = z.infer<typeof rescheduleAppointmentSchema>;

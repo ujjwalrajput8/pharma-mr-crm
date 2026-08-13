@@ -19,6 +19,7 @@ export interface CalendarSelection {
 interface DashboardCalendarProps {
   appointments: Appointment[];
   visits: Visit[];
+  showMrName?: boolean;
   onSelectSlot: (selection: CalendarSelection) => void;
   onEventClick: (kind: CalendarEventKind, id: number) => void;
   onAppointmentMove?: (id: number, date: string, time: string) => void;
@@ -31,6 +32,7 @@ function combineDateTime(date: string, time: string): string {
 export function DashboardCalendar({
   appointments,
   visits,
+  showMrName = false,
   onSelectSlot,
   onEventClick,
   onAppointmentMove,
@@ -38,7 +40,9 @@ export function DashboardCalendar({
   const events = useMemo<EventInput[]>(() => {
     const appointmentEvents: EventInput[] = appointments.map((item) => ({
       id: `appointment:${item.id}`,
-      title: `Appt · ${item.doctor?.fullName ?? 'Doctor'}`,
+      title: showMrName
+        ? `Appt · ${item.mr?.fullName ?? 'MR'} · ${item.doctor?.fullName ?? 'Doctor'}`
+        : `Appt · ${item.doctor?.fullName ?? 'Doctor'}`,
       start: combineDateTime(item.date, item.time),
       backgroundColor: 'var(--color-cal-appointment)',
       borderColor: 'var(--color-cal-appointment)',
@@ -48,7 +52,9 @@ export function DashboardCalendar({
 
     const visitEvents: EventInput[] = visits.map((item) => ({
       id: `visit:${item.id}`,
-      title: `Visit · ${item.doctor?.fullName ?? 'Doctor'}`,
+      title: showMrName
+        ? `Visit · ${item.mr?.fullName ?? 'MR'} · ${item.doctor?.fullName ?? 'Doctor'}`
+        : `Visit · ${item.doctor?.fullName ?? 'Doctor'}`,
       start: combineDateTime(item.visitDate, item.visitTime ?? '09:00'),
       backgroundColor: 'var(--color-cal-visit)',
       borderColor: 'var(--color-cal-visit)',
@@ -70,7 +76,7 @@ export function DashboardCalendar({
       }));
 
     return [...appointmentEvents, ...visitEvents, ...followUps];
-  }, [appointments, visits]);
+  }, [appointments, visits, showMrName]);
 
   return (
     <Card className="overflow-hidden p-3 md:p-5">

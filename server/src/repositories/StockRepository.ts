@@ -1,7 +1,8 @@
-import type { Prisma, Stock } from '../../generated/prisma/client';
-import { PrismaService } from '../prisma/PrismaService';
+import { StockTxnRepository } from './StockTxnRepository';
+import { SettingRepository } from './SettingRepository';
 
-export type StockWithMedicine = Stock & {
+export type WarehouseStockRow = {
+  medicineId: number;
   medicine: {
     id: number;
     name: string;
@@ -10,16 +11,22 @@ export type StockWithMedicine = Stock & {
     sampleAvailable: boolean;
     status: string;
   };
+  available: number;
+  batches: Array<{ batchId: number; batchNo: string; expiryDate: Date | null; qty: number }>;
 };
 
+const DEFAULT_WAREHOUSE_SETTING = 'stock.default_warehouse_id';
+
 /**
- * StockRepository — data access for inventory rows and movements.
- * Design Pattern: Repository + Singleton
+ * StockRepository — reads warehouse StockBalance rollups.
  */
 export class StockRepository {
   private static instance: StockRepository | null = null;
 
-  private constructor(private readonly prisma = PrismaService.getClient()) {}
+  private constructor(
+    private readonly stockTxns = StockTxnRepository.getInstance(),
+    private readonly settings = SettingRepository.getInstance(),
+  ) {}
 
   public static getInstance(): StockRepository {
     if (!StockRepository.instance) {
@@ -28,151 +35,39 @@ export class StockRepository {
     return StockRepository.instance;
   }
 
+  private async getDefaultWarehouseId(): Promise<number> {
+    const setting = await this.settings.findByKey(DEFAULT_WAREHOUSE_SETTING);
+    if (!setting) throw new Error('DEFAULT_WAREHOUSE_NOT_CONFIGURED');
+    const warehouseId = Number(setting.value);
+    if (!Number.isInteger(warehouseId) || warehouseId <= 0) {
+      throw new Error('DEFAULT_WAREHOUSE_NOT_CONFIGURED');
+    }
+    return warehouseId;
+  }
+
   public async list(params: {
     page: number;
     limit: number;
     search?: string;
     lowOnly?: boolean;
-  }): Promise<{ items: StockWithMedicine[]; total: number }> {
-    const medicineFilter: Prisma.MedicineWhereInput = {
-      deletedAt: null,
-      ...(params.search
-        ? {
-            OR: [
-              { name: { contains: params.search, mode: 'insensitive' } },
-              { company: { contains: params.search, mode: 'insensitive' } },
-              { sku: { contains: params.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    };
-
-    const where: Prisma.StockWhereInput = {
-      deletedAt: null,
-      medicine: medicineFilter,
-    };
-
-    if (params.lowOnly) {
-      const all = await this.prisma.stock.findMany({
-        where,
-        include: {
-          medicine: {
-            select: {
-              id: true,
-              name: true,
-              company: true,
-              sku: true,
-              sampleAvailable: true,
-              status: true,
-            },
-          },
-        },
-        orderBy: { available: 'asc' },
-      });
-      const filtered = all.filter((row) => row.available <= row.minimumStockAlert);
-      const start = (params.page - 1) * params.limit;
-      return {
-        items: filtered.slice(start, start + params.limit),
-        total: filtered.length,
-      };
-    }
-
-    const [items, total] = await Promise.all([
-      this.prisma.stock.findMany({
-        where,
-        include: {
-          medicine: {
-            select: {
-              id: true,
-              name: true,
-              company: true,
-              sku: true,
-              sampleAvailable: true,
-              status: true,
-            },
-          },
-        },
-        orderBy: { medicine: { name: 'asc' } },
-        skip: (params.page - 1) * params.limit,
-        take: params.limit,
-      }),
-      this.prisma.stock.count({ where }),
-    ]);
-
-    return { items, total };
-  }
-
-  public findByMedicineId(medicineId: number): Promise<StockWithMedicine | null> {
-    return this.prisma.stock.findFirst({
-      where: { medicineId, deletedAt: null },
-      include: {
-        medicine: {
-          select: {
-            id: true,
-            name: true,
-            company: true,
-            sku: true,
-            sampleAvailable: true,
-            status: true,
-          },
-        },
-      },
+  }): Promise<{ items: WarehouseStockRow[]; total: number }> {
+    const warehouseId = await this.getDefaultWarehouseId();
+    return this.stockTxns.listWarehouseBalances({
+      warehouseId,
+      page: params.page,
+      limit: params.limit,
+      search: params.search,
+      lowOnly: params.lowOnly,
     });
   }
 
-  public async adjustAvailable(params: {
-    medicineId: number;
-    quantityDelta: number;
-    remarks?: string;
-    actorId: number;
-  }): Promise<StockWithMedicine> {
-    return this.prisma.$transaction(async (tx) => {
-      const stock = await tx.stock.findFirst({
-        where: { medicineId: params.medicineId, deletedAt: null },
-      });
-      if (!stock) {
-        throw new Error('STOCK_NOT_FOUND');
-      }
-
-      const nextAvailable = stock.available + params.quantityDelta;
-      if (nextAvailable < 0) {
-        throw new Error('INSUFFICIENT_STOCK');
-      }
-
-      const updated = await tx.stock.update({
-        where: { id: stock.id },
-        data: {
-          available: nextAvailable,
-          updatedBy: params.actorId,
-        },
-        include: {
-          medicine: {
-            select: {
-              id: true,
-              name: true,
-              company: true,
-              sku: true,
-              sampleAvailable: true,
-              status: true,
-            },
-          },
-        },
-      });
-
-      await tx.stockMovement.create({
-        data: {
-          medicineId: params.medicineId,
-          type: 'ADJUSTMENT',
-          quantity: Math.abs(params.quantityDelta),
-          remarks:
-            params.remarks ??
-            `Manual stock adjustment (${params.quantityDelta > 0 ? '+' : ''}${params.quantityDelta})`,
-          createdBy: params.actorId,
-          updatedBy: params.actorId,
-        },
-      });
-
-      return updated;
+  public async findByMedicineId(medicineId: number): Promise<WarehouseStockRow | null> {
+    const warehouseId = await this.getDefaultWarehouseId();
+    const { items } = await this.stockTxns.listWarehouseBalances({
+      warehouseId,
+      page: 1,
+      limit: 1000,
     });
+    return items.find((row) => row.medicineId === medicineId) ?? null;
   }
 }

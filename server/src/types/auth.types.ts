@@ -38,6 +38,7 @@ export interface LoginResult {
     fullName: string;
     role: AppRole;
     status: string;
+    permissions: string[];
   };
   tokens: TokenPair;
 }

@@ -12,6 +12,11 @@ import { tokenStorage } from '@/api/client';
 import type { AuthUser, Permission, Role } from '@/types';
 import { hasAnyPermission, hasPermission } from '@/utils/permissions';
 
+function normalizeRole(role: string): Role {
+  if (role === 'MANAGER' || role === 'MR' || role === 'ADMIN') return role;
+  return 'MR';
+}
+
 interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
@@ -41,7 +46,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         const me = await authApi.me();
-        if (!cancelled) setUser(me);
+        if (!cancelled) {
+          setUser({
+            ...me,
+            role: normalizeRole(me.role),
+            permissions: me.permissions,
+          });
+        }
       } catch {
         tokenStorage.clear();
         if (!cancelled) setUser(null);
@@ -59,7 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const session = await authApi.login(email, password);
     tokenStorage.set(session.accessToken);
-    setUser(session.user);
+    const role = normalizeRole(session.user.role);
+    setUser({ ...session.user, role, permissions: session.user.permissions });
   }, []);
 
   const logout = useCallback(async () => {
@@ -73,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => {
     const role = user?.role ?? null;
+    const permissions = user?.permissions;
     return {
       user,
       isAuthenticated: Boolean(user),
@@ -80,8 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       logout,
       role,
-      can: (permission) => (role ? hasPermission(role, permission) : false),
-      canAny: (permissions) => (role ? hasAnyPermission(role, permissions) : false),
+      can: (permission) => hasPermission(role, permission, permissions),
+      canAny: (needed) => hasAnyPermission(role, needed, permissions),
     };
   }, [user, isBootstrapping, login, logout]);
 

@@ -1,6 +1,7 @@
 import { AppRoles } from '../constants';
 import type { ListVisitsQueryDto } from '../dto/visit.dto';
 import { ForbiddenError, NotFoundError } from '../errors/AppError';
+import { UserRepository } from '../repositories/UserRepository';
 import { VisitRepository } from '../repositories/VisitRepository';
 import type { AuthUser } from '../types/auth.types';
 
@@ -14,7 +15,10 @@ function formatTime(value: Date): string {
 export class VisitService {
   private static instance: VisitService | null = null;
 
-  private constructor(private readonly visits = VisitRepository.getInstance()) {}
+  private constructor(
+    private readonly visits = VisitRepository.getInstance(),
+    private readonly users = UserRepository.getInstance(),
+  ) {}
 
   public static getInstance(): VisitService {
     if (!VisitService.instance) {
@@ -24,11 +28,22 @@ export class VisitService {
   }
 
   public async list(query: ListVisitsQueryDto, actor: AuthUser) {
+    let mrId: number | undefined;
+    let mrIds: number[] | undefined;
+
+    if (actor.role === AppRoles.MR) {
+      mrId = actor.id;
+    } else if (actor.role === AppRoles.MANAGER) {
+      const teamIds = await this.users.listReportIds(actor.id);
+      mrIds = [actor.id, ...teamIds];
+    }
+
     const { items, total } = await this.visits.list({
       page: query.page,
       limit: query.limit,
       doctorId: query.doctorId,
-      mrId: actor.role === AppRoles.MR ? actor.id : undefined,
+      mrId,
+      mrIds,
     });
 
     return {
@@ -48,13 +63,19 @@ export class VisitService {
     if (actor.role === AppRoles.MR && visit.mrId !== actor.id) {
       throw new ForbiddenError('You can only delete your own visits');
     }
+    if (actor.role === AppRoles.MANAGER) {
+      const teamIds = await this.users.listReportIds(actor.id);
+      if (![actor.id, ...teamIds].includes(visit.mrId)) {
+        throw new ForbiddenError('You can only delete team visits');
+      }
+    }
     await this.visits.softDelete(id, actor.id);
   }
 
   private toPublic(visit: {
     id: number;
       appointmentId?: number | null;
-    doctorId: number;
+    doctorId: number | null;
     mrId: number;
     visitDate: Date;
     visitTime?: Date | null;
@@ -68,15 +89,15 @@ export class VisitService {
     nextFollowUp: Date | null;
     createdAt: Date;
     updatedAt: Date;
-    doctor?: { id: number; fullName: string };
+    doctor?: { id: number; fullName: string } | null;
     mr?: { id: number; fullName: string; email: string };
     products?: Array<{ notes?: string | null; medicine: { id: number; name: string } }>;
     distributions?: Array<{
       id: number;
-      quantity: number;
-      batchNumber: string | null;
-      remarks: string | null;
+      qty: number;
+      note: string | null;
       medicine: { id: number; name: string };
+      batch: { batchNo: string };
     }>;
   }) {
     return {
@@ -107,9 +128,9 @@ export class VisitService {
           id: row.id,
           medicineId: row.medicine.id,
           medicineName: row.medicine.name,
-          quantity: row.quantity,
-          batchNumber: row.batchNumber,
-          remarks: row.remarks,
+          quantity: row.qty,
+          batchNumber: row.batch.batchNo,
+          remarks: row.note,
         })) ?? [],
       createdAt: visit.createdAt,
       updatedAt: visit.updatedAt,

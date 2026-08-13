@@ -3,10 +3,18 @@ import type { ApiSuccess } from '@/types';
 
 export type AppointmentStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
 
+export interface AppointmentActor {
+  id: number;
+  fullName: string;
+  email: string;
+  role: string;
+}
+
 export interface Appointment {
   id: number;
   doctorId: number;
   mrId: number;
+  assignedById: number | null;
   date: string;
   time: string;
   purpose: string | null;
@@ -14,6 +22,15 @@ export interface Appointment {
   remarks: string | null;
   doctor: { id: number; fullName: string } | null;
   mr: { id: number; fullName: string; email: string } | null;
+  createdBy: AppointmentActor | null;
+  assignedBy: AppointmentActor | null;
+}
+
+export interface AssignableMr {
+  id: number;
+  fullName: string;
+  email: string;
+  role: string;
 }
 
 export interface CreateAppointmentPayload {
@@ -59,12 +76,26 @@ export interface CompleteAppointmentPayload {
 }
 
 export const appointmentsApi = {
-  async list(params?: { limit?: number; status?: AppointmentStatus }): Promise<Appointment[]> {
+  async list(params?: {
+    limit?: number;
+    status?: AppointmentStatus;
+    mrId?: number;
+  }): Promise<Appointment[]> {
     const { data } = await api.get<ApiSuccess<Appointment[]>>('/appointments', {
-      params: { limit: params?.limit ?? 100, status: params?.status },
+      params: {
+        limit: params?.limit ?? 100,
+        status: params?.status,
+        mrId: params?.mrId,
+      },
     });
     return data.data;
   },
+
+  async listAssignableMrs(): Promise<AssignableMr[]> {
+    const { data } = await api.get<ApiSuccess<AssignableMr[]>>('/appointments/assignable-mrs');
+    return data.data;
+  },
+
   async create(payload: CreateAppointmentPayload): Promise<Appointment> {
     const { data } = await api.post<ApiSuccess<Appointment>>('/appointments', payload);
     return data.data;
@@ -73,6 +104,18 @@ export const appointmentsApi = {
     const { data } = await api.patch<ApiSuccess<Appointment>>(`/appointments/${id}`, payload);
     return data.data;
   },
+
+  async reschedule(
+    id: number,
+    payload: { date: string; time: string; remarks?: string },
+  ): Promise<Appointment> {
+    const { data } = await api.post<ApiSuccess<Appointment>>(
+      `/appointments/${id}/reschedule`,
+      payload,
+    );
+    return data.data;
+  },
+
   async updateStatus(
     id: number,
     status: 'PENDING' | 'CANCELLED' | 'RESCHEDULED',

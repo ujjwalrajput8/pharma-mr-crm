@@ -130,14 +130,14 @@ export function VisitsPage() {
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="secondary"
-                      className="!px-2.5 !py-1.5 text-xs"
+                      size="sm"
                       onClick={() => setSelected(visit)}
                     >
                       View
                     </Button>
                     <Button
                       variant="danger"
-                      className="!px-2.5 !py-1.5 text-xs"
+                      size="sm"
                       onClick={() => setDeleteId(visit.id)}
                     >
                       Delete

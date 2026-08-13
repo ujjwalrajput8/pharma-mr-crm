@@ -1,16 +1,31 @@
-import { AppointmentStatuses } from '../constants';
+import { AppointmentStatuses, HolderTypes, StockTxnTypes } from '../constants';
 import { PrismaService } from '../prisma/PrismaService';
+import { SettingRepository } from '../repositories/SettingRepository';
+import { StockTxnRepository } from '../repositories/StockTxnRepository';
+
+const DEFAULT_WAREHOUSE_SETTING = 'stock.default_warehouse_id';
 
 export class ReportRepository {
   private static instance: ReportRepository | null = null;
 
-  private constructor(private readonly prisma = PrismaService.getClient()) {}
+  private constructor(
+    private readonly prisma = PrismaService.getClient(),
+    private readonly stockTxns = StockTxnRepository.getInstance(),
+    private readonly settings = SettingRepository.getInstance(),
+  ) {}
 
   public static getInstance(): ReportRepository {
     if (!ReportRepository.instance) {
       ReportRepository.instance = new ReportRepository();
     }
     return ReportRepository.instance;
+  }
+
+  private async getDefaultWarehouseId(): Promise<number | null> {
+    const setting = await this.settings.findByKey(DEFAULT_WAREHOUSE_SETTING);
+    if (!setting) return null;
+    const warehouseId = Number(setting.value);
+    return Number.isInteger(warehouseId) && warehouseId > 0 ? warehouseId : null;
   }
 
   public async appointmentStats(
@@ -83,29 +98,29 @@ export class ReportRepository {
     filters?: { mrId?: number; doctorId?: number; medicineId?: number },
   ) {
     const where = {
-      deletedAt: null as null,
-      distributedAt: { gte: from, lte: to },
-      ...(filters?.mrId ? { mrId: filters.mrId } : {}),
-      ...(filters?.doctorId ? { doctorId: filters.doctorId } : {}),
+      txnType: StockTxnTypes.SAMPLE_GIVEN,
+      txnDate: { gte: from, lte: to },
+      ...(filters?.mrId
+        ? { fromHolderType: HolderTypes.USER, fromHolderId: filters.mrId }
+        : {}),
+      ...(filters?.doctorId
+        ? { toHolderType: HolderTypes.DOCTOR, toHolderId: filters.doctorId }
+        : {}),
       ...(filters?.medicineId ? { medicineId: filters.medicineId } : {}),
     };
 
-    const [totalRows, aggregate] = await Promise.all([
-      this.prisma.medicineDistribution.count({ where }),
-      this.prisma.medicineDistribution.aggregate({
+    const [totalRows, aggregate, byMedicine] = await Promise.all([
+      this.prisma.stockTxn.count({ where }),
+      this.prisma.stockTxn.aggregate({ where, _sum: { qty: true } }),
+      this.prisma.stockTxn.groupBy({
+        by: ['medicineId'],
         where,
-        _sum: { quantity: true },
+        _sum: { qty: true },
+        _count: { _all: true },
+        orderBy: { _sum: { qty: 'desc' } },
+        take: 20,
       }),
     ]);
-
-    const byMedicine = await this.prisma.medicineDistribution.groupBy({
-      by: ['medicineId'],
-      where,
-      _sum: { quantity: true },
-      _count: { _all: true },
-      orderBy: { _sum: { quantity: 'desc' } },
-      take: 20,
-    });
 
     const medicineIds = byMedicine.map((row) => row.medicineId);
     const medicines = await this.prisma.medicine.findMany({
@@ -116,34 +131,20 @@ export class ReportRepository {
 
     return {
       totalRows,
-      totalQuantity: aggregate._sum.quantity ?? 0,
+      totalQuantity: aggregate._sum.qty ?? 0,
       byMedicine: byMedicine.map((row) => ({
         medicineId: row.medicineId,
         medicineName: medicineMap.get(row.medicineId) ?? 'Unknown',
-        quantity: row._sum.quantity ?? 0,
+        quantity: row._sum.qty ?? 0,
         rows: row._count._all,
       })),
     };
   }
 
   public async stockReport() {
-    const stocks = await this.prisma.stock.findMany({
-      where: { deletedAt: null },
-      include: { medicine: { select: { id: true, name: true, company: true } } },
-      orderBy: { available: 'asc' },
-    });
-
-    return stocks.map((stock) => ({
-      medicineId: stock.medicineId,
-      medicineName: stock.medicine.name,
-      company: stock.medicine.company,
-      openingStock: stock.openingStock,
-      issued: stock.issued,
-      returned: stock.returned,
-      available: stock.available,
-      minimumStockAlert: stock.minimumStockAlert,
-      isLow: stock.available <= stock.minimumStockAlert,
-    }));
+    const warehouseId = await this.getDefaultWarehouseId();
+    if (!warehouseId) return [];
+    return this.stockTxns.warehouseStockReport(warehouseId);
   }
 
   public async mrPerformance(from: Date, to: Date, mrId?: number) {
@@ -179,13 +180,14 @@ export class ReportRepository {
               visitDate: { gte: from, lte: to },
             },
           }),
-          this.prisma.medicineDistribution.aggregate({
+          this.prisma.stockTxn.aggregate({
             where: {
-              deletedAt: null,
-              mrId: mr.id,
-              distributedAt: { gte: from, lte: to },
+              txnType: StockTxnTypes.SAMPLE_GIVEN,
+              fromHolderType: HolderTypes.USER,
+              fromHolderId: mr.id,
+              txnDate: { gte: from, lte: to },
             },
-            _sum: { quantity: true },
+            _sum: { qty: true },
           }),
         ]);
 
@@ -197,7 +199,7 @@ export class ReportRepository {
           assignedArea: mr.mrProfile?.assignedArea ?? null,
           appointments,
           visits,
-          samplesDistributed: samples._sum.quantity ?? 0,
+          samplesDistributed: samples._sum.qty ?? 0,
         };
       }),
     );
@@ -211,6 +213,7 @@ export class ReportRepository {
       where: {
         deletedAt: null,
         visitDate: { gte: from, lte: to },
+        doctorId: { not: null },
         ...(mrId ? { mrId } : {}),
       },
       _count: { doctorId: true },
@@ -218,22 +221,28 @@ export class ReportRepository {
       take: 50,
     });
 
+    const doctorIds = visits
+      .map((v) => v.doctorId)
+      .filter((id): id is number => id != null);
+
     const doctors = await this.prisma.doctor.findMany({
-      where: { id: { in: visits.map((v) => v.doctorId) } },
+      where: { id: { in: doctorIds } },
       select: { id: true, fullName: true, specialization: true, city: true },
     });
     const doctorMap = new Map(doctors.map((d) => [d.id, d]));
 
-    return visits.map((row) => {
-      const doctor = doctorMap.get(row.doctorId);
-      return {
-        doctorId: row.doctorId,
-        doctorName: doctor?.fullName ?? 'Unknown',
-        specialization: doctor?.specialization ?? null,
-        city: doctor?.city ?? null,
-        visitCount: row._count.doctorId,
-      };
-    });
+    return visits
+      .filter((row): row is typeof row & { doctorId: number } => row.doctorId != null)
+      .map((row) => {
+        const doctor = doctorMap.get(row.doctorId);
+        return {
+          doctorId: row.doctorId,
+          doctorName: doctor?.fullName ?? 'Unknown',
+          specialization: doctor?.specialization ?? null,
+          city: doctor?.city ?? null,
+          visitCount: row._count.doctorId,
+        };
+      });
   }
 
   public async mrDetail(from: Date, to: Date, mrId: number) {
@@ -254,7 +263,12 @@ export class ReportRepository {
       performance,
     ] = await Promise.all([
       this.prisma.attendance.count({
-        where: { deletedAt: null, mrId, workDate: { gte: from, lte: to }, checkInAt: { not: null } },
+        where: {
+          deletedAt: null,
+          userId: mrId,
+          attDate: { gte: from, lte: to },
+          checkInAt: { not: null },
+        },
       }),
       this.prisma.visit.groupBy({
         by: ['visitDate'],
@@ -290,12 +304,22 @@ export class ReportRepository {
           status: AppointmentStatuses.CANCELLED,
         },
       }),
-      this.prisma.medicineDistribution.count({
-        where: { deletedAt: null, mrId, distributedAt: { gte: from, lte: to } },
+      this.prisma.stockTxn.count({
+        where: {
+          txnType: StockTxnTypes.SAMPLE_GIVEN,
+          fromHolderType: HolderTypes.USER,
+          fromHolderId: mrId,
+          txnDate: { gte: from, lte: to },
+        },
       }),
-      this.prisma.medicineDistribution.aggregate({
-        where: { deletedAt: null, mrId, distributedAt: { gte: from, lte: to } },
-        _sum: { quantity: true },
+      this.prisma.stockTxn.aggregate({
+        where: {
+          txnType: StockTxnTypes.SAMPLE_GIVEN,
+          fromHolderType: HolderTypes.USER,
+          fromHolderId: mrId,
+          txnDate: { gte: from, lte: to },
+        },
+        _sum: { qty: true },
       }),
       this.prisma.sale.aggregate({
         where: { deletedAt: null, mrId, invoiceDate: { gte: from, lte: to } },
@@ -334,7 +358,7 @@ export class ReportRepository {
         pendingVisits: pendingAppointments,
         cancelledVisits: cancelledAppointments,
         medicineDistributionCount: distributionCount,
-        totalSamplesGiven: samplesAgg._sum.quantity ?? 0,
+        totalSamplesGiven: samplesAgg._sum.qty ?? 0,
         monthlySales: Number(salesMonth._sum.amount ?? 0),
         yearlySales: Number(salesYear._sum.amount ?? 0),
         sales: Number(salesMonth._sum.amount ?? 0),

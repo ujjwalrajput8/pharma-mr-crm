@@ -25,7 +25,7 @@ export function LoginPage() {
 
     try {
       await login(email.trim(), password);
-      toast.success('Login successful', 'Welcome back to Pharma MR CRM.');
+      toast.success('Login successful', 'Welcome back to Field Force Panel.');
       navigate('/dashboard', { replace: true });
     } catch (err) {
       const message = getApiErrorMessage(err, 'Login failed');
@@ -104,7 +104,7 @@ export function LoginPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-6 w-full rounded-md bg-[#0f766e] px-4 py-2.5 font-medium text-white hover:bg-[#0d9488] disabled:opacity-60"
+          className="mt-6 h-11 w-full touch-manipulation rounded-[6px] bg-[#0d5c56] px-4 text-sm font-semibold text-white hover:bg-[#0a4a45] disabled:opacity-60"
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>

@@ -1,16 +1,21 @@
 import type { CreateMedicineIssueDto, ListMedicineIssuesQueryDto } from '../dto/medicine-issue.dto';
 import { BadRequestError, NotFoundError } from '../errors/AppError';
 import { MedicineIssueRepository } from '../repositories/MedicineIssueRepository';
-import { AppRoles } from '../constants';
+import { StockTxnRepository } from '../repositories/StockTxnRepository';
+import { AppRoles, HolderTypes } from '../constants';
+import { StockLedgerService } from './StockLedgerService';
 import type { AuthUser } from '../types/auth.types';
 
 /**
- * MedicineIssueService — Admin issues company samples to MR bag stock.
- * Decrements company Stock.available / increments issued; upserts MrStock.
+ * MedicineIssueService — issues warehouse stock to MR via append-only ISSUE txns.
  */
 export class MedicineIssueService {
   private static instance: MedicineIssueService | null = null;
-  private constructor(private readonly issues = MedicineIssueRepository.getInstance()) {}
+  private constructor(
+    private readonly issues = MedicineIssueRepository.getInstance(),
+    private readonly stockTxns = StockTxnRepository.getInstance(),
+    private readonly ledger = StockLedgerService.getInstance(),
+  ) {}
   public static getInstance(): MedicineIssueService {
     if (!MedicineIssueService.instance) MedicineIssueService.instance = new MedicineIssueService();
     return MedicineIssueService.instance;
@@ -38,88 +43,48 @@ export class MedicineIssueService {
     const prisma = this.issues.getPrisma();
     const medicine = await prisma.medicine.findFirst({
       where: { id: dto.medicineId, deletedAt: null },
-      include: { stock: true },
     });
     if (!medicine) throw new NotFoundError('Medicine not found');
-    if (!medicine.stock || medicine.stock.deletedAt) {
-      throw new BadRequestError('Company stock record missing for this medicine');
-    }
-    if (medicine.stock.available < dto.quantity) {
-      throw new BadRequestError(
-        `Insufficient company stock. Available: ${medicine.stock.available}`,
-      );
-    }
 
     const mr = await prisma.user.findFirst({
       where: { id: dto.mrId, role: AppRoles.MR, deletedAt: null },
     });
     if (!mr) throw new NotFoundError('MR not found');
 
+    const warehouseId = await this.ledger.getDefaultWarehouseId();
+    const batch = await this.stockTxns.resolveBatchForIssue({
+      medicineId: dto.medicineId,
+      batchNumber: dto.batchNumber,
+      warehouseId,
+      requiredQty: dto.quantity,
+    });
+    if (!batch) {
+      throw new BadRequestError('Insufficient warehouse stock for the requested batch');
+    }
+
     const issueDate = new Date(`${dto.issueDate}T00:00:00.000Z`);
 
-    const created = await prisma.$transaction(async (tx) => {
-      const issue = await tx.medicineIssue.create({
-        data: {
-          mrId: dto.mrId,
-          medicineId: dto.medicineId,
-          quantity: dto.quantity,
-          batchNumber: dto.batchNumber ?? medicine.batchNumber,
-          issueDate,
-          remarks: dto.remarks,
-          createdBy: actor.id,
-          updatedBy: actor.id,
-        },
-        include: {
-          medicine: { select: { id: true, name: true, batchNumber: true } },
-          mr: { select: { id: true, fullName: true, email: true } },
-        },
-      });
-
-      await tx.stock.update({
-        where: { medicineId: dto.medicineId },
-        data: {
-          issued: { increment: dto.quantity },
-          available: { decrement: dto.quantity },
-          updatedBy: actor.id,
-        },
-      });
-
-      await tx.mrStock.upsert({
-        where: {
-          mrId_medicineId: { mrId: dto.mrId, medicineId: dto.medicineId },
-        },
-        create: {
-          mrId: dto.mrId,
-          medicineId: dto.medicineId,
-          quantity: dto.quantity,
-          batchNumber: dto.batchNumber ?? medicine.batchNumber,
-          createdBy: actor.id,
-          updatedBy: actor.id,
-        },
-        update: {
-          quantity: { increment: dto.quantity },
-          batchNumber: dto.batchNumber ?? medicine.batchNumber,
-          updatedBy: actor.id,
-          deletedAt: null,
-        },
-      });
-
-      await tx.stockMovement.create({
-        data: {
-          medicineId: dto.medicineId,
-          mrId: dto.mrId,
-          type: 'ISSUE',
-          quantity: dto.quantity,
-          remarks: dto.remarks ?? `Issued to MR ${mr.fullName}`,
-          createdBy: actor.id,
-          updatedBy: actor.id,
-        },
-      });
-
-      return issue;
+    const created = await this.ledger.issueToMr({
+      fromHolderType: HolderTypes.WAREHOUSE,
+      fromHolderId: warehouseId,
+      mrId: dto.mrId,
+      medicineId: dto.medicineId,
+      batchId: batch.id,
+      qty: dto.quantity,
+      txnDate: issueDate,
+      note: dto.remarks ?? `Issued to MR ${mr.fullName}`,
+      createdBy: actor.id,
     });
 
-    return this.toPublic(created);
+    return this.toPublic({
+      id: created.id,
+      quantity: created.qty,
+      batchNumber: batch.batchNo,
+      issueDate: created.txnDate,
+      remarks: created.note,
+      medicine: { id: medicine.id, name: medicine.name },
+      mr: { id: mr.id, fullName: mr.fullName, email: mr.email },
+    });
   }
 
   private toPublic(item: {
@@ -128,8 +93,8 @@ export class MedicineIssueService {
     batchNumber: string | null;
     issueDate: Date;
     remarks: string | null;
-    medicine: { id: number; name: string; batchNumber: string | null };
-    mr: { id: number; fullName: string; email: string };
+    medicine: { id: number; name: string };
+    mr: { id: number; fullName: string; email: string } | null;
   }) {
     return {
       id: item.id,
@@ -137,7 +102,7 @@ export class MedicineIssueService {
       batchNumber: item.batchNumber,
       issueDate: item.issueDate.toISOString().slice(0, 10),
       remarks: item.remarks,
-      medicine: item.medicine,
+      medicine: { ...item.medicine, batchNumber: item.batchNumber },
       mr: item.mr,
     };
   }

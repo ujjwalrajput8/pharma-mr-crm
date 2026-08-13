@@ -130,4 +130,21 @@ export class UserRepository {
       where: { role: role as Prisma.EnumRoleFilter['equals'], deletedAt: null },
     });
   }
+
+  /** Direct reports (typically MRs under a Manager). */
+  public async listReportIds(managerId: number): Promise<number[]> {
+    const rows = await this.prisma.user.findMany({
+      where: { managerId, deletedAt: null, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
+  public findManyByIds(ids: number[]) {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.user.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true, fullName: true, email: true, role: true },
+    });
+  }
 }

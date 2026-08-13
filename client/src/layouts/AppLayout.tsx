@@ -5,8 +5,8 @@ import { Sidebar } from '@/layouts/Sidebar';
 import { cn } from '@/utils/cn';
 
 /**
- * Shared application shell for Admin and MR.
- * Sidebar + header stay fixed; only the main content scrolls.
+ * Shared application shell for Admin, Manager, and MR.
+ * One login / one layout — menus filtered by RBAC.
  */
 export function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -15,7 +15,7 @@ export function AppLayout() {
     <div className="flex h-svh overflow-hidden bg-[var(--color-bg)]">
       <div
         className={cn(
-          'fixed inset-y-0 left-0 z-40 w-72 transition-transform',
+          'fixed inset-y-0 left-0 z-40 w-[16.5rem] transition-transform',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           'lg:translate-x-0',
         )}
@@ -32,9 +32,9 @@ export function AppLayout() {
         />
       ) : null}
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pl-72">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pl-[16.5rem]">
         <Header onToggleSidebar={() => setMobileOpen((open) => !open)} />
-        <main className="scrollbar-hide min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="scrollbar-hide min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
           <Outlet />
         </main>
       </div>

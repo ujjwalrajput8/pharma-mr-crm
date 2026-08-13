@@ -204,7 +204,7 @@ export class ReportService {
       rows: visits.recent.map((visit) => ({
         id: visit.id,
         visitDate: visit.visitDate.toISOString().slice(0, 10),
-        doctorName: visit.doctor.fullName,
+        doctorName: visit.doctor?.fullName ?? '—',
         mrName: visit.mr.fullName,
       })),
     };

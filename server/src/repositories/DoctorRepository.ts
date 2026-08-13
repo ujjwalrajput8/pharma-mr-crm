@@ -1,5 +1,6 @@
 import type { Doctor, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/PrismaService';
+import { StockTxnRepository } from './StockTxnRepository';
 
 export interface DoctorListParams {
   page: number;
@@ -14,7 +15,10 @@ export interface DoctorListParams {
 export class DoctorRepository {
   private static instance: DoctorRepository | null = null;
 
-  private constructor(private readonly prisma = PrismaService.getClient()) {}
+  private constructor(
+    private readonly prisma = PrismaService.getClient(),
+    private readonly stockTxns = StockTxnRepository.getInstance(),
+  ) {}
 
   public static getInstance(): DoctorRepository {
     if (!DoctorRepository.instance) {
@@ -138,12 +142,7 @@ export class DoctorRepository {
 
   /** Aggregated doctor workspace data for detail tabs. */
   public async getDetailBundle(doctorId: number) {
-    const [
-      appointments,
-      visits,
-      distributions,
-      visitProductGroups,
-    ] = await Promise.all([
+    const [appointments, visits, sampleTxns, visitProductGroups] = await Promise.all([
       this.prisma.appointment.findMany({
         where: { doctorId, deletedAt: null },
         orderBy: [{ date: 'desc' }, { time: 'desc' }],
@@ -161,21 +160,9 @@ export class DoctorRepository {
             where: { deletedAt: null },
             include: { medicine: { select: { id: true, name: true, company: true } } },
           },
-          distributions: {
-            where: { deletedAt: null },
-            include: { medicine: { select: { id: true, name: true } } },
-          },
         },
       }),
-      this.prisma.medicineDistribution.findMany({
-        where: { doctorId, deletedAt: null },
-        orderBy: { distributedAt: 'desc' },
-        include: {
-          medicine: { select: { id: true, name: true, company: true } },
-          mr: { select: { id: true, fullName: true } },
-          visit: { select: { id: true, visitDate: true } },
-        },
-      }),
+      this.stockTxns.findSamplesForDoctor(doctorId),
       this.prisma.visitProduct.groupBy({
         by: ['medicineId'],
         where: {
@@ -185,6 +172,63 @@ export class DoctorRepository {
         _count: { medicineId: true },
       }),
     ]);
+
+    const visitIds = sampleTxns
+      .map((row) => row.refId)
+      .filter((id): id is number => id != null);
+    const mrIds = sampleTxns
+      .map((row) => row.fromHolderId)
+      .filter((id): id is number => id != null);
+
+    const [visitsById, mrs] = await Promise.all([
+      visitIds.length
+        ? this.prisma.visit.findMany({
+            where: { id: { in: visitIds } },
+            select: { id: true, visitDate: true },
+          })
+        : Promise.resolve([]),
+      mrIds.length
+        ? this.prisma.user.findMany({
+            where: { id: { in: mrIds } },
+            select: { id: true, fullName: true },
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const visitMap = new Map(visitsById.map((v) => [v.id, v]));
+    const mrMap = new Map(mrs.map((m) => [m.id, m]));
+
+    const distributions = sampleTxns.map((row) => ({
+      id: row.id,
+      medicineId: row.medicineId,
+      medicine: row.medicine,
+      quantity: row.qty,
+      batchNumber: row.batch.batchNo,
+      remarks: row.note,
+      distributedAt: row.createdAt,
+      visitId: row.refId,
+      visit: row.refId ? (visitMap.get(row.refId) ?? null) : null,
+      mr: row.fromHolderId ? (mrMap.get(row.fromHolderId) ?? null) : null,
+    }));
+
+    const visitSamples = await this.stockTxns.findSamplesByVisitIds(visits.map((v) => v.id));
+    const samplesByVisit = new Map<number, typeof visitSamples>();
+    for (const sample of visitSamples) {
+      if (sample.refId == null) continue;
+      const list = samplesByVisit.get(sample.refId) ?? [];
+      list.push(sample);
+      samplesByVisit.set(sample.refId, list);
+    }
+
+    const visitsWithSamples = visits.map((visit) => ({
+      ...visit,
+      distributions: (samplesByVisit.get(visit.id) ?? []).map((row) => ({
+        id: row.id,
+        medicine: row.medicine,
+        quantity: row.qty,
+        batchNumber: row.batch.batchNo,
+      })),
+    }));
 
     const medicineIds = visitProductGroups.map((row) => row.medicineId);
     const medicines =
@@ -204,6 +248,6 @@ export class DoctorRepository {
       timesDiscussed: row._count.medicineId,
     }));
 
-    return { appointments, visits, distributions, medicinesDiscussed };
+    return { appointments, visits: visitsWithSamples, distributions, medicinesDiscussed };
   }
 }

@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'MR';
+export type Role = 'ADMIN' | 'MANAGER' | 'MR';
 
 export type UserStatus = 'ACTIVE' | 'INACTIVE';
 
@@ -8,6 +8,8 @@ export interface AuthUser {
   fullName: string;
   role: Role;
   status: UserStatus | string;
+  /** Effective permissions from API (role defaults or Admin overrides). */
+  permissions?: Permission[];
 }
 
 export interface ApiSuccess<T> {
@@ -32,20 +34,27 @@ export interface AuthSessionPayload {
 
 export type Permission =
   | 'dashboard:view'
+  | 'myday:own'
+  | 'approvals:team'
   | 'users:manage'
   | 'doctors:manage'
   | 'doctors:own'
   | 'stores:manage'
   | 'medicines:manage'
+  | 'batches:manage'
   | 'appointments:manage'
   | 'appointments:own'
   | 'visits:manage'
   | 'visits:own'
+  | 'tour-plan:manage'
+  | 'tour-plan:own'
   | 'distributions:manage'
   | 'distributions:own'
   | 'medicine-issues:manage'
   | 'medicine-issues:own'
   | 'stock:manage'
+  | 'ledger:view'
+  | 'mystock:own'
   | 'reports:all'
   | 'reports:own'
   | 'sales:manage'

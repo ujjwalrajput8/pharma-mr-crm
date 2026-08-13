@@ -10,7 +10,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 const router = Router();
 const controller = VisitController.getInstance();
 
-router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MR));
+router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR));
 
 router.get('/', validateRequest(listVisitsQuerySchema, 'query'), asyncHandler(controller.list));
 router.delete('/:id', asyncHandler(controller.remove));

@@ -5,6 +5,7 @@ import type {
   CompleteAppointmentDto,
   CreateAppointmentDto,
   ListAppointmentsQueryDto,
+  RescheduleAppointmentDto,
   UpdateAppointmentDto,
 } from '../dto/appointment.dto';
 import { UnauthorizedError } from '../errors/AppError';
@@ -21,6 +22,12 @@ export class AppointmentController {
     }
     return AppointmentController.instance;
   }
+
+  public listAssignableMrs = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const items = await this.appointments.listAssignableMrs(actor);
+    ApiResponse.success(res, items, 'Assignable MRs retrieved');
+  };
 
   public list = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
@@ -43,6 +50,16 @@ export class AppointmentController {
       actor,
     );
     ApiResponse.success(res, appointment, 'Appointment updated');
+  };
+
+  public reschedule = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const appointment = await this.appointments.reschedule(
+      Number(req.params.id),
+      req.body as RescheduleAppointmentDto,
+      actor,
+    );
+    ApiResponse.success(res, appointment, 'Appointment rescheduled');
   };
 
   public complete = async (req: Request, res: Response): Promise<void> => {

@@ -134,7 +134,7 @@ export class DoctorService {
       remarks: item.remarks,
       distributedAt: item.distributedAt.toISOString(),
       visitId: item.visitId,
-      visitDate: item.visit.visitDate.toISOString().slice(0, 10),
+      visitDate: item.visit?.visitDate.toISOString().slice(0, 10) ?? null,
       mr: item.mr,
     }));
 
@@ -182,7 +182,7 @@ export class DoctorService {
         at: item.distributedAt,
         title: `Sample · ${item.medicineName}`,
         summary: `Qty ${item.quantity}${item.batchNumber ? ` · Batch ${item.batchNumber}` : ''}`,
-        meta: { distributionId: item.id, mrName: item.mr.fullName, quantity: item.quantity },
+        meta: { distributionId: item.id, mrName: item.mr?.fullName ?? 'Unknown', quantity: item.quantity },
       })),
     ].sort((a, b) => (a.at < b.at ? 1 : -1));
 
@@ -275,7 +275,7 @@ export class DoctorService {
       throw new NotFoundError('Doctor not found');
     }
 
-    if (actor.role === AppRoles.ADMIN) {
+    if (actor.role === AppRoles.ADMIN || actor.role === AppRoles.MANAGER) {
       return doctor;
     }
 

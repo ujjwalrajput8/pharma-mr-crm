@@ -168,14 +168,14 @@ export function DoctorsPage() {
               <Td>
                 <div className="flex flex-wrap gap-2">
                   <Link to={`/doctors/${doctor.id}`}>
-                    <Button variant="secondary" className="!px-2.5 !py-1.5 text-xs">
+                    <Button variant="secondary" size="sm">
                       Open
                     </Button>
                   </Link>
                   {isAdmin ? (
                     <Button
                       variant="danger"
-                      className="!px-2.5 !py-1.5 text-xs"
+                      size="sm"
                       onClick={() => setDeleteTarget({ id: doctor.id, name: doctor.fullName })}
                     >
                       Delete

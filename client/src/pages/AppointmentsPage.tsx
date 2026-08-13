@@ -4,6 +4,10 @@ import { useMemo, useState } from 'react';
 import { getApiErrorMessage } from '@/api/client';
 import { AppointmentDetailsDialog } from '@/components/appointments/AppointmentDetailsDialog';
 import { AppointmentFormDialog } from '@/components/appointments/AppointmentFormDialog';
+import {
+  AppointmentRescheduleDialog,
+  type ReschedulePayload,
+} from '@/components/appointments/AppointmentRescheduleDialog';
 import { VisitCompleteDialog } from '@/components/appointments/VisitCompleteDialog';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -22,7 +26,6 @@ import {
 } from '@/services/appointments.service';
 import { doctorsApi } from '@/services/doctors.service';
 import { medicinesApi } from '@/services/medicines.service';
-import { usersApi } from '@/services/users.service';
 import { formatDisplayDate, formatTime12 } from '@/utils/datetime';
 
 const statusTone: Record<AppointmentStatus, 'primary' | 'success' | 'danger' | 'warning'> = {
@@ -33,8 +36,9 @@ const statusTone: Record<AppointmentStatus, 'primary' | 'success' | 'danger' | '
 };
 
 export function AppointmentsPage() {
-  const { can, user } = useAuth();
-  const isAdmin = can('appointments:manage');
+  const { can, user, role } = useAuth();
+  const canManage = can('appointments:manage');
+  const canAssignMr = role === 'ADMIN' || role === 'MANAGER';
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -42,6 +46,7 @@ export function AppointmentsPage() {
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | ''>('');
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [completeFor, setCompleteFor] = useState<Appointment | null>(null);
+  const [rescheduleFor, setRescheduleFor] = useState<Appointment | null>(null);
   const [cancelId, setCancelId] = useState<number | null>(null);
 
   const appointmentsQuery = useQuery({
@@ -58,9 +63,9 @@ export function AppointmentsPage() {
     enabled: open,
   });
   const mrsQuery = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.list(),
-    enabled: open && isAdmin,
+    queryKey: ['appointments', 'assignable-mrs'],
+    queryFn: () => appointmentsApi.listAssignableMrs(),
+    enabled: open && canAssignMr,
   });
   const medicinesQuery = useQuery({
     queryKey: ['medicines'],
@@ -78,6 +83,8 @@ export function AppointmentsPage() {
         item.mr?.fullName,
         item.purpose,
         item.status,
+        item.createdBy?.fullName,
+        item.assignedBy?.fullName,
       ]
         .filter(Boolean)
         .join(' '),
@@ -88,6 +95,8 @@ export function AppointmentsPage() {
       if (key === 'mr') return row.mr?.fullName;
       if (key === 'purpose') return row.purpose;
       if (key === 'status') return row.status;
+      if (key === 'createdBy') return row.createdBy?.fullName;
+      if (key === 'assignedBy') return row.assignedBy?.fullName;
       return undefined;
     },
     initialSortKey: 'date',
@@ -117,6 +126,19 @@ export function AppointmentsPage() {
     onError: (err) => toast.error('Cancel failed', getApiErrorMessage(err)),
   });
 
+  const rescheduleMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: ReschedulePayload }) =>
+      appointmentsApi.reschedule(id, payload),
+    onSuccess: async () => {
+      setRescheduleFor(null);
+      setSelected(null);
+      toast.success('Appointment rescheduled');
+      await queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err) => toast.error('Reschedule failed', getApiErrorMessage(err)),
+  });
+
   const completeMutation = useMutation({
     mutationFn: ({ id, payload }: { id: number; payload: CompleteAppointmentPayload }) =>
       appointmentsApi.complete(id, payload),
@@ -133,10 +155,34 @@ export function AppointmentsPage() {
     onError: (err) => toast.error('Complete failed', getApiErrorMessage(err)),
   });
 
-  const title = useMemo(
-    () => (isAdmin ? 'Appointment Management' : 'My Appointments'),
-    [isAdmin],
-  );
+  const title = useMemo(() => {
+    if (role === 'ADMIN') return 'Appointment Management';
+    if (role === 'MANAGER') return 'Team Appointments';
+    return 'My Appointments';
+  }, [role]);
+
+  const columns = useMemo(() => {
+    const base = [
+      { key: 'date', label: 'Date', sortable: true },
+      { key: 'time', label: 'Time', sortable: true },
+      { key: 'doctor', label: 'Doctor', sortable: true },
+    ];
+    if (canManage) {
+      base.push({ key: 'mr', label: 'MR', sortable: true });
+    }
+    base.push(
+      { key: 'purpose', label: 'Purpose', sortable: true },
+      { key: 'status', label: 'Status', sortable: true },
+    );
+    if (canManage) {
+      base.push(
+        { key: 'createdBy', label: 'Created by', sortable: true },
+        { key: 'assignedBy', label: 'Assigned by', sortable: true },
+      );
+    }
+    base.push({ key: 'actions', label: 'Actions' });
+    return base;
+  }, [canManage]);
 
   function onCreate(payload: CreateAppointmentPayload) {
     createMutation.mutate(payload);
@@ -146,7 +192,11 @@ export function AppointmentsPage() {
     <div className="space-y-5">
       <PageHeader
         title={title}
-        description="Appointments schedule meetings only. Completing one opens the structured Visit form."
+        description={
+          canAssignMr
+            ? 'Create for yourself or assign to an MR. Created by / Assigned by is visible here.'
+            : 'Your appointments only. Completing one opens the Visit form.'
+        }
         actions={
           <Button onClick={() => setOpen(true)}>
             <Plus size={16} />
@@ -178,15 +228,7 @@ export function AppointmentsPage() {
           placeholder="Search appointments…"
         />
         <DataTable
-          columns={[
-            { key: 'date', label: 'Date', sortable: true },
-            { key: 'time', label: 'Time', sortable: true },
-            { key: 'doctor', label: 'Doctor', sortable: true },
-            { key: 'mr', label: 'MR', sortable: true },
-            { key: 'purpose', label: 'Purpose', sortable: true },
-            { key: 'status', label: 'Status', sortable: true },
-            { key: 'actions', label: 'Actions' },
-          ]}
+          columns={columns}
           sortKey={table.sortKey}
           sortDir={table.sortDir}
           onSort={table.toggleSort}
@@ -212,16 +254,34 @@ export function AppointmentsPage() {
                   <Td className="font-medium">{formatDisplayDate(item.date)}</Td>
                   <Td>{formatTime12(item.time)}</Td>
                   <Td>{item.doctor?.fullName ?? '—'}</Td>
-                  <Td>{item.mr?.fullName ?? '—'}</Td>
+                  {canManage ? <Td>{item.mr?.fullName ?? '—'}</Td> : null}
                   <Td>{item.purpose ?? '—'}</Td>
                   <Td>
                     <Badge tone={statusTone[item.status]}>{item.status}</Badge>
                   </Td>
+                  {canManage ? (
+                    <>
+                      <Td>
+                        <div className="text-sm">{item.createdBy?.fullName ?? '—'}</div>
+                        <div className="text-xs text-[var(--color-muted)]">
+                          {item.createdBy?.role ?? ''}
+                        </div>
+                      </Td>
+                      <Td>
+                        <div className="text-sm">
+                          {item.assignedBy?.fullName ?? 'Self-booked'}
+                        </div>
+                        <div className="text-xs text-[var(--color-muted)]">
+                          {item.assignedBy?.role ?? ''}
+                        </div>
+                      </Td>
+                    </>
+                  ) : null}
                   <Td>
                     <div className="flex flex-wrap gap-2">
                       <Button
                         variant="secondary"
-                        className="!px-2.5 !py-1.5 text-xs"
+                        size="sm"
                         onClick={() => setSelected(item)}
                       >
                         View
@@ -229,15 +289,22 @@ export function AppointmentsPage() {
                       {item.status === 'PENDING' || item.status === 'RESCHEDULED' ? (
                         <>
                           <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setRescheduleFor(item)}
+                          >
+                            Reschedule
+                          </Button>
+                          <Button
                             variant="primary"
-                            className="!px-2.5 !py-1.5 text-xs"
+                            size="sm"
                             onClick={() => setCompleteFor(item)}
                           >
                             Complete + Visit
                           </Button>
                           <Button
                             variant="ghost"
-                            className="!px-2.5 !py-1.5 text-xs"
+                            size="sm"
                             onClick={() => setCancelId(item.id)}
                           >
                             Cancel
@@ -266,7 +333,7 @@ export function AppointmentsPage() {
       <AppointmentFormDialog
         open={open}
         onClose={() => setOpen(false)}
-        isAdmin={isAdmin}
+        canAssignMr={canAssignMr}
         currentUserId={user?.id}
         doctors={doctorsQuery.data ?? []}
         mrs={mrsQuery.data ?? []}
@@ -279,7 +346,22 @@ export function AppointmentsPage() {
         appointment={selected}
         onClose={() => setSelected(null)}
         onCancel={() => selected && setCancelId(selected.id)}
+        onReschedule={() => {
+          if (!selected) return;
+          setRescheduleFor(selected);
+          setSelected(null);
+        }}
         onComplete={() => selected && setCompleteFor(selected)}
+      />
+
+      <AppointmentRescheduleDialog
+        open={Boolean(rescheduleFor)}
+        appointment={rescheduleFor}
+        submitting={rescheduleMutation.isPending}
+        onClose={() => setRescheduleFor(null)}
+        onSubmit={(payload) =>
+          rescheduleFor && rescheduleMutation.mutate({ id: rescheduleFor.id, payload })
+        }
       />
 
       <VisitCompleteDialog

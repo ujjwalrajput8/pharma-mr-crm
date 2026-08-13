@@ -10,6 +10,10 @@ import {
 } from 'lucide-react';
 import { AppointmentDetailsDialog } from '@/components/appointments/AppointmentDetailsDialog';
 import { AppointmentFormDialog } from '@/components/appointments/AppointmentFormDialog';
+import {
+  AppointmentRescheduleDialog,
+  type ReschedulePayload,
+} from '@/components/appointments/AppointmentRescheduleDialog';
 import { VisitCompleteDialog } from '@/components/appointments/VisitCompleteDialog';
 import { VisitDetailsDialog } from '@/components/appointments/VisitDetailsDialog';
 import {
@@ -27,7 +31,6 @@ import { appointmentsApi, type Appointment, type CompleteAppointmentPayload } fr
 import { dashboardApi } from '@/services/dashboard.service';
 import { doctorsApi } from '@/services/doctors.service';
 import { medicinesApi } from '@/services/medicines.service';
-import { usersApi } from '@/services/users.service';
 import { visitsApi, type Visit } from '@/services/visits.service';
 
 const adminCards: Array<{ key: string; label: string; to: string; icon: typeof Users }> = [
@@ -57,8 +60,9 @@ const mrCards: Array<{ key: string; label: string; to: string; icon: typeof User
 ];
 
 export function DashboardPage() {
-  const { user, can } = useAuth();
-  const isAdmin = can('appointments:manage');
+  const { user, can, canAny, role } = useAuth();
+  const canManage = can('appointments:manage');
+  const canAssignMr = role === 'ADMIN' || role === 'MANAGER';
   const toast = useToast();
   const queryClient = useQueryClient();
 
@@ -67,6 +71,7 @@ export function DashboardPage() {
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [completeFor, setCompleteFor] = useState<Appointment | null>(null);
+  const [rescheduleFor, setRescheduleFor] = useState<Appointment | null>(null);
 
   const summaryQuery = useQuery({
     queryKey: ['dashboard', 'summary'],
@@ -86,9 +91,9 @@ export function DashboardPage() {
     enabled: createOpen,
   });
   const mrsQuery = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.list(),
-    enabled: createOpen && isAdmin,
+    queryKey: ['appointments', 'assignable-mrs'],
+    queryFn: () => appointmentsApi.listAssignableMrs(),
+    enabled: createOpen && canAssignMr,
   });
   const medicinesQuery = useQuery({
     queryKey: ['medicines'],
@@ -109,13 +114,26 @@ export function DashboardPage() {
 
   const moveMutation = useMutation({
     mutationFn: ({ id, date, time }: { id: number; date: string; time: string }) =>
-      appointmentsApi.update(id, { date, time }),
+      appointmentsApi.reschedule(id, { date, time }),
     onSuccess: async () => {
       toast.success('Appointment rescheduled');
       await queryClient.invalidateQueries({ queryKey: ['appointments'] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (err) => toast.error('Move failed', getApiErrorMessage(err)),
+  });
+
+  const rescheduleMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: ReschedulePayload }) =>
+      appointmentsApi.reschedule(id, payload),
+    onSuccess: async () => {
+      setRescheduleFor(null);
+      setSelectedAppointment(null);
+      toast.success('Appointment rescheduled');
+      await queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err) => toast.error('Reschedule failed', getApiErrorMessage(err)),
   });
 
   const cancelMutation = useMutation({
@@ -145,7 +163,7 @@ export function DashboardPage() {
     onError: (err) => toast.error('Visit save failed', getApiErrorMessage(err)),
   });
 
-  const cards = user?.role === 'ADMIN' ? adminCards : mrCards;
+  const cards = user?.role === 'ADMIN' || user?.role === 'MANAGER' ? adminCards : mrCards;
   const values = summaryQuery.data?.cards ?? {};
 
   const appointmentMap = useMemo(() => {
@@ -172,10 +190,57 @@ export function DashboardPage() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description={`Welcome back, ${user?.fullName}. Live ${
-          user?.role === 'ADMIN' ? 'organization' : 'field'
+        description={`Welcome back, ${user?.fullName}. ${
+          user?.role === 'ADMIN'
+            ? 'Organization'
+            : user?.role === 'MANAGER'
+              ? 'Team'
+              : 'Field'
         } overview with schedule calendar.`}
       />
+
+      <Card className="flex flex-wrap gap-1.5 p-3">
+        {can('myday:own') ? (
+          <Link
+            to="/my-day"
+            className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]"
+          >
+            My Day
+          </Link>
+        ) : null}
+        {can('approvals:team') ? (
+          <Link
+            to="/approvals"
+            className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]"
+          >
+            Approvals
+          </Link>
+        ) : null}
+        {canAny(['tour-plan:own', 'tour-plan:manage']) ? (
+          <Link
+            to="/tour-plan"
+            className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]"
+          >
+            Tour Plan
+          </Link>
+        ) : null}
+        {can('mystock:own') ? (
+          <Link
+            to="/my-stock"
+            className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]"
+          >
+            My Stock
+          </Link>
+        ) : null}
+        {can('ledger:view') ? (
+          <Link
+            to="/ledger"
+            className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]"
+          >
+            Ledger
+          </Link>
+        ) : null}
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summaryQuery.isLoading
@@ -289,6 +354,7 @@ export function DashboardPage() {
           <DashboardCalendar
             appointments={appointmentsQuery.data ?? []}
             visits={visitsQuery.data ?? []}
+            showMrName={canManage}
             onSelectSlot={(selection) => {
               setSlot(selection);
               setCreateOpen(true);
@@ -302,7 +368,7 @@ export function DashboardPage() {
       <AppointmentFormDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        isAdmin={isAdmin}
+        canAssignMr={canAssignMr}
         currentUserId={user?.id}
         doctors={doctorsQuery.data ?? []}
         mrs={mrsQuery.data ?? []}
@@ -317,10 +383,25 @@ export function DashboardPage() {
         appointment={selectedAppointment}
         onClose={() => setSelectedAppointment(null)}
         onCancel={() => selectedAppointment && cancelMutation.mutate(selectedAppointment.id)}
+        onReschedule={() => {
+          if (!selectedAppointment) return;
+          setRescheduleFor(selectedAppointment);
+          setSelectedAppointment(null);
+        }}
         onComplete={() => {
           if (!selectedAppointment) return;
           setCompleteFor(selectedAppointment);
         }}
+      />
+
+      <AppointmentRescheduleDialog
+        open={Boolean(rescheduleFor)}
+        appointment={rescheduleFor}
+        submitting={rescheduleMutation.isPending}
+        onClose={() => setRescheduleFor(null)}
+        onSubmit={(payload) =>
+          rescheduleFor && rescheduleMutation.mutate({ id: rescheduleFor.id, payload })
+        }
       />
 
       <VisitDetailsDialog

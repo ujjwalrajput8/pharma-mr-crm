@@ -203,7 +203,7 @@ export function VisitCompleteDialog({
             </h3>
             <Button
               variant="secondary"
-              className="!py-1.5 text-xs"
+              size="sm"
               onClick={() =>
                 setProducts((prev) => [
                   ...prev,
@@ -271,7 +271,7 @@ export function VisitCompleteDialog({
                 <div className="flex items-end lg:col-span-1">
                   <Button
                     variant="ghost"
-                    className="!px-2"
+                    size="icon-sm"
                     onClick={() => setProducts((prev) => prev.filter((_, i) => i !== index))}
                     aria-label="Remove product row"
                   >
@@ -290,7 +290,7 @@ export function VisitCompleteDialog({
             </h3>
             <Button
               variant="secondary"
-              className="!py-1.5 text-xs"
+              size="sm"
               onClick={() =>
                 setSamples((prev) => [
                   ...prev,
@@ -368,7 +368,7 @@ export function VisitCompleteDialog({
                   <div className="flex items-end lg:col-span-1">
                     <Button
                       variant="ghost"
-                      className="!px-2"
+                      size="icon-sm"
                       onClick={() => setSamples((prev) => prev.filter((_, i) => i !== index))}
                     >
                       <Trash2 size={16} />

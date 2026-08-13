@@ -136,7 +136,7 @@ export function StoresPage() {
               <Td>
                 <Button
                   variant="danger"
-                  className="!px-2.5 !py-1.5 text-xs"
+                  size="sm"
                   onClick={() => setDeleteTarget({ id: store.id, name: store.name })}
                 >
                   Delete

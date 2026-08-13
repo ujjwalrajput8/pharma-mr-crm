@@ -60,6 +60,8 @@ npm run dev
 
 Default Admin (seed): `admin@pharma-mr.local` / `Admin@12345`
 
+Client demo walkthrough (Admin / Manager / MR): [docs/DEMO.md](docs/DEMO.md)
+
 ## License
 
 For learning and development purposes.

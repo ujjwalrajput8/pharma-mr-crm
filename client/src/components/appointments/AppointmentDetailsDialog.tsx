@@ -12,6 +12,7 @@ interface AppointmentDetailsDialogProps {
   onClose: () => void;
   onComplete?: () => void;
   onCancel?: () => void;
+  onReschedule?: () => void;
 }
 
 function Row({ label, value }: { label: string; value: ReactNode }) {
@@ -29,9 +30,12 @@ export function AppointmentDetailsDialog({
   onClose,
   onComplete,
   onCancel,
+  onReschedule,
 }: AppointmentDetailsDialogProps) {
   if (!appointment) return null;
   const { text, meta } = unpackAppointmentRemarks(appointment.remarks);
+  const canAct =
+    appointment.status === 'PENDING' || appointment.status === 'RESCHEDULED';
 
   return (
     <Modal
@@ -45,12 +49,17 @@ export function AppointmentDetailsDialog({
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
-          {appointment.status === 'PENDING' && onCancel ? (
+          {canAct && onReschedule ? (
+            <Button variant="secondary" onClick={onReschedule}>
+              Reschedule
+            </Button>
+          ) : null}
+          {canAct && onCancel ? (
             <Button variant="danger" onClick={onCancel}>
               Cancel
             </Button>
           ) : null}
-          {appointment.status === 'PENDING' && onComplete ? (
+          {canAct && onComplete ? (
             <Button onClick={onComplete}>Complete + Visit</Button>
           ) : null}
         </>
@@ -61,6 +70,22 @@ export function AppointmentDetailsDialog({
           <Row label="Appointment No." value={`#${shortId(appointment.id)}`} />
           <Row label="Doctor" value={appointment.doctor?.fullName} />
           <Row label="MR" value={appointment.mr?.fullName} />
+          <Row
+            label="Created by"
+            value={
+              appointment.createdBy
+                ? `${appointment.createdBy.fullName} (${appointment.createdBy.role})`
+                : null
+            }
+          />
+          <Row
+            label="Assigned by"
+            value={
+              appointment.assignedBy
+                ? `${appointment.assignedBy.fullName} (${appointment.assignedBy.role})`
+                : 'Self-booked'
+            }
+          />
           <Row label="Date" value={formatDisplayDate(appointment.date)} />
           <Row label="Time" value={formatTime12(appointment.time)} />
           <Row label="Purpose" value={appointment.purpose} />
@@ -73,7 +98,9 @@ export function AppointmentDetailsDialog({
                     ? 'success'
                     : appointment.status === 'CANCELLED'
                       ? 'danger'
-                      : 'primary'
+                      : appointment.status === 'RESCHEDULED'
+                        ? 'warning'
+                        : 'primary'
                 }
               >
                 {appointment.status}
