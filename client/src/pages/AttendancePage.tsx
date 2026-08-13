@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { useClientTable } from '@/hooks/useClientTable';
 import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { useAuth } from '@/store/AuthContext';
 import { attendanceApi } from '@/services/attendance.service';
@@ -19,6 +20,34 @@ export function AttendancePage() {
   const listQuery = useQuery({
     queryKey: ['attendance', 'list'],
     queryFn: () => attendanceApi.list(),
+  });
+
+  const table = useClientTable({
+    data: listQuery.data ?? [],
+    getSearchText: (row) =>
+      [
+        row.workDate,
+        row.mr?.fullName,
+        row.checkInAt ? new Date(row.checkInAt).toLocaleTimeString() : '',
+        row.checkOutAt ? new Date(row.checkOutAt).toLocaleTimeString() : '',
+        row.workingHours,
+        row.checkOutAt ? 'Complete' : row.checkInAt ? 'In progress' : 'Absent',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    getSortValue: (row, key) => {
+      if (key === 'date') return row.workDate;
+      if (key === 'mr') return row.mr?.fullName;
+      if (key === 'checkIn') return row.checkInAt;
+      if (key === 'checkOut') return row.checkOutAt;
+      if (key === 'hours') return row.workingHours;
+      if (key === 'status') {
+        return row.checkOutAt ? 'Complete' : row.checkInAt ? 'In progress' : 'Absent';
+      }
+      return undefined;
+    },
+    initialSortKey: 'date',
+    initialSortDir: 'desc',
   });
 
   const checkInMutation = useMutation({
@@ -82,17 +111,39 @@ export function AttendancePage() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
+          placeholder="Search attendance…"
+        />
         <DataTable
-          columns={['Date', 'MR', 'Check-in', 'Check-out', 'Hours', 'Status']}
+          columns={[
+            { key: 'date', label: 'Date', sortable: true },
+            { key: 'mr', label: 'MR', sortable: true },
+            { key: 'checkIn', label: 'Check-in', sortable: true },
+            { key: 'checkOut', label: 'Check-out', sortable: true },
+            { key: 'hours', label: 'Hours', sortable: true },
+            { key: 'status', label: 'Status', sortable: true },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
           loading={listQuery.isLoading}
           empty={
-            !listQuery.isLoading && listQuery.data?.length === 0 ? (
-              <EmptyState title="No attendance yet" description="Use Check-in to start today." />
+            !listQuery.isLoading && table.filteredTotal === 0 ? (
+              <EmptyState
+                title={table.totalAll === 0 ? 'No attendance yet' : 'No matching records'}
+                description={
+                  table.totalAll === 0
+                    ? 'Use Check-in to start today.'
+                    : 'Try a different search term.'
+                }
+              />
             ) : null
           }
         >
-          {listQuery.data?.map((row) => (
+          {table.rows.map((row) => (
             <tr key={row.id} className="border-b border-[var(--color-border)] last:border-0">
               <Td>{row.workDate}</Td>
               <Td>{row.mr?.fullName ?? '—'}</Td>
@@ -107,6 +158,17 @@ export function AttendancePage() {
             </tr>
           ))}
         </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
     </div>
   );

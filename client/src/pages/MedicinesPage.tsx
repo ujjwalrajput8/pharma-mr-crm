@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { useClientTable } from '@/hooks/useClientTable';
 import { Input, Select } from '@/components/ui/Field';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Modal } from '@/components/ui/Modal';
@@ -34,14 +35,20 @@ export function MedicinesPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateMedicinePayload>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
 
   const medicinesQuery = useQuery({
-    queryKey: ['medicines', search],
-    queryFn: () => medicinesApi.list(search || undefined),
+    queryKey: ['medicines'],
+    queryFn: () => medicinesApi.list(),
+  });
+
+  const table = useClientTable({
+    data: medicinesQuery.data ?? [],
+    searchKeys: ['name', 'brandName', 'batchNumber', 'stock.available', 'sampleAvailable'],
+    getSortValue: (row, key) => (key === 'stock' ? row.stock?.available ?? 0 : undefined),
+    initialSortKey: 'name',
   });
 
   const createMutation = useMutation({
@@ -103,27 +110,39 @@ export function MedicinesPage() {
 
       {error ? <Alert message={error} /> : null}
 
-      <div className="relative max-w-md">
-        <Search size={16} className="pointer-events-none absolute top-3.5 left-3.5 text-[var(--color-muted)]" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
           placeholder="Search medicines…"
-          className="w-full rounded-xl border border-[var(--color-border)] bg-white py-2.5 pr-3 pl-10 text-sm outline-none focus:ring-2 focus:ring-teal-500/20"
         />
-      </div>
-
-      <Card>
         <DataTable
-          columns={['Medicine', 'Brand / Generic', 'Batch / Expiry', 'Stock', 'Samples', 'Actions']}
+          columns={[
+            { key: 'name', label: 'Medicine', sortable: true },
+            { key: 'brandName', label: 'Brand / Generic', sortable: true },
+            { key: 'batchNumber', label: 'Batch / Expiry', sortable: true },
+            { key: 'stock', label: 'Stock', sortable: true },
+            { key: 'sampleAvailable', label: 'Samples', sortable: true },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
           loading={medicinesQuery.isLoading}
           empty={
-            !medicinesQuery.isLoading && medicinesQuery.data?.length === 0 ? (
-              <EmptyState title="No medicines found" description="Add products to the catalog." />
+            !medicinesQuery.isLoading && table.filteredTotal === 0 ? (
+              <EmptyState
+                title={table.totalAll === 0 ? 'No medicines found' : 'No matching medicines'}
+                description={
+                  table.totalAll === 0
+                    ? 'Add products to the catalog.'
+                    : 'Try a different search term.'
+                }
+              />
             ) : null
           }
         >
-          {medicinesQuery.data?.map((medicine) => (
+          {table.rows.map((medicine) => (
             <tr key={medicine.id} className="border-b border-[var(--color-border)] last:border-0">
               <Td>
                 <Link to={`/medicines/${medicine.id}`} className="font-medium text-[var(--color-primary)] hover:underline">
@@ -172,6 +191,17 @@ export function MedicinesPage() {
             </tr>
           ))}
         </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
 
       <Modal

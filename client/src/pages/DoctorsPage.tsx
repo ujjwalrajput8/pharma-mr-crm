@@ -1,15 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
 import { Input } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
+import { useClientTable } from '@/hooks/useClientTable';
 import { useAuth } from '@/store/AuthContext';
 import { doctorsApi, type CreateDoctorPayload } from '@/services/doctors.service';
 import { usersApi } from '@/services/users.service';
@@ -31,14 +32,21 @@ export function DoctorsPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateDoctorPayload>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
 
   const doctorsQuery = useQuery({
-    queryKey: ['doctors', search],
-    queryFn: () => doctorsApi.list(search || undefined),
+    queryKey: ['doctors'],
+    queryFn: () => doctorsApi.list(),
+  });
+
+  const table = useClientTable({
+    data: doctorsQuery.data ?? [],
+    searchKeys: ['fullName', 'phone', 'specialization', 'hospital', 'clinic', 'city'],
+    getSortValue: (row, key) =>
+      key === 'mr' ? row.assignedMrs.map((mr) => mr.fullName).join(', ') : undefined,
+    initialSortKey: 'fullName',
   });
 
   const mrsQuery = useQuery({
@@ -107,27 +115,38 @@ export function DoctorsPage() {
 
       {error ? <Alert message={error} /> : null}
 
-      <div className="relative max-w-md">
-        <Search size={16} className="pointer-events-none absolute top-3.5 left-3.5 text-[var(--color-muted)]" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
           placeholder="Search doctors…"
-          className="w-full rounded-xl border border-[var(--color-border)] bg-white py-2.5 pr-3 pl-10 text-sm outline-none focus:ring-2 focus:ring-teal-500/20"
         />
-      </div>
-
-      <Card>
         <DataTable
-          columns={['Doctor', 'Specialization', 'Visiting', 'Assigned MR', 'Actions']}
+          columns={[
+            { key: 'fullName', label: 'Doctor', sortable: true },
+            { key: 'specialization', label: 'Specialization', sortable: true },
+            { key: 'visitingDays', label: 'Visiting', sortable: true },
+            { key: 'mr', label: 'Assigned MR', sortable: true },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
           loading={doctorsQuery.isLoading}
           empty={
-            !doctorsQuery.isLoading && doctorsQuery.data?.length === 0 ? (
-              <EmptyState title="No doctors found" description="Add a doctor to get started." />
+            !doctorsQuery.isLoading && table.filteredTotal === 0 ? (
+              <EmptyState
+                title={table.totalAll === 0 ? 'No doctors found' : 'No matching doctors'}
+                description={
+                  table.totalAll === 0
+                    ? 'Add a doctor to get started.'
+                    : 'Try a different search term.'
+                }
+              />
             ) : null
           }
         >
-          {doctorsQuery.data?.map((doctor) => (
+          {table.rows.map((doctor) => (
             <tr key={doctor.id} className="border-b border-[var(--color-border)] last:border-0">
               <Td>
                 <Link to={`/doctors/${doctor.id}`} className="font-medium text-[var(--color-primary)] hover:underline">
@@ -167,6 +186,17 @@ export function DoctorsPage() {
             </tr>
           ))}
         </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
 
       <Modal

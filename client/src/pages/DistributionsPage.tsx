@@ -1,12 +1,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { Card, EmptyState, PageHeader } from '@/components/ui/Page';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { useClientTable } from '@/hooks/useClientTable';
 import { distributionsApi } from '@/services/distributions.service';
 
 export function DistributionsPage() {
   const distributionsQuery = useQuery({
     queryKey: ['distributions'],
     queryFn: () => distributionsApi.list(),
+  });
+
+  const table = useClientTable({
+    data: distributionsQuery.data ?? [],
+    searchKeys: ['visitDate', 'medicineName', 'quantity', 'batchNumber', 'doctorName', 'mrName'],
+    initialSortKey: 'visitDate',
+    initialSortDir: 'desc',
   });
 
   return (
@@ -21,20 +29,41 @@ export function DistributionsPage() {
         read-only distribution history.
       </Card>
 
-      <Card>
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
+          placeholder="Search distributions…"
+        />
         <DataTable
-          columns={['Date', 'Medicine', 'Qty', 'Batch', 'Doctor', 'MR']}
+          columns={[
+            { key: 'visitDate', label: 'Date', sortable: true },
+            { key: 'medicineName', label: 'Medicine', sortable: true },
+            { key: 'quantity', label: 'Qty', sortable: true },
+            { key: 'batchNumber', label: 'Batch', sortable: true },
+            { key: 'doctorName', label: 'Doctor', sortable: true },
+            { key: 'mrName', label: 'MR', sortable: true },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
           loading={distributionsQuery.isLoading}
           empty={
-            !distributionsQuery.isLoading && distributionsQuery.data?.length === 0 ? (
+            !distributionsQuery.isLoading && table.filteredTotal === 0 ? (
               <EmptyState
-                title="No samples distributed yet"
-                description="Complete a visit with sample quantities to populate this ledger."
+                title={
+                  table.totalAll === 0 ? 'No samples distributed yet' : 'No matching distributions'
+                }
+                description={
+                  table.totalAll === 0
+                    ? 'Complete a visit with sample quantities to populate this ledger.'
+                    : 'Try a different search term.'
+                }
               />
             ) : null
           }
         >
-          {distributionsQuery.data?.map((row) => (
+          {table.rows.map((row) => (
             <tr key={row.id} className="border-b border-[var(--color-border)] last:border-0">
               <Td className="font-medium">{row.visitDate}</Td>
               <Td>{row.medicineName}</Td>
@@ -45,6 +74,17 @@ export function DistributionsPage() {
             </tr>
           ))}
         </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
     </div>
   );

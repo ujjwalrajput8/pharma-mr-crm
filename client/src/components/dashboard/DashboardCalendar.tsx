@@ -73,8 +73,8 @@ export function DashboardCalendar({
   }, [appointments, visits]);
 
   return (
-    <Card className="overflow-hidden p-3 md:p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-[var(--color-muted)]">
+    <Card className="overflow-hidden p-3 md:p-5">
+      <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-[var(--color-muted)]">
         <span className="inline-flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-cal-appointment)]" /> Appointment
         </span>
@@ -85,57 +85,63 @@ export function DashboardCalendar({
           <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-cal-followup)]" /> Follow-up
         </span>
       </div>
-      <FullCalendar
-        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-        initialView="dayGridMonth"
-        headerToolbar={{
-          left: 'prev,next today',
-          center: 'title',
-          right: 'dayGridMonth,timeGridWeek,timeGridDay',
-        }}
-        height={620}
-        contentHeight={560}
-        expandRows
-        selectable
-        selectMirror
-        editable
-        eventStartEditable
-        eventDurationEditable={false}
-        events={events}
-        select={(arg) => {
-          const date = toIsoDate(arg.start);
-          const hours = arg.allDay ? 10 : arg.start.getHours();
-          const minutes = arg.allDay ? 0 : arg.start.getMinutes();
-          const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-          onSelectSlot({ date, time });
-          arg.view.calendar.unselect();
-        }}
-        eventClick={(arg) => {
-          const kind = arg.event.extendedProps.kind as CalendarEventKind;
-          const entityId = Number(arg.event.extendedProps.entityId);
-          onEventClick(kind, entityId);
-        }}
-        eventDrop={(arg) => {
-          const kind = arg.event.extendedProps.kind as CalendarEventKind;
-          if (kind !== 'appointment' || !onAppointmentMove) {
-            arg.revert();
-            return;
-          }
-          const start = arg.event.start;
-          if (!start) {
-            arg.revert();
-            return;
-          }
-          onAppointmentMove(
-            Number(arg.event.extendedProps.entityId),
-            toIsoDate(start),
-            `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`,
-          );
-        }}
-        nowIndicator
-        dayMaxEvents={3}
-        handleWindowResize={false}
-      />
+      <div className="fc-shell scrollbar-hide">
+        <FullCalendar
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+          initialView="dayGridMonth"
+          headerToolbar={{
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,timeGridWeek,timeGridDay',
+          }}
+          buttonText={{
+            today: 'Today',
+            month: 'Month',
+            week: 'Week',
+            day: 'Day',
+          }}
+          height="auto"
+          selectable
+          selectMirror
+          editable
+          eventStartEditable
+          eventDurationEditable={false}
+          events={events}
+          select={(arg) => {
+            const date = toIsoDate(arg.start);
+            const hours = arg.allDay ? 10 : arg.start.getHours();
+            const minutes = arg.allDay ? 0 : arg.start.getMinutes();
+            const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            onSelectSlot({ date, time });
+            arg.view.calendar.unselect();
+          }}
+          eventClick={(arg) => {
+            const kind = arg.event.extendedProps.kind as CalendarEventKind;
+            const entityId = Number(arg.event.extendedProps.entityId);
+            onEventClick(kind, entityId);
+          }}
+          eventDrop={(arg) => {
+            const kind = arg.event.extendedProps.kind as CalendarEventKind;
+            if (kind !== 'appointment' || !onAppointmentMove) {
+              arg.revert();
+              return;
+            }
+            const start = arg.event.start;
+            if (!start) {
+              arg.revert();
+              return;
+            }
+            onAppointmentMove(
+              Number(arg.event.extendedProps.entityId),
+              toIsoDate(start),
+              `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`,
+            );
+          }}
+          nowIndicator
+          dayMaxEvents={3}
+          handleWindowResize
+        />
+      </div>
     </Card>
   );
 }

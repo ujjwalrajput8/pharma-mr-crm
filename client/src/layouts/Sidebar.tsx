@@ -8,8 +8,8 @@ export function Sidebar() {
   const items = NAV_ITEMS.filter((item) => canAny(item.permissions));
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col bg-[var(--color-sidebar)] text-[var(--color-sidebar-ink)]">
-      <div className="border-b border-white/10 px-5 py-6">
+    <aside className="flex h-svh w-72 shrink-0 flex-col bg-[var(--color-sidebar)] text-[var(--color-sidebar-ink)]">
+      <div className="shrink-0 border-b border-white/10 px-5 py-6">
         <img
           src="/jovance-logo-dark.png"
           alt="Jovance Laboratories Pvt. Ltd."
@@ -18,7 +18,7 @@ export function Sidebar() {
         <p className="mt-3 text-xs tracking-wide text-teal-100/70 uppercase">Pharma MR CRM</p>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav className="scrollbar-hide min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {items.map((item) => {
           const Icon = item.icon;
           return (
@@ -41,7 +41,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-white/10 px-4 py-4 text-xs text-teal-100/55">
+      <div className="shrink-0 border-t border-white/10 px-4 py-4 text-xs text-teal-100/55">
         © {new Date().getFullYear()} Jovance Laboratories
       </div>
     </aside>

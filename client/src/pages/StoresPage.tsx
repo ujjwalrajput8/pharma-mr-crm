@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { useClientTable } from '@/hooks/useClientTable';
 import { Input } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
@@ -24,14 +25,19 @@ export function StoresPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateStorePayload>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
 
   const storesQuery = useQuery({
-    queryKey: ['stores', search],
-    queryFn: () => storesApi.list(search || undefined),
+    queryKey: ['stores'],
+    queryFn: () => storesApi.list(),
+  });
+
+  const table = useClientTable({
+    data: storesQuery.data ?? [],
+    searchKeys: ['name', 'ownerName', 'gstNumber', 'drugLicenseNumber', 'city'],
+    initialSortKey: 'name',
   });
 
   const createMutation = useMutation({
@@ -85,27 +91,39 @@ export function StoresPage() {
 
       {error ? <Alert message={error} /> : null}
 
-      <div className="relative max-w-md">
-        <Search size={16} className="pointer-events-none absolute top-3.5 left-3.5 text-[var(--color-muted)]" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
           placeholder="Search stores…"
-          className="w-full rounded-xl border border-[var(--color-border)] bg-white py-2.5 pr-3 pl-10 text-sm outline-none focus:ring-2 focus:ring-teal-500/20"
         />
-      </div>
-
-      <Card>
         <DataTable
-          columns={['Store', 'Owner', 'GST', 'License', 'City', 'Actions']}
+          columns={[
+            { key: 'name', label: 'Store', sortable: true },
+            { key: 'ownerName', label: 'Owner', sortable: true },
+            { key: 'gstNumber', label: 'GST', sortable: true },
+            { key: 'drugLicenseNumber', label: 'License', sortable: true },
+            { key: 'city', label: 'City', sortable: true },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
           loading={storesQuery.isLoading}
           empty={
-            !storesQuery.isLoading && storesQuery.data?.length === 0 ? (
-              <EmptyState title="No stores found" description="Add a medical store to begin." />
+            !storesQuery.isLoading && table.filteredTotal === 0 ? (
+              <EmptyState
+                title={table.totalAll === 0 ? 'No stores found' : 'No matching stores'}
+                description={
+                  table.totalAll === 0
+                    ? 'Add a medical store to begin.'
+                    : 'Try a different search term.'
+                }
+              />
             ) : null
           }
         >
-          {storesQuery.data?.map((store) => (
+          {table.rows.map((store) => (
             <tr key={store.id} className="border-b border-[var(--color-border)] last:border-0">
               <Td className="font-medium">{store.name}</Td>
               <Td>
@@ -127,6 +145,17 @@ export function StoresPage() {
             </tr>
           ))}
         </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
 
       <Modal

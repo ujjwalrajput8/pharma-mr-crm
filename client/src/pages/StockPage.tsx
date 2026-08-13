@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { useClientTable } from '@/hooks/useClientTable';
 import { Input, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
@@ -19,6 +20,20 @@ export function StockPage() {
   const stockQuery = useQuery({
     queryKey: ['stock', { lowOnly }],
     queryFn: () => stockApi.list({ lowOnly: lowOnly || undefined }),
+  });
+
+  const table = useClientTable({
+    data: stockQuery.data ?? [],
+    searchKeys: [
+      'medicineName',
+      'company',
+      'openingStock',
+      'issued',
+      'returned',
+      'available',
+      'minimumStockAlert',
+    ],
+    initialSortKey: 'medicineName',
   });
 
   const adjustMutation = useMutation({
@@ -66,20 +81,40 @@ export function StockPage() {
 
       {error ? <Alert message={error} /> : null}
 
-      <Card>
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
+          placeholder="Search stock…"
+        />
         <DataTable
-          columns={['Medicine', 'Opening', 'Issued', 'Returned', 'Available', 'Min Alert', 'Actions']}
+          columns={[
+            { key: 'medicineName', label: 'Medicine', sortable: true },
+            { key: 'openingStock', label: 'Opening', sortable: true },
+            { key: 'issued', label: 'Issued', sortable: true },
+            { key: 'returned', label: 'Returned', sortable: true },
+            { key: 'available', label: 'Available', sortable: true },
+            { key: 'minimumStockAlert', label: 'Min Alert', sortable: true },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
           loading={stockQuery.isLoading}
           empty={
-            !stockQuery.isLoading && stockQuery.data?.length === 0 ? (
+            !stockQuery.isLoading && table.filteredTotal === 0 ? (
               <EmptyState
-                title="No stock records"
-                description="Add medicines first to see inventory here."
+                title={table.totalAll === 0 ? 'No stock records' : 'No matching stock'}
+                description={
+                  table.totalAll === 0
+                    ? 'Add medicines first to see inventory here.'
+                    : 'Try a different search term or toggle low stock filter.'
+                }
               />
             ) : null
           }
         >
-          {stockQuery.data?.map((row) => (
+          {table.rows.map((row) => (
             <tr key={row.id} className="border-b border-[var(--color-border)] last:border-0">
               <Td className="font-medium">
                 {row.medicineName}
@@ -120,6 +155,17 @@ export function StockPage() {
             </tr>
           ))}
         </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
 
       <Modal

@@ -3,7 +3,8 @@ import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { useClientTable } from '@/hooks/useClientTable';
 import { Input, Select } from '@/components/ui/Field';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Modal } from '@/components/ui/Modal';
@@ -33,6 +34,33 @@ export function SalesPage() {
   });
 
   const salesQuery = useQuery({ queryKey: ['sales'], queryFn: () => salesApi.list() });
+
+  const table = useClientTable({
+    data: salesQuery.data ?? [],
+    getSearchText: (sale) =>
+      [
+        sale.invoiceDate,
+        sale.medicine.name,
+        sale.quantity,
+        sale.amount,
+        sale.doctor?.fullName,
+        sale.medicalStore?.name,
+        sale.mr.fullName,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    getSortValue: (row, key) => {
+      if (key === 'date') return row.invoiceDate;
+      if (key === 'medicine') return row.medicine.name;
+      if (key === 'quantity') return row.quantity;
+      if (key === 'amount') return row.amount;
+      if (key === 'doctorStore') return row.doctor?.fullName ?? row.medicalStore?.name;
+      if (key === 'mr') return row.mr.fullName;
+      return undefined;
+    },
+    initialSortKey: 'date',
+    initialSortDir: 'desc',
+  });
   const medicinesQuery = useQuery({
     queryKey: ['medicines'],
     queryFn: () => medicinesApi.list(),
@@ -87,17 +115,39 @@ export function SalesPage() {
         }
       />
       {error ? <Alert message={error} /> : null}
-      <Card>
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
+          placeholder="Search sales…"
+        />
         <DataTable
-          columns={['Date', 'Medicine', 'Qty', 'Amount', 'Doctor/Store', 'MR']}
+          columns={[
+            { key: 'date', label: 'Date', sortable: true },
+            { key: 'medicine', label: 'Medicine', sortable: true },
+            { key: 'quantity', label: 'Qty', sortable: true },
+            { key: 'amount', label: 'Amount', sortable: true },
+            { key: 'doctorStore', label: 'Doctor/Store', sortable: true },
+            { key: 'mr', label: 'MR', sortable: true },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
           loading={salesQuery.isLoading}
           empty={
-            !salesQuery.isLoading && salesQuery.data?.length === 0 ? (
-              <EmptyState title="No sales yet" description="Create the first sale entry." />
+            !salesQuery.isLoading && table.filteredTotal === 0 ? (
+              <EmptyState
+                title={table.totalAll === 0 ? 'No sales yet' : 'No matching sales'}
+                description={
+                  table.totalAll === 0
+                    ? 'Create the first sale entry.'
+                    : 'Try a different search term.'
+                }
+              />
             ) : null
           }
         >
-          {salesQuery.data?.map((sale) => (
+          {table.rows.map((sale) => (
             <tr key={sale.id} className="border-b border-[var(--color-border)] last:border-0">
               <Td>{sale.invoiceDate}</Td>
               <Td>{sale.medicine.name}</Td>
@@ -108,6 +158,17 @@ export function SalesPage() {
             </tr>
           ))}
         </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
 
       <Modal

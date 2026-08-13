@@ -11,7 +11,7 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="sticky top-16 z-20 -mx-4 mb-2 border-b border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-bg)_88%,transparent)] px-4 py-4 backdrop-blur-md md:-mx-6 md:px-6">
+    <div className="mb-2">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]">{title}</h2>

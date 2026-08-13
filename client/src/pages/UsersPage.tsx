@@ -3,7 +3,8 @@ import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { useClientTable } from '@/hooks/useClientTable';
 import { Input } from '@/components/ui/Field';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Modal } from '@/components/ui/Modal';
@@ -34,6 +35,12 @@ export function UsersPage() {
   const [resetPassword, setResetPassword] = useState('');
 
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list() });
+
+  const table = useClientTable({
+    data: usersQuery.data ?? [],
+    searchKeys: ['employeeCode', 'fullName', 'email', 'assignedArea', 'status'],
+    initialSortKey: 'fullName',
+  });
 
   const createMutation = useMutation({
     mutationFn: usersApi.create,
@@ -95,17 +102,39 @@ export function UsersPage() {
 
       {error ? <Alert message={error} /> : null}
 
-      <Card>
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
+          placeholder="Search MRs…"
+        />
         <DataTable
-          columns={['Code', 'Name', 'Email', 'Area', 'Status', 'Actions']}
+          columns={[
+            { key: 'employeeCode', label: 'Code', sortable: true },
+            { key: 'fullName', label: 'Name', sortable: true },
+            { key: 'email', label: 'Email', sortable: true },
+            { key: 'assignedArea', label: 'Area', sortable: true },
+            { key: 'status', label: 'Status', sortable: true },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
           loading={usersQuery.isLoading}
           empty={
-            !usersQuery.isLoading && usersQuery.data?.length === 0 ? (
-              <EmptyState title="No MR accounts yet" description="Click Add MR to create the first account." />
+            !usersQuery.isLoading && table.filteredTotal === 0 ? (
+              <EmptyState
+                title={table.totalAll === 0 ? 'No MR accounts yet' : 'No matching MRs'}
+                description={
+                  table.totalAll === 0
+                    ? 'Click Add MR to create the first account.'
+                    : 'Try a different search term.'
+                }
+              />
             ) : null
           }
         >
-          {usersQuery.data?.map((user) => (
+          {table.rows.map((user) => (
             <tr key={user.id} className="border-b border-[var(--color-border)] last:border-0">
               <Td className="font-medium">{user.employeeCode ?? '—'}</Td>
               <Td>
@@ -158,6 +187,17 @@ export function UsersPage() {
             </tr>
           ))}
         </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
 
       <Modal

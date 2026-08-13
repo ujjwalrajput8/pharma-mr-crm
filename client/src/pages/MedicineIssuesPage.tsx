@@ -3,7 +3,8 @@ import { Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { useClientTable } from '@/hooks/useClientTable';
 import { Input, Select } from '@/components/ui/Field';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Modal } from '@/components/ui/Modal';
@@ -32,6 +33,34 @@ export function MedicineIssuesPage() {
   const listQuery = useQuery({
     queryKey: ['medicine-issues'],
     queryFn: () => medicineIssuesApi.list(),
+  });
+
+  const table = useClientTable({
+    data: listQuery.data ?? [],
+    getSearchText: (row) =>
+      [
+        row.id,
+        row.issueDate,
+        row.mr.fullName,
+        row.medicine.name,
+        row.batchNumber,
+        row.quantity,
+        row.remarks,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    getSortValue: (row, key) => {
+      if (key === 'id') return row.id;
+      if (key === 'date') return row.issueDate;
+      if (key === 'mr') return row.mr.fullName;
+      if (key === 'medicine') return row.medicine.name;
+      if (key === 'batch') return row.batchNumber;
+      if (key === 'quantity') return row.quantity;
+      if (key === 'remarks') return row.remarks;
+      return undefined;
+    },
+    initialSortKey: 'date',
+    initialSortDir: 'desc',
   });
   const medicinesQuery = useQuery({
     queryKey: ['medicines'],
@@ -86,20 +115,40 @@ export function MedicineIssuesPage() {
       />
       {error ? <Alert message={error} /> : null}
 
-      <Card>
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
+          placeholder="Search issues…"
+        />
         <DataTable
-          columns={['Issue #', 'Date', 'MR', 'Medicine', 'Batch', 'Qty', 'Remarks']}
+          columns={[
+            { key: 'id', label: 'Issue #', sortable: true },
+            { key: 'date', label: 'Date', sortable: true },
+            { key: 'mr', label: 'MR', sortable: true },
+            { key: 'medicine', label: 'Medicine', sortable: true },
+            { key: 'batch', label: 'Batch', sortable: true },
+            { key: 'quantity', label: 'Qty', sortable: true },
+            { key: 'remarks', label: 'Remarks', sortable: true },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
           loading={listQuery.isLoading}
           empty={
-            !listQuery.isLoading && listQuery.data?.length === 0 ? (
+            !listQuery.isLoading && table.filteredTotal === 0 ? (
               <EmptyState
-                title="No issues yet"
-                description="Issue medicines from company stock to an MR."
+                title={table.totalAll === 0 ? 'No issues yet' : 'No matching issues'}
+                description={
+                  table.totalAll === 0
+                    ? 'Issue medicines from company stock to an MR.'
+                    : 'Try a different search term.'
+                }
               />
             ) : null
           }
         >
-          {listQuery.data?.map((row) => (
+          {table.rows.map((row) => (
             <tr key={row.id} className="border-b border-[var(--color-border)] last:border-0">
               <Td className="font-medium">#{row.id}</Td>
               <Td>{row.issueDate}</Td>
@@ -111,6 +160,17 @@ export function MedicineIssuesPage() {
             </tr>
           ))}
         </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
 
       <Modal

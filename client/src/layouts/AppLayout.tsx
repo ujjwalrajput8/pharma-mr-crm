@@ -6,17 +6,18 @@ import { cn } from '@/utils/cn';
 
 /**
  * Shared application shell for Admin and MR.
- * Navigation content is role-filtered; layout itself is identical.
+ * Sidebar + header stay fixed; only the main content scrolls.
  */
 export function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="flex min-h-svh bg-[var(--color-bg)]">
+    <div className="flex h-svh overflow-hidden bg-[var(--color-bg)]">
       <div
         className={cn(
-          'fixed inset-y-0 left-0 z-40 transition-transform lg:static lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 w-72 transition-transform',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
+          'lg:translate-x-0',
         )}
       >
         <Sidebar />
@@ -31,9 +32,9 @@ export function AppLayout() {
         />
       ) : null}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:pl-72">
         <Header onToggleSidebar={() => setMobileOpen((open) => !open)} />
-        <main className="flex-1 p-4 md:p-6">
+        <main className="scrollbar-hide min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
           <Outlet />
         </main>
       </div>

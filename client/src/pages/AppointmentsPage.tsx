@@ -7,10 +7,10 @@ import { AppointmentFormDialog } from '@/components/appointments/AppointmentForm
 import { VisitCompleteDialog } from '@/components/appointments/VisitCompleteDialog';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { useClientTable } from '@/hooks/useClientTable';
 import { Select } from '@/components/ui/Field';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
-import { TableSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
 import {
@@ -66,6 +66,32 @@ export function AppointmentsPage() {
     queryKey: ['medicines'],
     queryFn: () => medicinesApi.list(),
     enabled: Boolean(completeFor),
+  });
+
+  const table = useClientTable({
+    data: appointmentsQuery.data ?? [],
+    getSearchText: (item) =>
+      [
+        formatDisplayDate(item.date),
+        formatTime12(item.time),
+        item.doctor?.fullName,
+        item.mr?.fullName,
+        item.purpose,
+        item.status,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    getSortValue: (row, key) => {
+      if (key === 'date') return row.date;
+      if (key === 'time') return row.time;
+      if (key === 'doctor') return row.doctor?.fullName;
+      if (key === 'mr') return row.mr?.fullName;
+      if (key === 'purpose') return row.purpose;
+      if (key === 'status') return row.status;
+      return undefined;
+    },
+    initialSortKey: 'date',
+    initialSortDir: 'desc',
   });
 
   const createMutation = useMutation({
@@ -145,22 +171,42 @@ export function AppointmentsPage() {
         </div>
       </Card>
 
-      <Card>
-        {appointmentsQuery.isLoading ? (
-          <TableSkeleton rows={6} />
-        ) : (
-          <DataTable
-            columns={['Date', 'Time', 'Doctor', 'MR', 'Purpose', 'Status', 'Actions']}
-            empty={
-              appointmentsQuery.data?.length === 0 ? (
-                <EmptyState
-                  title="No appointments yet"
-                  description="Schedule an appointment or pick a date on the dashboard calendar."
-                />
-              ) : null
-            }
-          >
-            {appointmentsQuery.data?.map((item) => {
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
+          placeholder="Search appointments…"
+        />
+        <DataTable
+          columns={[
+            { key: 'date', label: 'Date', sortable: true },
+            { key: 'time', label: 'Time', sortable: true },
+            { key: 'doctor', label: 'Doctor', sortable: true },
+            { key: 'mr', label: 'MR', sortable: true },
+            { key: 'purpose', label: 'Purpose', sortable: true },
+            { key: 'status', label: 'Status', sortable: true },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
+          loading={appointmentsQuery.isLoading}
+          empty={
+            !appointmentsQuery.isLoading && table.filteredTotal === 0 ? (
+              <EmptyState
+                title={
+                  table.totalAll === 0 ? 'No appointments yet' : 'No matching appointments'
+                }
+                description={
+                  table.totalAll === 0
+                    ? 'Schedule an appointment or pick a date on the dashboard calendar.'
+                    : 'Try a different search term or status filter.'
+                }
+              />
+            ) : null
+          }
+        >
+          {table.rows.map((item) => {
               return (
                 <tr key={item.id} className="border-b border-[var(--color-border)] last:border-0">
                   <Td className="font-medium">{formatDisplayDate(item.date)}</Td>
@@ -203,8 +249,18 @@ export function AppointmentsPage() {
                 </tr>
               );
             })}
-          </DataTable>
-        )}
+        </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
 
       <AppointmentFormDialog

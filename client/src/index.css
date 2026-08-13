@@ -114,6 +114,16 @@ textarea {
   animation: scale-in 180ms ease-out;
 }
 
+/* Scroll works; bar stays hidden */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* FullCalendar theme bridge */
 .fc {
   --fc-border-color: var(--color-border);
@@ -121,30 +131,141 @@ textarea {
   --fc-neutral-bg-color: color-mix(in srgb, var(--color-bg) 80%, transparent);
   --fc-list-event-hover-bg-color: var(--color-primary-soft);
   --fc-today-bg-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  --fc-button-bg-color: var(--color-primary);
-  --fc-button-border-color: var(--color-primary);
-  --fc-button-hover-bg-color: var(--color-primary-hover);
-  --fc-button-hover-border-color: var(--color-primary-hover);
-  --fc-button-active-bg-color: var(--color-primary-hover);
-  --fc-button-active-border-color: var(--color-primary-hover);
+  --fc-button-bg-color: transparent;
+  --fc-button-border-color: var(--color-border);
+  --fc-button-text-color: var(--color-ink);
+  --fc-button-hover-bg-color: var(--color-primary-soft);
+  --fc-button-hover-border-color: var(--color-primary);
+  --fc-button-active-bg-color: var(--color-primary);
+  --fc-button-active-border-color: var(--color-primary);
+  --fc-button-active-text-color: #ffffff;
   font-family: var(--font-sans);
 }
 
+.fc .fc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem !important;
+}
+
+.fc .fc-toolbar-chunk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .fc .fc-toolbar-title {
-  font-size: 1.1rem;
+  margin: 0;
+  font-size: 1.15rem;
   font-weight: 600;
   color: var(--color-ink);
+  white-space: nowrap;
+}
+
+.fc .fc-button-group {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.fc .fc-button-group > .fc-button {
+  margin: 0 !important;
+  border-radius: 0.75rem !important;
 }
 
 .fc .fc-button {
   border-radius: 0.75rem !important;
+  border-width: 1px !important;
+  padding: 0.45rem 0.85rem !important;
+  font-size: 0.8125rem !important;
+  font-weight: 600 !important;
   text-transform: capitalize;
   box-shadow: none !important;
+  background: var(--color-bg) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-ink) !important;
+}
+
+.fc .fc-button:hover,
+.fc .fc-button:focus {
+  background: var(--color-primary-soft) !important;
+  border-color: var(--color-primary) !important;
+  color: var(--color-primary) !important;
+}
+
+.fc .fc-button:disabled {
+  opacity: 0.45;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled).fc-button-active:focus,
+.fc .fc-button-primary:not(:disabled).fc-button-active:hover {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: #ffffff !important;
+}
+
+.fc .fc-today-button {
+  margin-left: 0.15rem !important;
 }
 
 .fc .fc-daygrid-day-number,
 .fc .fc-col-header-cell-cushion {
   color: var(--color-ink);
+}
+
+.fc .fc-scrollgrid,
+.fc .fc-scrollgrid td,
+.fc .fc-scrollgrid th {
+  border-color: var(--color-border) !important;
+}
+
+.fc .fc-col-header-cell {
+  background: color-mix(in srgb, var(--color-bg) 70%, transparent);
+  padding: 0.5rem 0;
+}
+
+.fc .fc-daygrid-day.fc-day-today {
+  background: var(--fc-today-bg-color);
+}
+
+/* Hide FullCalendar internal scrollbars (scroll still works) */
+.fc .fc-scroller,
+.fc .fc-scroller-liquid,
+.fc .fc-scroller-liquid-absolute,
+.fc .fc-daygrid-body,
+.fc .fc-timegrid-body {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.fc .fc-scroller::-webkit-scrollbar,
+.fc .fc-scroller-liquid::-webkit-scrollbar,
+.fc .fc-scroller-liquid-absolute::-webkit-scrollbar,
+.fc .fc-daygrid-body::-webkit-scrollbar,
+.fc .fc-timegrid-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .fc .fc-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .fc .fc-toolbar-chunk {
+    justify-content: center;
+  }
+
+  .fc .fc-toolbar-title {
+    text-align: center;
+    width: 100%;
+  }
 }
 
 .rdp-root {

@@ -94,7 +94,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-surface)_92%,transparent)] backdrop-blur">
+      <header className="z-30 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)]">
         <div className="flex h-16 items-center gap-3 px-4 md:px-6">
           <Button
             variant="secondary"

@@ -4,9 +4,9 @@ import { getApiErrorMessage } from '@/api/client';
 import { VisitDetailsDialog } from '@/components/appointments/VisitDetailsDialog';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { DataTable, Td } from '@/components/ui/DataTable';
+import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { useClientTable } from '@/hooks/useClientTable';
 import { Card, EmptyState, PageHeader } from '@/components/ui/Page';
-import { TableSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
 import { visitsApi, type Visit } from '@/services/visits.service';
@@ -21,6 +21,38 @@ export function VisitsPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const visitsQuery = useQuery({ queryKey: ['visits'], queryFn: () => visitsApi.list() });
+
+  const table = useClientTable({
+    data: visitsQuery.data ?? [],
+    getSearchText: (visit) =>
+      [
+        formatDisplayDate(visit.visitDate),
+        visit.checkInTime
+          ? formatTime12(visit.checkInTime)
+          : visit.visitTime
+            ? formatTime12(visit.visitTime)
+            : '',
+        visit.doctor?.fullName,
+        visit.mr?.fullName,
+        visit.meetingDurationMin ? `${visit.meetingDurationMin} min` : '',
+        visit.visitOutcome,
+        visit.nextFollowUp ? formatDisplayDate(visit.nextFollowUp) : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    getSortValue: (row, key) => {
+      if (key === 'visitDate') return row.visitDate;
+      if (key === 'time') return row.checkInTime ?? row.visitTime;
+      if (key === 'doctor') return row.doctor?.fullName;
+      if (key === 'mr') return row.mr?.fullName;
+      if (key === 'duration') return row.meetingDurationMin ?? 0;
+      if (key === 'outcome') return row.visitOutcome;
+      if (key === 'followUp') return row.nextFollowUp;
+      return undefined;
+    },
+    initialSortKey: 'visitDate',
+    initialSortDir: 'desc',
+  });
 
   const deleteMutation = useMutation({
     mutationFn: visitsApi.remove,
@@ -45,22 +77,41 @@ export function VisitsPage() {
         click <strong>Complete + Visit</strong>. Sample distribution there reduces stock automatically.
       </Card>
 
-      <Card>
-        {visitsQuery.isLoading ? (
-          <TableSkeleton />
-        ) : (
-          <DataTable
-            columns={['Visit Date', 'Time', 'Doctor', 'MR', 'Duration', 'Outcome', 'Follow-up', 'Actions']}
-            empty={
-              visitsQuery.data?.length === 0 ? (
-                <EmptyState
-                  title="No visits logged"
-                  description="Complete an appointment to create the first visit."
-                />
-              ) : null
-            }
-          >
-            {visitsQuery.data?.map((visit) => (
+      <Card className="p-4">
+        <TableToolbar
+          search={table.search}
+          onSearchChange={table.setSearch}
+          placeholder="Search visits…"
+        />
+        <DataTable
+          columns={[
+            { key: 'visitDate', label: 'Visit Date', sortable: true },
+            { key: 'time', label: 'Time', sortable: true },
+            { key: 'doctor', label: 'Doctor', sortable: true },
+            { key: 'mr', label: 'MR', sortable: true },
+            { key: 'duration', label: 'Duration', sortable: true },
+            { key: 'outcome', label: 'Outcome', sortable: true },
+            { key: 'followUp', label: 'Follow-up', sortable: true },
+            { key: 'actions', label: 'Actions' },
+          ]}
+          sortKey={table.sortKey}
+          sortDir={table.sortDir}
+          onSort={table.toggleSort}
+          loading={visitsQuery.isLoading}
+          empty={
+            !visitsQuery.isLoading && table.filteredTotal === 0 ? (
+              <EmptyState
+                title={table.totalAll === 0 ? 'No visits logged' : 'No matching visits'}
+                description={
+                  table.totalAll === 0
+                    ? 'Complete an appointment to create the first visit.'
+                    : 'Try a different search term.'
+                }
+              />
+            ) : null
+          }
+        >
+          {table.rows.map((visit) => (
               <tr key={visit.id} className="border-b border-[var(--color-border)] last:border-0">
                 <Td className="font-medium">{formatDisplayDate(visit.visitDate)}</Td>
                 <Td>
@@ -95,8 +146,18 @@ export function VisitsPage() {
                 </Td>
               </tr>
             ))}
-          </DataTable>
-        )}
+        </DataTable>
+        <TablePagination
+          page={table.page}
+          totalPages={table.totalPages}
+          from={table.from}
+          to={table.to}
+          total={table.filteredTotal}
+          pageSize={table.pageSize}
+          pageSizeOptions={table.pageSizeOptions}
+          onPageChange={table.setPage}
+          onPageSizeChange={table.setPageSize}
+        />
       </Card>
 
       <VisitDetailsDialog
