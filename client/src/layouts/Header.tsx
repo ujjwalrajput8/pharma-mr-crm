@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bell,
@@ -7,7 +7,6 @@ import {
   LogOut,
   Menu,
   Moon,
-  Search,
   Settings,
   Sun,
   UserRound,
@@ -45,7 +44,6 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   const [notifOpen, setNotifOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const [search, setSearch] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -77,19 +75,6 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       setLoggingOut(false);
       setLogoutOpen(false);
     }
-  }
-
-  function onSearchSubmit(event: FormEvent) {
-    event.preventDefault();
-    const q = search.trim().toLowerCase();
-    if (!q) return;
-    if (q.includes('doctor')) navigate('/doctors');
-    else if (q.includes('medicine') || q.includes('stock')) navigate('/medicines');
-    else if (q.includes('appoint')) navigate('/appointments');
-    else if (q.includes('visit')) navigate('/visits');
-    else if (q.includes('report')) navigate('/reports');
-    else if (q.includes('sale')) navigate('/sales');
-    else toast.info('Search', `No quick match for “${search.trim()}”. Use module filters.`);
   }
 
   return (
@@ -130,19 +115,6 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               </nav>
             </div>
           </div>
-
-          <form onSubmit={onSearchSubmit} className="relative mx-auto hidden max-w-md flex-1 lg:block">
-            <Search
-              size={15}
-              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[var(--color-muted)]"
-            />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search doctors, products, appointments…"
-              className="w-full rounded-[var(--radius-sm)] border border-[var(--color-border-strong)] bg-[var(--color-bg)] py-2 pr-3 pl-9 text-sm outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/15"
-            />
-          </form>
 
           <div className="ml-auto flex items-center gap-1.5">
             <div className="relative" ref={notifRef}>

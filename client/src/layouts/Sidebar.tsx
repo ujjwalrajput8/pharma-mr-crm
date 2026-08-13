@@ -17,8 +17,9 @@ export function Sidebar() {
           alt="Jovance Laboratories Pvt. Ltd."
           className="h-12 w-auto max-w-full object-contain"
         />
-        <p className="mt-2.5 text-[10px] font-semibold tracking-[0.14em] text-teal-100/50 uppercase">
-          Field Force
+        <p className="mt-2.5 text-[11px] font-semibold tracking-[0.06em] uppercase">
+          <span className="text-[#d4af37]">Jovance</span>{' '}
+          <span className="text-[#dc2626]">Laboratories</span>
         </p>
       </div>
 
