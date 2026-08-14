@@ -6,7 +6,11 @@ services:
     runtime: node
     rootDir: server
     plan: free
+    # No SQL migration folders yet (only migration_lock.toml) → use db push.
+    # When you add real migrations under prisma/migrations/*/migration.sql,
+    # switch preDeployCommand to: npx prisma migrate deploy
     buildCommand: npm install && npm run build
+    preDeployCommand: npx prisma db push
     startCommand: npm start
     healthCheckPath: /health
     envVars:
@@ -25,5 +29,5 @@ services:
 # - Prisma uses provider "prisma-client-js" → @prisma/client (CommonJS-safe).
 # - Do NOT use provider "prisma-client" with output "../generated/prisma"
 #   (that emits ESM + import.meta and breaks "type": "commonjs" / npm start).
-# - After first deploy, sync schema: npx prisma db push
-#   (or add a releaseCommand once you have real migrations).
+# - Schema sync today: preDeployCommand = `npx prisma db push`
+#   (migrate deploy finds nothing until you create real migration folders).
