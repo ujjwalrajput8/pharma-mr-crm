@@ -5,11 +5,12 @@ node_modules
 /generated/prisma
 dist
 
-# Accidental emit beside sources
+# Accidental emit beside sources (intentional ambient types live under src/types/*.ts)
 src/**/*.js
 src/**/*.js.map
 src/**/*.d.ts
 src/**/*.d.ts.map
+!src/types/**/*.d.ts
 *.js.map
 prisma.config.js
 prisma.config.d.ts
