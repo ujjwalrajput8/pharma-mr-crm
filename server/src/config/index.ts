@@ -18,6 +18,7 @@ export interface IConfig {
   readonly jwtAccessExpiresIn: string;
   readonly jwtRefreshExpiresIn: string;
   readonly corsOrigin: string;
+  readonly corsOrigins: string[];
   readonly bcryptSaltRounds: number;
   readonly rateLimitWindowMs: number;
   readonly rateLimitMax: number;
@@ -33,7 +34,10 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
-  CORS_ORIGIN: z.string().default('http://localhost:5173'),
+  // Comma-separated list. Includes prod frontend so Render works even if env is unset.
+  CORS_ORIGIN: z
+    .string()
+    .default('http://localhost:5173,https://pharma-mr-crm-1.onrender.com'),
   BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
@@ -145,6 +149,13 @@ export class Config implements IConfig {
 
   public get corsOrigin(): string {
     return this.parsed.CORS_ORIGIN;
+  }
+
+  /** Parsed allowlist from comma-separated `CORS_ORIGIN`. */
+  public get corsOrigins(): string[] {
+    return this.parsed.CORS_ORIGIN.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
   }
 
   public get bcryptSaltRounds(): number {

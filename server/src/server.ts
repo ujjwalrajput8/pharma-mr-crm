@@ -55,10 +55,24 @@ export class Server {
 
   private setupMiddlewares(): void {
     this.app.set('trust proxy', 1);
-    this.app.use(helmet());
+    this.app.use(
+      helmet({
+        // Frontend is on a different origin (Render static → API).
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+      }),
+    );
+
+    const allowedOrigins = this.config.corsOrigins;
     this.app.use(
       cors({
-        origin: this.config.corsOrigin,
+        origin(origin, callback) {
+          // Non-browser clients (health checks, curl) send no Origin.
+          if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+            return;
+          }
+          callback(null, false);
+        },
         credentials: true,
       }),
     );
