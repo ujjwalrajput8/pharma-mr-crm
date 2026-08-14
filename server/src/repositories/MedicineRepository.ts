@@ -1,4 +1,4 @@
-import type { Batch, Medicine, Prisma } from '../../generated/prisma/client';
+import type { Batch, Medicine, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/PrismaService';
 import { StockTxnRepository } from './StockTxnRepository';
 import { StockLedgerService } from '../services/StockLedgerService';

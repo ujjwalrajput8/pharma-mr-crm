@@ -55,3 +55,17 @@ npm run dev
 - RBAC on frontend (nav/routes) and backend (middleware)
 - JWT access token + httpOnly refresh cookie
 - Prisma repositories only; services own business rules
+
+## Render / production deploy (server)
+
+Root directory: `server`
+
+| Setting | Value |
+|---------|--------|
+| Build | `npm install && npm run build` |
+| Start | `npm start` |
+| Release (schema) | `npx prisma db push` *(no full migrate history yet)* |
+
+Required env: `DATABASE_URL`, JWT secrets, etc. (see `.env.example`).
+
+Build runs `prisma generate && tsc`. Client imports use `@prisma/client` (not a gitignored `generated/` folder).

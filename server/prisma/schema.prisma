@@ -2,8 +2,7 @@
 // Core bet: append-only stock_txns (mutable qty columns are NOT source of truth)
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {

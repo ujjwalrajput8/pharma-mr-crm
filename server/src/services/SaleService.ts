@@ -3,7 +3,7 @@ import type { CreateSaleDto, ListSalesQueryDto } from '../dto/sale.dto';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors/AppError';
 import { SaleRepository } from '../repositories/SaleRepository';
 import { PrismaService } from '../prisma/PrismaService';
-import { Prisma } from '../../generated/prisma/client';
+import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../types/auth.types';
 
 export class SaleService {

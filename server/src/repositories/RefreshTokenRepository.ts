@@ -1,4 +1,4 @@
-import type { Prisma, RefreshToken } from '../../generated/prisma/client';
+import type { Prisma, RefreshToken } from '@prisma/client';
 import { PrismaService } from '../prisma/PrismaService';
 
 /**

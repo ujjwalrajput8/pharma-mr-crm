@@ -6,7 +6,7 @@ import type {
   StockRefType,
   StockTxn,
   StockTxnType,
-} from '../../generated/prisma/client';
+} from '@prisma/client';
 import { HolderTypes, StockTxnTypes } from '../constants';
 import { PrismaService } from '../prisma/PrismaService';
 

@@ -1,4 +1,4 @@
-import type { Appointment, Prisma } from '../../generated/prisma/client';
+import type { Appointment, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/PrismaService';
 
 const appointmentInclude = {

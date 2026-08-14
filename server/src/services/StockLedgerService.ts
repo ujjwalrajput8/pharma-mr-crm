@@ -1,4 +1,4 @@
-import type { StockTxn } from '../../generated/prisma/client';
+import type { StockTxn } from '@prisma/client';
 import { HolderTypes, StockTxnTypes } from '../constants';
 import {
   StockTxnRepository,

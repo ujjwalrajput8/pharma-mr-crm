@@ -7,7 +7,7 @@ import { ConflictError, NotFoundError } from '../errors/AppError';
 import { MedicineRepository } from '../repositories/MedicineRepository';
 import { StockTxnRepository } from '../repositories/StockTxnRepository';
 import { StockLedgerService } from './StockLedgerService';
-import { Prisma } from '../../generated/prisma/client';
+import { Prisma } from '@prisma/client';
 
 export class MedicineService {
   private static instance: MedicineService | null = null;

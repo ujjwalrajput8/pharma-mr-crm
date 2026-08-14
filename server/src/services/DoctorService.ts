@@ -1,4 +1,4 @@
-import type { Doctor } from '../../generated/prisma/client';
+import type { Doctor } from '@prisma/client';
 import { AppRoles } from '../constants';
 import type {
   AssignMrDto,

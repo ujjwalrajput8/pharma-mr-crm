@@ -1,4 +1,4 @@
-import type { AttendanceStatus, Prisma } from '../../generated/prisma/client';
+import type { AttendanceStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/PrismaService';
 
 export class AttendanceRepository {

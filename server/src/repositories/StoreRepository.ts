@@ -1,4 +1,4 @@
-import type { MedicalStore, Prisma } from '../../generated/prisma/client';
+import type { MedicalStore, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/PrismaService';
 
 export class StoreRepository {

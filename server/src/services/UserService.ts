@@ -14,7 +14,7 @@ import {
 import { UserRepository, type UserWithProfile } from '../repositories/UserRepository';
 import { RefreshTokenRepository } from '../repositories/RefreshTokenRepository';
 import { PasswordService } from './PasswordService';
-import { Prisma } from '../../generated/prisma/client';
+import { Prisma } from '@prisma/client';
 
 export interface PublicUser {
   id: number;

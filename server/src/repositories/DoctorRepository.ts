@@ -1,4 +1,4 @@
-import type { Doctor, Prisma } from '../../generated/prisma/client';
+import type { Doctor, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/PrismaService';
 import { StockTxnRepository } from './StockTxnRepository';
 
