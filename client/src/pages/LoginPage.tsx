@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/store/AuthContext';
 import { getApiErrorMessage } from '@/api/client';
@@ -17,6 +18,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('Admin@12345');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -63,11 +65,15 @@ export function LoginPage() {
         onSubmit={(event) => void onSubmit(event)}
         className="relative z-10 w-full max-w-md rounded-xl border border-[#d3dee1] bg-white p-8 shadow-lg"
       >
-        <img
-          src="/jovance-logo.png"
-          alt="Jovance Laboratories Pvt. Ltd."
-          className="mb-6 h-20 w-auto max-w-[220px] object-contain lg:hidden"
-        />
+        <div className="mb-6 flex justify-center lg:hidden">
+          <div className="flex w-full items-center justify-center rounded-lg bg-[#0b2e2b] px-4 py-4">
+            <img
+              src="/jovance-logo-dark.png"
+              alt="Jovance Laboratories Pvt. Ltd."
+              className="h-24 w-auto max-w-[min(260px,80vw)] object-contain"
+            />
+          </div>
+        </div>
         <h2 className="text-2xl font-semibold text-[#102226]">Sign in</h2>
         <p className="mt-1 text-sm text-[#617276]">
           Use your Admin or MR credentials. There is no self-registration.
@@ -87,14 +93,25 @@ export function LoginPage() {
 
         <label className="mt-4 block text-sm font-medium text-[#102226]">
           Password
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-1.5 w-full rounded-md border border-[#d3dee1] bg-white px-3 py-2.5 text-[#102226] outline-none ring-[#0f766e] focus:ring-2"
-            autoComplete="current-password"
-          />
+          <div className="relative mt-1.5">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="w-full rounded-md border border-[#d3dee1] bg-white py-2.5 pr-11 pl-3 text-[#102226] outline-none ring-[#0f766e] focus:ring-2"
+              autoComplete="current-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-1 text-[#617276] hover:bg-[#f4f7f8] hover:text-[#102226]"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </label>
 
         {error ? (
