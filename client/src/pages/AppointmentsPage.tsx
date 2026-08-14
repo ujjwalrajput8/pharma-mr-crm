@@ -180,7 +180,7 @@ export function AppointmentsPage() {
         { key: 'assignedBy', label: 'Assigned by', sortable: true },
       );
     }
-    base.push({ key: 'actions', label: 'Actions' });
+    base.push({ key: 'actions', label: 'Actions', sortable: false });
     return base;
   }, [canManage]);
 
