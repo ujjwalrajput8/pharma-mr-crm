@@ -1,4 +1,4 @@
-# Render — Pharma MR CRM (server)
+# Render — Pharma MR CRM
 
 services:
   - type: web
@@ -24,8 +24,22 @@ services:
       - key: JWT_REFRESH_SECRET
         sync: false
 
+  # Frontend SPA — rewrite all paths to index.html so /dashboard reload works
+  - type: web
+    name: pharma-mr-crm-1
+    runtime: static
+    rootDir: client
+    plan: free
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
 # Notes:
 # - Prisma uses provider "prisma-client-js" → @prisma/client (CommonJS-safe).
 # - Do NOT use provider "prisma-client" with output "../generated/prisma"
 #   (that emits ESM + import.meta and breaks "type": "commonjs" / npm start).
 # - Schema: `npx prisma migrate deploy` (pending only). Seed: admin + permissions.
+# - Frontend: SPA rewrite /* → /index.html (also client/public/_redirects).
