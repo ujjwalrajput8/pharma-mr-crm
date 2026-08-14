@@ -6,9 +6,10 @@ services:
     runtime: node
     rootDir: server
     plan: free
-    # Schema + ensure admin & role permissions on every deploy (idempotent, no truncate).
+    # migrate deploy: only applies NEW pending migrations (no-op if none).
+    # seed: idempotent admin + role_permissions upsert every deploy.
     buildCommand: npm install && npm run build
-    preDeployCommand: npx prisma db push && npx prisma db seed
+    preDeployCommand: npx prisma migrate deploy && npx prisma db seed
     startCommand: npm start
     healthCheckPath: /health
     envVars:
@@ -27,5 +28,4 @@ services:
 # - Prisma uses provider "prisma-client-js" → @prisma/client (CommonJS-safe).
 # - Do NOT use provider "prisma-client" with output "../generated/prisma"
 #   (that emits ESM + import.meta and breaks "type": "commonjs" / npm start).
-# - Schema sync: preDeployCommand = `npx prisma db push && npx prisma db seed`
-#   Seed is idempotent: admin upsert + role permissions only (no demo truncate).
+# - Schema: `npx prisma migrate deploy` (pending only). Seed: admin + permissions.

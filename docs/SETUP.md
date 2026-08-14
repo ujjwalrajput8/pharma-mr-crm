@@ -64,8 +64,10 @@ Or use repo-root [`render.yaml`](../render.yaml).
 | Setting | Value |
 |---------|--------|
 | Build | `npm install && npm run build` |
+| Pre-deploy | `npx prisma migrate deploy && npx prisma db seed` |
 | Start | `npm start` → `node dist/server.js` |
-| Schema sync | `npx prisma db push` *(until real migrations exist)* |
+
+`migrate deploy` sirf **pending** migrations apply karta hai (nayi na ho to no-op). Seed har baar admin + role permissions upsert karta hai.
 
 Required env: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, etc. (see `.env.example`).
 

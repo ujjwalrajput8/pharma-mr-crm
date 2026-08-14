@@ -28,11 +28,11 @@ npm run dev
 | API       | http://localhost:4000 |
 | Health    | http://localhost:4000/health |
 
-DB seed / reset chahiye ho to (sirf **admin + role permissions** — baaki data touch nahi):
+DB seed (sirf **admin + role permissions** — baaki data touch nahi):
 
 ```bash
 cd server
-npx prisma db push
+npx prisma migrate deploy
 npm run prisma:seed
 ```
 
