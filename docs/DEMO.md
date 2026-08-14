@@ -28,11 +28,11 @@ npm run dev
 | API       | http://localhost:4000 |
 | Health    | http://localhost:4000/health |
 
-DB seed / reset chahiye ho to:
+DB seed (sirf **admin + role permissions** — baaki data touch nahi):
 
 ```bash
 cd server
-npx prisma db push
+npx prisma migrate deploy
 npm run prisma:seed
 ```
 
@@ -42,11 +42,12 @@ Setup detail: [SETUP.md](./SETUP.md)
 
 ## 2. Demo login accounts
 
+Seed se sirf Admin banta hai. Manager / MR aap Users se create karo.
+
 | Role | Email | Password | Client ko kya dikhana |
 |------|--------|----------|------------------------|
 | **Admin** | `admin@pharma-mr.local` | `Admin@12345` | Masters, users, Manager permissions, reports |
-| **Manager (ASM)** | `asm.west@jovance.local` | `Manager@12345` | Team approvals, attendance, stock issue |
-| **MR** | `rahul.mr@jovance.local` | `Mr@12345` | My Day, visit/DCR, own stock, check-in |
+| **Manager / MR** | (UI se create) | (jo set karo) | Team / field workflows |
 
 Extra MRs (same password `Mr@12345`):
 
