@@ -3,7 +3,11 @@ import { NAV_ITEMS } from '@/constants/navigation';
 import { useAuth } from '@/store/AuthContext';
 import { cn } from '@/utils/cn';
 
-export function Sidebar() {
+type SidebarProps = {
+  onNavigate?: () => void;
+};
+
+export function Sidebar({ onNavigate }: SidebarProps) {
   const { canAny } = useAuth();
   const items = NAV_ITEMS.filter((item) => canAny(item.permissions));
 
@@ -38,6 +42,7 @@ export function Sidebar() {
               ) : null}
               <NavLink
                 to={item.path}
+                onClick={() => onNavigate?.()}
                 className={({ isActive }) =>
                   cn(
                     'flex items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-2 text-[13px] font-medium transition-colors',

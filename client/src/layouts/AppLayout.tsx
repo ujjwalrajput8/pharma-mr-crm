@@ -20,7 +20,7 @@ export function AppLayout() {
           'lg:translate-x-0',
         )}
       >
-        <Sidebar />
+        <Sidebar onNavigate={() => setMobileOpen(false)} />
       </div>
 
       {mobileOpen ? (
