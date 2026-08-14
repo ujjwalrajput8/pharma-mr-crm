@@ -84,7 +84,7 @@ export class AuthController {
         : undefined;
 
     await this.authService.logout(bodyToken ?? cookieToken);
-    res.clearCookie(REFRESH_COOKIE, { httpOnly: true, sameSite: 'lax', path: '/api/v1/auth' });
+    res.clearCookie(REFRESH_COOKIE, this.refreshCookieOptions());
     ApiResponse.success(res, null, 'Logged out');
   };
 
@@ -98,12 +98,20 @@ export class AuthController {
     ApiResponse.success(res, { user }, 'Current user');
   };
 
+  private refreshCookieOptions() {
+    const isProd = process.env.NODE_ENV === 'production';
+    return {
+      httpOnly: true,
+      secure: isProd,
+      // Cross-origin SPA (e.g. Vercel → Render) needs None; local same-site uses Lax.
+      sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
+      path: '/api/v1/auth',
+    };
+  }
+
   private setRefreshCookie(res: Response, token: string): void {
     res.cookie(REFRESH_COOKIE, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/api/v1/auth',
+      ...this.refreshCookieOptions(),
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
   }

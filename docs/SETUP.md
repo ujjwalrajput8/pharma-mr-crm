@@ -58,14 +58,24 @@ npm run dev
 
 ## Render / production deploy (server)
 
-Root directory: `server`
+Root directory: `server`  
+Or use repo-root [`render.yaml`](../render.yaml).
 
 | Setting | Value |
 |---------|--------|
 | Build | `npm install && npm run build` |
-| Start | `npm start` |
-| Release (schema) | `npx prisma db push` *(no full migrate history yet)* |
+| Start | `npm start` → `node dist/server.js` |
+| Schema sync | `npx prisma db push` *(until real migrations exist)* |
 
-Required env: `DATABASE_URL`, JWT secrets, etc. (see `.env.example`).
+Required env: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, etc. (see `.env.example`).
 
-Build runs `prisma generate && tsc`. Client imports use `@prisma/client` (not a gitignored `generated/` folder).
+### Prisma + CommonJS (important)
+
+Production package is `"type": "commonjs"`.
+
+- Use `generator.provider = "prisma-client-js"` and import from `@prisma/client`.
+- **Do not** use `provider = "prisma-client"` with `output = "../generated/prisma"`.  
+  That emits ESM (`import.meta`) into `dist/generated/...` and crashes `npm start` with:  
+  `SyntaxError: Cannot use 'import.meta' outside a module`.
+
+Build: `clean` → `prisma generate` → `tsc`.

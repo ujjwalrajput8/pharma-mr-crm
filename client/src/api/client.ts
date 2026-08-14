@@ -3,6 +3,11 @@ import type { ApiError, ApiSuccess } from '@/types';
 
 const ACCESS_TOKEN_KEY = 'pharma_access_token';
 
+/** Local: `/api/v1` (Vite proxy). Prod: set `VITE_API_BASE_URL` in `.env.production`. */
+export const API_BASE_URL =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
+  '/api/v1';
+
 export const tokenStorage = {
   get(): string | null {
     return localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -16,7 +21,7 @@ export const tokenStorage = {
 };
 
 export const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -36,7 +41,7 @@ let refreshPromise: Promise<string | null> | null = null;
 async function refreshAccessToken(): Promise<string | null> {
   try {
     const response = await axios.post<ApiSuccess<{ accessToken: string }>>(
-      '/api/v1/auth/refresh',
+      `${API_BASE_URL}/auth/refresh`,
       {},
       { withCredentials: true },
     );

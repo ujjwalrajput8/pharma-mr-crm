@@ -1,0 +1,27 @@
+# Render — Pharma MR CRM (server)
+
+services:
+  - type: web
+    name: pharma-mr-crm-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+
+# Notes:
+# - Prisma uses provider "prisma-client-js" → @prisma/client (CommonJS-safe).
+# - Do NOT use provider "prisma-client" with output "../generated/prisma"
+#   (that emits ESM + import.meta and breaks "type": "commonjs" / npm start).
+# - After first deploy, sync schema: npx prisma db push
+#   (or add a releaseCommand once you have real migrations).
