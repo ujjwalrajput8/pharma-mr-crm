@@ -2,7 +2,10 @@
 // Core bet: append-only stock_txns (mutable qty columns are NOT source of truth)
 
 generator client {
-  provider = "prisma-client-js"
+  // Must stay prisma-client-js for CommonJS ("type": "commonjs") production starts.
+  // Do NOT use provider = "prisma-client" + custom output (ESM/import.meta → npm start crash).
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
