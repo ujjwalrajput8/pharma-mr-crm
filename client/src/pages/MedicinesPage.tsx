@@ -110,7 +110,7 @@ export function MedicinesPage() {
 
       {error ? <Alert message={error} /> : null}
 
-      <Card className="p-4">
+      <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}
@@ -207,102 +207,137 @@ export function MedicinesPage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Add Medicine"
-        description="Create medicine master record with stock and sample availability."
+        title="Add Medicine Master"
+        description="Register pharmaceutical products into catalog with batch specifications, MRP, and stock controls."
         className="max-w-3xl"
         footer={
           <>
             <Button variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" form="create-medicine-form" disabled={createMutation.isPending}>
+            <Button type="submit" form="create-medicine-form" loading={createMutation.isPending}>
               {createMutation.isPending ? 'Saving…' : 'Save Medicine'}
             </Button>
           </>
         }
       >
-        <form id="create-medicine-form" className="grid gap-3 sm:grid-cols-2" onSubmit={onCreate}>
-          <Input
-            label="Medicine Name"
-            required
-            value={form.name}
-            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-          />
-          <Input
-            label="Brand Name"
-            value={form.brandName}
-            onChange={(e) => setForm((prev) => ({ ...prev, brandName: e.target.value }))}
-          />
-          <Input
-            label="Generic Name"
-            value={form.genericName}
-            onChange={(e) => setForm((prev) => ({ ...prev, genericName: e.target.value }))}
-          />
-          <Input
-            label="Composition"
-            value={form.composition}
-            onChange={(e) => setForm((prev) => ({ ...prev, composition: e.target.value }))}
-          />
-          <Input
-            label="Strength"
-            value={form.strength}
-            onChange={(e) => setForm((prev) => ({ ...prev, strength: e.target.value }))}
-          />
-          <Input
-            label="Company"
-            value={form.company}
-            onChange={(e) => setForm((prev) => ({ ...prev, company: e.target.value }))}
-          />
-          <Input
-            label="Category"
-            value={form.category}
-            onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
-          />
-          <Input
-            label="Batch Number"
-            value={form.batchNumber}
-            onChange={(e) => setForm((prev) => ({ ...prev, batchNumber: e.target.value }))}
-          />
-          <DatePicker
-            label="Expiry"
-            value={form.expiryDate || ''}
-            onChange={(value) => setForm((prev) => ({ ...prev, expiryDate: value }))}
-          />
-          <Input
-            label="MRP"
-            type="number"
-            min={0}
-            step="0.01"
-            required
-            value={form.mrp}
-            onChange={(e) => setForm((prev) => ({ ...prev, mrp: Number(e.target.value) }))}
-          />
-          <Input
-            label="Current / Opening Stock"
-            type="number"
-            min={0}
-            value={form.openingStock}
-            onChange={(e) => setForm((prev) => ({ ...prev, openingStock: Number(e.target.value) }))}
-          />
-          <Input
-            label="Minimum stock alert"
-            type="number"
-            min={0}
-            value={form.minimumStockAlert}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, minimumStockAlert: Number(e.target.value) }))
-            }
-          />
-          <Select
-            label="Available Samples"
-            value={form.sampleAvailable === false ? 'no' : 'yes'}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, sampleAvailable: e.target.value === 'yes' }))
-            }
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </Select>
+        <form id="create-medicine-form" className="space-y-4" onSubmit={onCreate}>
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
+              Molecule & Brand Identity
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Medicine Name"
+                required
+                placeholder="e.g. Jovamox 500"
+                value={form.name}
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              />
+              <Input
+                label="Brand Name"
+                placeholder="e.g. Jovamox"
+                value={form.brandName}
+                onChange={(e) => setForm((prev) => ({ ...prev, brandName: e.target.value }))}
+              />
+              <Input
+                label="Generic / Active Salt"
+                placeholder="e.g. Amoxicillin Trihydrate"
+                value={form.genericName}
+                onChange={(e) => setForm((prev) => ({ ...prev, genericName: e.target.value }))}
+              />
+              <Input
+                label="Manufacturing Company"
+                placeholder="e.g. Jovance Laboratories"
+                value={form.company}
+                onChange={(e) => setForm((prev) => ({ ...prev, company: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-teal-500" />
+              Formulation & Batch Details
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Composition Details"
+                placeholder="e.g. Amoxicillin 500mg + Clavulanic Acid 125mg"
+                value={form.composition}
+                onChange={(e) => setForm((prev) => ({ ...prev, composition: e.target.value }))}
+              />
+              <Input
+                label="Strength / Dosage Form"
+                placeholder="e.g. 500mg Tablet / 100ml Syrup"
+                value={form.strength}
+                onChange={(e) => setForm((prev) => ({ ...prev, strength: e.target.value }))}
+              />
+              <Input
+                label="Therapeutic Category"
+                placeholder="e.g. Antibiotic, Analgesic, Cardiology"
+                value={form.category}
+                onChange={(e) => setForm((prev) => ({ ...prev, category: e.target.value }))}
+              />
+              <Input
+                label="Initial Batch Number"
+                placeholder="e.g. BATCH-2026-A1"
+                value={form.batchNumber}
+                onChange={(e) => setForm((prev) => ({ ...prev, batchNumber: e.target.value }))}
+              />
+              <DatePicker
+                label="Expiry Date"
+                value={form.expiryDate || ''}
+                onChange={(value) => setForm((prev) => ({ ...prev, expiryDate: value }))}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              Pricing & Inventory Controls
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Input
+                label="MRP (₹)"
+                type="number"
+                min={0}
+                step="0.01"
+                required
+                placeholder="0.00"
+                value={form.mrp}
+                onChange={(e) => setForm((prev) => ({ ...prev, mrp: Number(e.target.value) }))}
+              />
+              <Input
+                label="Opening Stock"
+                type="number"
+                min={0}
+                value={form.openingStock}
+                onChange={(e) => setForm((prev) => ({ ...prev, openingStock: Number(e.target.value) }))}
+              />
+              <Input
+                label="Low Stock Alert Threshold"
+                type="number"
+                min={0}
+                value={form.minimumStockAlert}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, minimumStockAlert: Number(e.target.value) }))
+                }
+              />
+              <Select
+                label="Sample Available for MR"
+                value={form.sampleAvailable === false ? 'no' : 'yes'}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, sampleAvailable: e.target.value === 'yes' }))
+                }
+              >
+                <option value="yes">Yes (Distributable)</option>
+                <option value="no">No (Commercial Only)</option>
+              </Select>
+            </div>
+          </div>
         </form>
       </Modal>
 

@@ -41,11 +41,12 @@ export function DashboardCalendar({
     const appointmentEvents: EventInput[] = appointments.map((item) => ({
       id: `appointment:${item.id}`,
       title: showMrName
-        ? `Appt · ${item.mr?.fullName ?? 'MR'} · ${item.doctor?.fullName ?? 'Doctor'}`
-        : `Appt · ${item.doctor?.fullName ?? 'Doctor'}`,
+        ? `📅 Appt: ${item.mr?.fullName ?? 'MR'} → ${item.doctor?.fullName ?? 'Dr'}`
+        : `📅 Appt: ${item.doctor?.fullName ?? 'Doctor'}`,
       start: combineDateTime(item.date, item.time),
-      backgroundColor: 'var(--color-cal-appointment)',
-      borderColor: 'var(--color-cal-appointment)',
+      backgroundColor: 'var(--color-primary-soft)',
+      borderColor: 'var(--color-primary)',
+      textColor: 'var(--color-ink)',
       editable: item.status === 'PENDING',
       extendedProps: { kind: 'appointment' as const, entityId: item.id },
     }));
@@ -53,11 +54,12 @@ export function DashboardCalendar({
     const visitEvents: EventInput[] = visits.map((item) => ({
       id: `visit:${item.id}`,
       title: showMrName
-        ? `Visit · ${item.mr?.fullName ?? 'MR'} · ${item.doctor?.fullName ?? 'Doctor'}`
-        : `Visit · ${item.doctor?.fullName ?? 'Doctor'}`,
+        ? `🩺 Visit: ${item.mr?.fullName ?? 'MR'} → ${item.doctor?.fullName ?? 'Dr'}`
+        : `🩺 Visit: ${item.doctor?.fullName ?? 'Doctor'}`,
       start: combineDateTime(item.visitDate, item.visitTime ?? '09:00'),
-      backgroundColor: 'var(--color-cal-visit)',
-      borderColor: 'var(--color-cal-visit)',
+      backgroundColor: 'rgba(37, 99, 235, 0.12)',
+      borderColor: '#2563eb',
+      textColor: 'var(--color-ink)',
       editable: false,
       extendedProps: { kind: 'visit' as const, entityId: item.id },
     }));
@@ -66,11 +68,12 @@ export function DashboardCalendar({
       .filter((item) => item.nextFollowUp)
       .map((item) => ({
         id: `followup:${item.id}`,
-        title: `Follow-up · ${item.doctor?.fullName ?? 'Doctor'}`,
+        title: `🔔 Follow-up: ${item.doctor?.fullName ?? 'Dr'}`,
         start: item.nextFollowUp!,
         allDay: true,
-        backgroundColor: 'var(--color-cal-followup)',
-        borderColor: 'var(--color-cal-followup)',
+        backgroundColor: 'rgba(217, 119, 6, 0.12)',
+        borderColor: '#d97706',
+        textColor: 'var(--color-ink)',
         editable: false,
         extendedProps: { kind: 'followup' as const, entityId: item.id },
       }));
@@ -78,19 +81,32 @@ export function DashboardCalendar({
     return [...appointmentEvents, ...visitEvents, ...followUps];
   }, [appointments, visits, showMrName]);
 
+  const apptCount = appointments.length;
+  const visitCount = visits.length;
+  const followUpCount = visits.filter((v) => v.nextFollowUp).length;
+
   return (
-    <Card className="overflow-hidden p-3 md:p-5">
-      <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-[var(--color-muted)]">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-cal-appointment)]" /> Appointment
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-cal-visit)]" /> Visit
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-cal-followup)]" /> Follow-up
-        </span>
+    <Card className="overflow-hidden p-4 md:p-6 shadow-sm border border-[var(--color-border)]">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-primary-soft)] px-3 py-1 text-xs font-semibold text-[var(--color-primary)] border border-[var(--color-primary)]/20 shadow-2xs">
+            <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
+            Appointments ({apptCount})
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 border border-blue-500/20 shadow-2xs">
+            <span className="h-2 w-2 rounded-full bg-blue-500" />
+            Visits ({visitCount})
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400 border border-amber-500/20 shadow-2xs">
+            <span className="h-2 w-2 rounded-full bg-amber-500" />
+            Follow-ups ({followUpCount})
+          </span>
+        </div>
+        <p className="text-xs text-[var(--color-muted)] italic hidden sm:block">
+          💡 Click any date slot to schedule an appointment.
+        </p>
       </div>
+
       <div className="fc-shell scrollbar-hide">
         <FullCalendar
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}

@@ -115,7 +115,7 @@ export function SalesPage() {
         }
       />
       {error ? <Alert message={error} /> : null}
-      <Card className="p-4">
+      <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}

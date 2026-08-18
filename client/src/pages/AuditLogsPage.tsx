@@ -42,7 +42,7 @@ export function AuditLogsPage() {
         description="Security and change history for administrators. Successful logins are recorded automatically."
       />
 
-      <Card className="p-4">
+      <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}

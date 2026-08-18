@@ -77,7 +77,7 @@ export function VisitsPage() {
         click <strong>Complete + Visit</strong>. Sample distribution there reduces stock automatically.
       </Card>
 
-      <Card className="p-4">
+      <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}

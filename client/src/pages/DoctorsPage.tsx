@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
-import { Input } from '@/components/ui/Field';
+import { Input, Select } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -115,7 +115,7 @@ export function DoctorsPage() {
 
       {error ? <Alert message={error} /> : null}
 
-      <Card className="p-4">
+      <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}
@@ -203,83 +203,113 @@ export function DoctorsPage() {
         open={open}
         onClose={() => setOpen(false)}
         title="Add Doctor"
-        description="Capture doctor details and optionally assign an MR."
+        description="Register a healthcare professional in the doctor master directory and assign a field representative."
         className="max-w-2xl"
         footer={
           <>
             <Button variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" form="create-doctor-form" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Saving…' : 'Save Doctor'}
+            <Button type="submit" form="create-doctor-form" loading={createMutation.isPending}>
+              {createMutation.isPending ? 'Saving…' : 'Register Doctor'}
             </Button>
           </>
         }
       >
-        <form id="create-doctor-form" className="grid gap-3 sm:grid-cols-2" onSubmit={onCreate}>
-          <Input
-            label="Full name"
-            required
-            value={form.fullName}
-            onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-          />
-          <Input
-            label="Specialization"
-            value={form.specialization}
-            onChange={(e) => setForm((prev) => ({ ...prev, specialization: e.target.value }))}
-          />
-          <Input
-            label="Hospital"
-            value={form.hospital}
-            onChange={(e) => setForm((prev) => ({ ...prev, hospital: e.target.value }))}
-          />
-          <Input
-            label="Clinic"
-            value={form.clinic}
-            onChange={(e) => setForm((prev) => ({ ...prev, clinic: e.target.value }))}
-          />
-          <Input
-            label="Phone"
-            value={form.phone}
-            onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-          />
-          <Input
-            label="City"
-            value={form.city}
-            onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
-          />
-          <Input
-            label="Visiting days"
-            placeholder="Mon, Wed, Fri"
-            value={form.visitingDays}
-            onChange={(e) => setForm((prev) => ({ ...prev, visitingDays: e.target.value }))}
-          />
-          <Input
-            label="Preferred time"
-            placeholder="10:00–13:00"
-            value={form.preferredTime}
-            onChange={(e) => setForm((prev) => ({ ...prev, preferredTime: e.target.value }))}
-          />
-          <label className="block text-sm font-medium sm:col-span-2">
-            Assign MR
-            <select
-              className="mt-1.5 w-full rounded-xl border border-[var(--color-border)] bg-white px-3.5 py-2.5 text-sm outline-none focus:ring-2 focus:ring-teal-500/20"
-              value={form.mrId ?? ''}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  mrId: e.target.value ? Number(e.target.value) : undefined,
-                }))
-              }
-            >
-              <option value="">Unassigned</option>
-              {mrsQuery.data?.map((mr) => (
-                <option key={mr.id} value={mr.id}>
-                  {mr.fullName} ({mr.email})
-                </option>
-              ))}
-            </select>
-          </label>
+        <form id="create-doctor-form" className="space-y-4" onSubmit={onCreate}>
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
+              Doctor Profile & Contact
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Full Name"
+                required
+                placeholder="Dr. Rajesh Sharma"
+                value={form.fullName}
+                onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
+              />
+              <Input
+                label="Specialization"
+                placeholder="e.g. Cardiologist, Physician"
+                value={form.specialization}
+                onChange={(e) => setForm((prev) => ({ ...prev, specialization: e.target.value }))}
+              />
+              <Input
+                label="Phone Number"
+                placeholder="+91 98765 43210"
+                value={form.phone}
+                onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+              />
+              <Input
+                label="City / Territory"
+                placeholder="e.g. Mumbai, Pune"
+                value={form.city}
+                onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-teal-500" />
+              Practice & Affiliation
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Primary Hospital"
+                placeholder="e.g. Apollo Hospital"
+                value={form.hospital}
+                onChange={(e) => setForm((prev) => ({ ...prev, hospital: e.target.value }))}
+              />
+              <Input
+                label="Private Clinic"
+                placeholder="e.g. Sharma Health Clinic"
+                value={form.clinic}
+                onChange={(e) => setForm((prev) => ({ ...prev, clinic: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              Visiting Schedule & MR Assignment
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Visiting Days"
+                placeholder="Mon, Wed, Fri"
+                value={form.visitingDays}
+                onChange={(e) => setForm((prev) => ({ ...prev, visitingDays: e.target.value }))}
+              />
+              <Input
+                label="Preferred Time Window"
+                placeholder="10:00 AM – 01:00 PM"
+                value={form.preferredTime}
+                onChange={(e) => setForm((prev) => ({ ...prev, preferredTime: e.target.value }))}
+              />
+              <Select
+                label="Assign Field Representative (MR)"
+                className="sm:col-span-2"
+                value={form.mrId ?? ''}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    mrId: e.target.value ? Number(e.target.value) : undefined,
+                  }))
+                }
+              >
+                <option value="">Unassigned (Open Pool)</option>
+                {mrsQuery.data?.map((mr) => (
+                  <option key={mr.id} value={mr.id}>
+                    {mr.fullName} ({mr.email})
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
         </form>
       </Modal>
 

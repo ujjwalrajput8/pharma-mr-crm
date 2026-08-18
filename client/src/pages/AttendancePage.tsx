@@ -168,59 +168,71 @@ export function AttendancePage() {
       ) : null}
 
       {canSelfMark ? (
-        <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-              Today · {user?.fullName}
-            </p>
-            <p className="mt-1 text-base font-semibold">
-              {today?.checkInAt
-                ? `In ${new Date(today.checkInAt).toLocaleTimeString()}${
-                    today.checkOutAt
-                      ? ` · Out ${new Date(today.checkOutAt).toLocaleTimeString()}`
-                      : ''
-                  }`
-                : today?.status === 'ABSENT'
-                  ? 'Marked absent'
-                  : 'Not checked in'}
-            </p>
-            {today?.workingHours != null ? (
-              <p className="text-sm text-[var(--color-muted)]">Hours: {today.workingHours}</p>
-            ) : null}
-            {today?.status ? (
-              <div className="mt-2">
-                <Badge tone={statusTone[today.status]}>{today.status}</Badge>
+        <Card className="relative overflow-hidden border border-[var(--color-border)] bg-gradient-to-r from-[var(--color-surface)] via-[var(--color-surface)] to-[var(--color-primary-soft)]/30 p-5 shadow-xs">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3.5">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-primary)] text-white shadow-sm">
+                <span className="text-lg font-bold">📍</span>
               </div>
-            ) : null}
-          </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <Button
-              className="w-full sm:w-auto"
-              onClick={() => checkInMutation.mutate()}
-              disabled={
-                Boolean(today?.checkInAt && !today.checkOutAt) ||
-                today?.status === 'ABSENT' ||
-                checkInMutation.isPending
-              }
-            >
-              Check-in
-            </Button>
-            <Button
-              variant="secondary"
-              className="w-full sm:w-auto"
-              onClick={() => checkOutMutation.mutate()}
-              disabled={
-                !today?.checkInAt || Boolean(today.checkOutAt) || checkOutMutation.isPending
-              }
-            >
-              Check-out
-            </Button>
+              <div>
+                <p className="text-[11px] font-bold tracking-wider text-[var(--color-muted)] uppercase flex items-center gap-1.5">
+                  <span>Today's Field Attendance</span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-primary)] animate-pulse" />
+                  <span>{user?.fullName}</span>
+                </p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="text-base font-bold text-[var(--color-ink)]">
+                    {today?.checkInAt
+                      ? `Clocked In ${new Date(today.checkInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${
+                          today.checkOutAt
+                            ? ` · Out ${new Date(today.checkOutAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                            : ' (Active)'
+                        }`
+                      : today?.status === 'ABSENT'
+                        ? 'Marked Absent'
+                        : 'Not Checked In Yet'}
+                  </p>
+                  {today?.status ? (
+                    <Badge tone={statusTone[today.status]}>{today.status}</Badge>
+                  ) : null}
+                </div>
+                {today?.workingHours != null ? (
+                  <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                    Logged Working Hours: <span className="font-semibold text-[var(--color-ink)]">{today.workingHours} hrs</span>
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <Button
+                className="w-full sm:w-auto shadow-xs"
+                onClick={() => checkInMutation.mutate()}
+                loading={checkInMutation.isPending}
+                disabled={
+                  Boolean(today?.checkInAt && !today.checkOutAt) ||
+                  today?.status === 'ABSENT' ||
+                  checkInMutation.isPending
+                }
+              >
+                Punch In (Check-in)
+              </Button>
+              <Button
+                variant="secondary"
+                className="w-full sm:w-auto"
+                onClick={() => checkOutMutation.mutate()}
+                loading={checkOutMutation.isPending}
+                disabled={
+                  !today?.checkInAt || Boolean(today.checkOutAt) || checkOutMutation.isPending
+                }
+              >
+                Punch Out (Check-out)
+              </Button>
+            </div>
           </div>
         </Card>
       ) : (
-        <Card className="border-dashed p-4 text-sm text-[var(--color-muted)]">
-          Admin accounts do not check in. Use <strong>Mark / update</strong> to set Present, Late, or
-          Absent for MRs and Managers.
+        <Card className="border-dashed p-4 text-xs leading-relaxed text-[var(--color-muted)] bg-[var(--color-surface)]/50">
+          Admin workspace accounts do not mark personal check-in. Use <strong>Mark / update</strong> to record attendance statuses (Present, Late, Absent, Leave) for field team members.
         </Card>
       )}
 
@@ -332,14 +344,16 @@ export function AttendancePage() {
       <Modal
         open={manageOpen}
         onClose={() => setManageOpen(false)}
-        title="Manage attendance"
-        description="Set Present, Late, Absent, Leave, etc. for a field user."
+        title="Manage Field Attendance"
+        description="Update or override attendance status for a field representative with justification notes."
+        className="max-w-xl"
         footer={
           <>
             <Button variant="secondary" onClick={() => setManageOpen(false)}>
               Cancel
             </Button>
             <Button
+              loading={manageMutation.isPending}
               disabled={!manageForm.userId || manageMutation.isPending}
               onClick={() =>
                 manageMutation.mutate({
@@ -350,58 +364,63 @@ export function AttendancePage() {
                 })
               }
             >
-              {manageMutation.isPending ? 'Saving…' : 'Save mark'}
+              {manageMutation.isPending ? 'Saving Record…' : 'Save Attendance Mark'}
             </Button>
           </>
         }
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Select
-            label="Person"
-            required
-            value={manageForm.userId}
-            onChange={(e) => setManageForm((p) => ({ ...p, userId: e.target.value }))}
-            className="sm:col-span-2"
-          >
-            <option value="">Select MR / Manager</option>
-            {fieldUsers.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.fullName} ({u.role})
-              </option>
-            ))}
-          </Select>
-          <Input
-            label="Date"
-            type="text"
-            required
-            value={manageForm.attDate}
-            onChange={(e) => setManageForm((p) => ({ ...p, attDate: e.target.value }))}
-            placeholder="YYYY-MM-DD"
-            hint="Use YYYY-MM-DD"
-          />
-          <Select
-            label="Status"
-            required
-            value={manageForm.status}
-            onChange={(e) =>
-              setManageForm((p) => ({ ...p, status: e.target.value as AttendanceMarkStatus }))
-            }
-          >
-            <option value="PRESENT">Present</option>
-            <option value="LATE">Late</option>
-            <option value="ABSENT">Absent</option>
-            <option value="LEAVE">Leave</option>
-            <option value="HOLIDAY">Holiday</option>
-            <option value="OFFICE">Office</option>
-            <option value="JOINT_WORK">Joint work</option>
-            <option value="FLAGGED">Flagged</option>
-          </Select>
-          <Input
-            label="Remarks"
-            className="sm:col-span-2"
-            value={manageForm.remarks}
-            onChange={(e) => setManageForm((p) => ({ ...p, remarks: e.target.value }))}
-          />
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <Select
+              label="Select Field Staff"
+              required
+              value={manageForm.userId}
+              onChange={(e) => setManageForm((p) => ({ ...p, userId: e.target.value }))}
+            >
+              <option value="">Choose Medical Representative or Manager</option>
+              {fieldUsers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.fullName} ({u.role})
+                </option>
+              ))}
+            </Select>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Attendance Date"
+                type="text"
+                required
+                value={manageForm.attDate}
+                onChange={(e) => setManageForm((p) => ({ ...p, attDate: e.target.value }))}
+                placeholder="YYYY-MM-DD"
+                hint="Format: YYYY-MM-DD"
+              />
+              <Select
+                label="Marked Status"
+                required
+                value={manageForm.status}
+                onChange={(e) =>
+                  setManageForm((p) => ({ ...p, status: e.target.value as AttendanceMarkStatus }))
+                }
+              >
+                <option value="PRESENT">🟢 Present (Full Day)</option>
+                <option value="LATE">🟡 Late (Half Day / Late Arrival)</option>
+                <option value="ABSENT">🔴 Absent (Unapproved)</option>
+                <option value="LEAVE">⚪ Leave (Approved Leave)</option>
+                <option value="HOLIDAY">🔵 Holiday / Sunday</option>
+                <option value="OFFICE">🏢 Office Meeting / Training</option>
+                <option value="JOINT_WORK">🤝 Joint Field Work</option>
+                <option value="FLAGGED">⚠️ Flagged for Audit</option>
+              </Select>
+            </div>
+
+            <Input
+              label="Manager Remarks / Justification"
+              placeholder="e.g. Approved leave for medical reasons, joint fieldwork in Kanpur..."
+              value={manageForm.remarks}
+              onChange={(e) => setManageForm((p) => ({ ...p, remarks: e.target.value }))}
+            />
+          </div>
         </div>
       </Modal>
     </div>

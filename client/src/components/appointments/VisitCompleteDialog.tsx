@@ -1,9 +1,9 @@
-import { Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, MessageSquare, PackageCheck, Pill, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/Button';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Input, Select, Textarea } from '@/components/ui/Field';
-import { Modal } from '@/components/ui/Modal';
+import { FormSection, Modal } from '@/components/ui/Modal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { TimePicker } from '@/components/ui/TimePicker';
 import type { Appointment, CompleteAppointmentPayload } from '@/services/appointments.service';
@@ -126,99 +126,108 @@ export function VisitCompleteDialog({
     <Modal
       open={open}
       onClose={onClose}
+      icon={CheckCircle2}
+      badge="Visit Logging"
       title="Complete Appointment & Log Visit"
-      description="Structured visit capture. Sample lines reduce stock automatically on save."
+      description="Capture detailed interaction notes, products discussed, and distribute physical samples with automated stock deduction."
       className="max-w-4xl"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" form="visit-complete-form" disabled={submitting}>
-            {submitting ? 'Saving…' : 'Complete & Save Visit'}
+          <Button type="submit" form="visit-complete-form" loading={submitting}>
+            {submitting ? 'Saving Visit Record…' : 'Complete & Save Visit'}
           </Button>
         </>
       }
     >
-      <form id="visit-complete-form" className="space-y-6" onSubmit={handleSubmit}>
-        <section className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-            Section 1 · Basic Information
-          </h3>
-          <div className="grid gap-3 sm:grid-cols-2">
+      <form id="visit-complete-form" className="space-y-4" onSubmit={handleSubmit}>
+        <FormSection
+          title="Basic Visit Info & Timings"
+          subtitle="Appointment context, visit date, check-in, and check-out"
+          icon={CheckCircle2}
+        >
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Input label="Appointment" value={appointment ? `#${appointment.id}` : ''} disabled readOnly />
             <Input label="Doctor" value={appointment?.doctor?.fullName ?? ''} disabled readOnly />
-            <Input label="MR" value={appointment?.mr?.fullName ?? '—'} disabled readOnly />
-            <DatePicker label="Visit Date" required value={visitDate} onChange={setVisitDate} />
-            <TimePicker label="Visit Time" required value={visitTime} onChange={setVisitTime} />
-            <TimePicker label="Check-in Time" required value={checkIn} onChange={setCheckIn} />
-            <TimePicker label="Check-out Time" required value={checkOut} onChange={setCheckOut} />
+            <Input label="Assigned MR" value={appointment?.mr?.fullName ?? '—'} disabled readOnly />
             <Input
-              label="Meeting Duration (minutes)"
-              value={duration ?? ''}
+              label="Calculated Duration"
+              value={duration != null ? `${duration} mins` : '—'}
               readOnly
               disabled
             />
+            <DatePicker label="Visit Date" required value={visitDate} onChange={setVisitDate} />
+            <TimePicker label="Scheduled Time" required value={visitTime} onChange={setVisitTime} />
+            <TimePicker label="Check-in Time" required value={checkIn} onChange={setCheckIn} />
+            <TimePicker label="Check-out Time" required value={checkOut} onChange={setCheckOut} />
           </div>
-        </section>
+        </FormSection>
 
-        <section className="space-y-3">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-            Section 2 · Meeting Details
-          </h3>
+        <FormSection
+          title="Meeting Interaction & Feedback"
+          subtitle="Detailed doctor feedback, outcome, and follow-up timeline"
+          icon={MessageSquare}
+        >
           <div className="grid gap-3 sm:grid-cols-2">
             <Textarea
               label="Discussion Summary"
+              placeholder="Key topics discussed, new therapies presented..."
               className="sm:col-span-2"
               value={discussionNotes}
               onChange={(e) => setDiscussionNotes(e.target.value)}
             />
             <Textarea
               label="Doctor Feedback"
+              placeholder="Doctor's response, patient feedback on molecules, competitor feedback..."
               className="sm:col-span-2"
               value={doctorFeedback}
               onChange={(e) => setDoctorFeedback(e.target.value)}
             />
             <Select label="Visit Outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
-              <option value="">Select outcome</option>
-              <option value="POSITIVE">Positive</option>
-              <option value="NEUTRAL">Neutral</option>
-              <option value="FOLLOW_UP">Needs Follow-up</option>
-              <option value="NOT_INTERESTED">Not Interested</option>
+              <option value="">Select visit outcome</option>
+              <option value="POSITIVE">🟢 Positive (High Prescription Intent)</option>
+              <option value="NEUTRAL">🟡 Neutral (Agreed to evaluate)</option>
+              <option value="FOLLOW_UP">🔵 Needs Follow-up Visit</option>
+              <option value="NOT_INTERESTED">🔴 Not Interested</option>
             </Select>
             <DatePicker label="Next Follow-up Date" value={nextFollowUp} onChange={setNextFollowUp} />
             <Textarea
-              label="Remarks"
+              label="General Remarks"
+              placeholder="Additional internal notes..."
               className="sm:col-span-2"
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
             />
           </div>
-        </section>
+        </FormSection>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-              Section 3 · Products Discussed
-            </h3>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                setProducts((prev) => [
-                  ...prev,
-                  { medicineId: '', remarks: '', interestLevel: 'MEDIUM', prescriptionExpected: false },
-                ])
-              }
-            >
-              <Plus size={14} /> Add More
-            </Button>
-          </div>
+        <FormSection
+          title="Products Discussed"
+          subtitle="Select molecules and drugs detailed during this meeting"
+          icon={Pill}
+        >
           <div className="space-y-3">
+            <div className="flex justify-end">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  setProducts((prev) => [
+                    ...prev,
+                    { medicineId: '', remarks: '', interestLevel: 'MEDIUM', prescriptionExpected: false },
+                  ])
+                }
+              >
+                <Plus size={14} /> Add Molecule / Drug
+              </Button>
+            </div>
+            
             {products.map((row, index) => (
               <div
                 key={index}
-                className="grid gap-3 rounded-2xl border border-[var(--color-border)] p-3 sm:grid-cols-2 lg:grid-cols-12"
+                className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3.5 shadow-xs sm:grid-cols-2 lg:grid-cols-12 items-center"
               >
                 <SearchableSelect
                   label="Medicine"
@@ -246,7 +255,7 @@ export function VisitCompleteDialog({
                   <option value="HIGH">High</option>
                 </Select>
                 <Select
-                  label="Prescription Expected"
+                  label="Rx Expected"
                   className="lg:col-span-2"
                   value={row.prescriptionExpected ? 'yes' : 'no'}
                   onChange={(e) => {
@@ -261,6 +270,7 @@ export function VisitCompleteDialog({
                 <Input
                   label="Remarks"
                   className="lg:col-span-3"
+                  placeholder="Doctor remarks on product"
                   value={row.remarks}
                   onChange={(e) => {
                     const next = [...products];
@@ -268,53 +278,56 @@ export function VisitCompleteDialog({
                     setProducts(next);
                   }}
                 />
-                <div className="flex items-end lg:col-span-1">
+                <div className="flex items-end justify-center lg:col-span-1 pt-4">
                   <Button
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => setProducts((prev) => prev.filter((_, i) => i !== index))}
                     aria-label="Remove product row"
+                    className="text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={15} />
                   </Button>
                 </div>
               </div>
             ))}
           </div>
-        </section>
+        </FormSection>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--color-muted)]">
-              Section 4 · Sample Distribution
-            </h3>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                setSamples((prev) => [
-                  ...prev,
-                  { medicineId: '', batchNumber: '', quantity: 1, unit: 'pcs', remarks: '' },
-                ])
-              }
-            >
-              <Plus size={14} /> Add More
-            </Button>
-          </div>
+        <FormSection
+          title="Sample Distribution"
+          subtitle="Distribute physical samples from your inventory (automatically updates stock)"
+          icon={PackageCheck}
+        >
           <div className="space-y-3">
+            <div className="flex justify-end">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() =>
+                  setSamples((prev) => [
+                    ...prev,
+                    { medicineId: '', batchNumber: '', quantity: 1, unit: 'strips', remarks: '' },
+                  ])
+                }
+              >
+                <Plus size={14} /> Add Sample Line
+              </Button>
+            </div>
+
             {samples.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-[var(--color-border)] px-4 py-6 text-center text-sm text-[var(--color-muted)]">
-                Optional — add sample lines to decrement stock on save.
-              </p>
+              <div className="rounded-xl border border-dashed border-[var(--color-border)] p-6 text-center text-xs text-[var(--color-muted)]">
+                No samples distributed on this visit. Click <strong>Add Sample Line</strong> if physical samples were handed over.
+              </div>
             ) : (
               samples.map((row, index) => (
                 <div
                   key={index}
-                  className="grid gap-3 rounded-2xl border border-[var(--color-border)] p-3 sm:grid-cols-2 lg:grid-cols-12"
+                  className="grid gap-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3.5 shadow-xs sm:grid-cols-2 lg:grid-cols-12 items-center"
                 >
                   <SearchableSelect
-                    label="Medicine"
-                    className="lg:col-span-3"
+                    label="Sample Medicine"
+                    className="lg:col-span-4"
                     value={row.medicineId}
                     onChange={(value) => {
                       const next = [...samples];
@@ -324,8 +337,9 @@ export function VisitCompleteDialog({
                     options={medicineOptions}
                   />
                   <Input
-                    label="Batch"
+                    label="Batch #"
                     className="lg:col-span-2"
+                    placeholder="Batch"
                     value={row.batchNumber}
                     onChange={(e) => {
                       const next = [...samples];
@@ -347,7 +361,7 @@ export function VisitCompleteDialog({
                   />
                   <Input
                     label="Unit"
-                    className="lg:col-span-2"
+                    className="lg:col-span-1"
                     value={row.unit}
                     onChange={(e) => {
                       const next = [...samples];
@@ -358,6 +372,7 @@ export function VisitCompleteDialog({
                   <Input
                     label="Remarks"
                     className="lg:col-span-2"
+                    placeholder="Notes"
                     value={row.remarks}
                     onChange={(e) => {
                       const next = [...samples];
@@ -365,21 +380,23 @@ export function VisitCompleteDialog({
                       setSamples(next);
                     }}
                   />
-                  <div className="flex items-end lg:col-span-1">
+                  <div className="flex items-end justify-center lg:col-span-1 pt-4">
                     <Button
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => setSamples((prev) => prev.filter((_, i) => i !== index))}
+                      className="text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={15} />
                     </Button>
                   </div>
                 </div>
               ))
             )}
           </div>
-        </section>
+        </FormSection>
       </form>
     </Modal>
   );
 }
+

@@ -1,35 +1,39 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { Loader2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'soft' | 'destructive';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'soft' | 'destructive' | 'outline';
 type Size = 'sm' | 'md' | 'lg' | 'icon' | 'icon-sm';
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] active:brightness-95',
+    'bg-[var(--color-primary)] text-white shadow-xs hover:bg-[var(--color-primary-hover)] hover:shadow-sm active:scale-[0.98] border border-transparent',
   secondary:
-    'bg-[var(--color-surface)] text-[var(--color-ink)] border border-[var(--color-border)] hover:bg-[var(--color-bg)] hover:border-[var(--color-border-strong)]',
-  soft: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)] hover:brightness-95 border border-transparent',
+    'bg-[var(--color-surface)] text-[var(--color-ink)] border border-[var(--color-border)] shadow-xs hover:bg-[var(--color-bg)] hover:border-[var(--color-border-strong)] active:scale-[0.98]',
+  soft: 'bg-[var(--color-primary-soft)] text-[var(--color-primary)] hover:bg-[var(--color-primary)] hover:text-white active:scale-[0.98] border border-transparent font-semibold',
   ghost:
-    'bg-transparent text-[var(--color-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]',
+    'bg-transparent text-[var(--color-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)] active:scale-[0.98]',
+  outline:
+    'bg-transparent text-[var(--color-ink)] border border-[var(--color-border-strong)] hover:bg-[var(--color-bg)] active:scale-[0.98]',
   danger:
-    'bg-[var(--color-danger-soft)] text-[var(--color-danger)] border border-[var(--color-danger)]/20 hover:bg-[var(--color-danger)] hover:text-white',
+    'bg-[var(--color-danger-soft)] text-[var(--color-danger)] border border-[var(--color-danger)]/25 hover:bg-[var(--color-danger)] hover:text-white active:scale-[0.98]',
   destructive:
-    'bg-[var(--color-danger)] text-white hover:brightness-95 active:brightness-90 border border-transparent',
+    'bg-[var(--color-danger)] text-white shadow-xs hover:brightness-95 active:scale-[0.98] border border-transparent',
 };
 
 const sizes: Record<Size, string> = {
-  sm: 'h-7 min-h-7 px-2.5 text-xs gap-1 rounded-md',
-  md: 'h-8 min-h-8 px-3 text-xs gap-1.5 rounded-lg sm:text-sm',
-  lg: 'h-9 min-h-9 px-3.5 text-sm gap-1.5 rounded-lg',
-  icon: 'h-8 w-8 min-h-8 min-w-8 p-0 rounded-lg',
-  'icon-sm': 'h-7 w-7 min-h-7 min-w-7 p-0 rounded-md',
+  sm: 'h-7.5 min-h-[30px] px-2.5 text-xs gap-1.5 rounded-[var(--radius-sm)] font-medium',
+  md: 'h-9 min-h-[36px] px-3.5 text-xs sm:text-sm gap-2 rounded-[var(--radius-sm)] font-medium',
+  lg: 'h-10.5 min-h-[42px] px-4.5 text-sm gap-2 rounded-[var(--radius-sm)] font-semibold',
+  icon: 'h-9 w-9 min-h-[36px] min-w-[36px] p-0 rounded-[var(--radius-sm)]',
+  'icon-sm': 'h-7.5 w-7.5 min-h-[30px] min-w-[30px] p-0 rounded-[var(--radius-sm)]',
 };
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
   size?: Size;
   fullWidth?: boolean;
+  loading?: boolean;
   children: ReactNode;
 }
 
@@ -37,18 +41,21 @@ export function Button({
   variant = 'primary',
   size = 'md',
   fullWidth = false,
+  loading = false,
   className,
   children,
   type = 'button',
+  disabled,
   ...props
 }: ButtonProps) {
   return (
     <button
       type={type}
+      disabled={disabled || loading}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center font-medium tracking-tight whitespace-nowrap transition select-none',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/25 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-surface)]',
-        'disabled:pointer-events-none disabled:opacity-45',
+        'inline-flex shrink-0 items-center justify-center font-medium tracking-tight whitespace-nowrap cursor-pointer transition-all duration-150 select-none',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-surface)]',
+        'disabled:pointer-events-none disabled:opacity-45 disabled:cursor-not-allowed',
         'touch-manipulation',
         variants[variant],
         sizes[size],
@@ -57,6 +64,7 @@ export function Button({
       )}
       {...props}
     >
+      {loading ? <Loader2 size={14} className="animate-spin" /> : null}
       {children}
     </button>
   );
@@ -75,7 +83,7 @@ export function ButtonRow({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-1.5',
+        'flex flex-wrap items-center gap-2',
         align === 'end' && 'justify-end',
         align === 'start' && 'justify-start',
         align === 'between' && 'justify-between',

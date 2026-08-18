@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { CalendarSync, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Textarea } from '@/components/ui/Field';
@@ -61,38 +62,52 @@ export function AppointmentRescheduleDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title="Reschedule appointment"
-      description={`${appointment.doctor?.fullName ?? 'Doctor'} · ${appointment.mr?.fullName ?? 'MR'}`}
+      icon={CalendarSync}
+      badge="Reschedule"
+      title="Reschedule Appointment"
+      description={`Doctor: ${appointment.doctor?.fullName ?? 'Doctor'} · Representative: ${appointment.mr?.fullName ?? 'MR'}`}
       className="max-w-lg"
       footer={
         <>
-          <Button variant="secondary" size="sm" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" form="reschedule-form" size="sm" disabled={submitting}>
-            {submitting ? 'Saving…' : 'Save new schedule'}
+          <Button type="submit" form="reschedule-form" loading={submitting}>
+            {submitting ? 'Updating…' : 'Save New Schedule'}
           </Button>
         </>
       }
     >
-      <form id="reschedule-form" className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
-        <p className="sm:col-span-2 text-sm text-[var(--color-muted)]">
-          Current:{' '}
-          <span className="font-medium text-[var(--color-ink)]">
-            {formatDisplayDate(appointment.date)} · {formatTime12(appointment.time)}
-          </span>
-          . Status will become <strong>RESCHEDULED</strong>.
-        </p>
-        <DatePicker label="New date" required value={date} onChange={setDate} />
-        <TimePicker label="New time" required value={time} onChange={setTime} />
-        <Textarea
-          label="Reschedule note (optional)"
-          className="sm:col-span-2"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Reason for change…"
-        />
+      <form id="reschedule-form" className="space-y-4" onSubmit={handleSubmit}>
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3.5 text-xs text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2 font-semibold">
+            <Clock size={14} className="text-amber-600 dark:text-amber-400" />
+            <span>Current Scheduled Time</span>
+          </div>
+          <p className="mt-1 text-xs">
+            {formatDisplayDate(appointment.date)} at {formatTime12(appointment.time)}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
+            New Appointment Timings
+          </h4>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DatePicker label="New Date" required value={date} onChange={setDate} />
+            <TimePicker label="New Time" required value={time} onChange={setTime} />
+          </div>
+          <Textarea
+            label="Reason for Rescheduling"
+            optional
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. Doctor in emergency OT, requested afternoon slot..."
+          />
+        </div>
       </form>
     </Modal>
   );
 }
+
