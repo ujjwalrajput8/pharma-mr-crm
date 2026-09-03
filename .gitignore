@@ -9,6 +9,13 @@ build
 .env
 .env.*
 
+# ...except the frontend's build-time API URL. Vite inlines VITE_API_BASE_URL at
+# build time, so if this file is not in the repo the hosted build falls back to
+# the relative "/api/v1", hits the static host and returns "Not Found" — login
+# cannot work at all. It holds a public URL, no secret.
+!client/.env.production
+!client/.env.development
+
 # Logs
 *.log
 npm-debug.log*

@@ -208,9 +208,9 @@ export function AppointmentFormDialog({
               value={priority}
               onChange={(e) => setPriority(e.target.value as typeof priority)}
             >
-              <option value="LOW">🟢 Low Priority</option>
-              <option value="MEDIUM">🟡 Medium Priority</option>
-              <option value="HIGH">🔴 High Priority</option>
+              <option value="LOW">Low priority</option>
+              <option value="MEDIUM">Medium priority</option>
+              <option value="HIGH">High priority</option>
             </Select>
 
             <Select
