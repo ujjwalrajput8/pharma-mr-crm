@@ -31,7 +31,7 @@ export class StockService {
       lowOnly: query.lowOnly,
     });
 
-    const warehouseId = await this.ledger.getDefaultWarehouseId();
+    const warehouseId = await this.ledger.findDefaultWarehouseId();
     const enriched = await Promise.all(
       items.map(async (item) => {
         const stats = await this.stockTxns.getWarehouseMedicineStats(warehouseId, item.medicineId);

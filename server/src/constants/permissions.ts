@@ -15,6 +15,11 @@ export const PERMISSION_CATALOG = [
   { key: 'appointments:manage', label: 'Team appointments', group: 'Field' },
   { key: 'visits:own', label: 'Own visits / DCR', group: 'Field' },
   { key: 'visits:manage', label: 'Team visits', group: 'Field' },
+  { key: 'leaves:own', label: 'Apply / view own leave', group: 'People' },
+  { key: 'leaves:manage', label: 'Approve team leave', group: 'People' },
+  { key: 'employees:view', label: 'Employee directory & profiles', group: 'People' },
+  { key: 'holidays:manage', label: 'Holiday calendar', group: 'People' },
+  { key: 'leave-types:manage', label: 'Leave policy (types & quota)', group: 'People' },
   { key: 'doctors:own', label: 'Assigned doctors', group: 'Masters' },
   { key: 'doctors:manage', label: 'Manage doctors', group: 'Masters' },
   { key: 'stores:manage', label: 'Chemists / stores', group: 'Masters' },
@@ -63,6 +68,9 @@ export const DEFAULT_MANAGER_PERMISSIONS: readonly PermissionKey[] = [
   'sales:manage',
   'attendance:manage',
   'attendance:own',
+  'leaves:own',
+  'leaves:manage',
+  'employees:view',
   'profile:own',
 ];
 
@@ -79,9 +87,17 @@ export const DEFAULT_MR_PERMISSIONS: readonly PermissionKey[] = [
   'reports:own',
   'sales:own',
   'attendance:own',
+  'leaves:own',
   'profile:own',
 ];
 
+/** Admin gets everything except the personal field-force screens. */
 export const DEFAULT_ADMIN_PERMISSIONS: readonly PermissionKey[] = PERMISSION_CATALOG.map(
   (p) => p.key,
-).filter((k) => k !== 'myday:own' && k !== 'attendance:own' && k !== 'mystock:own');
+).filter(
+  (k) =>
+    k !== 'myday:own' &&
+    k !== 'attendance:own' &&
+    k !== 'mystock:own' &&
+    k !== 'leaves:own',
+);

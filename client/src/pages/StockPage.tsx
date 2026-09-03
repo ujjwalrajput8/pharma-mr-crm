@@ -81,7 +81,7 @@ export function StockPage() {
 
       {error ? <Alert message={error} /> : null}
 
-      <Card className="p-4">
+      <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}
@@ -171,34 +171,47 @@ export function StockPage() {
       <Modal
         open={Boolean(adjustFor)}
         onClose={() => setAdjustFor(null)}
-        title="Adjust stock"
+        title="Adjust Inventory Stock"
         description={
           adjustFor
-            ? `${adjustFor.medicineName} — current available: ${adjustFor.available}`
+            ? `Manual stock correction for ${adjustFor.medicineName} (Current available: ${adjustFor.available})`
             : undefined
         }
-      >
-        <form className="space-y-4" onSubmit={onAdjustSubmit}>
-          <Input
-            label="Quantity delta (+ add / − remove)"
-            type="number"
-            required
-            value={quantityDelta}
-            onChange={(event) => setQuantityDelta(event.target.value)}
-          />
-          <Textarea
-            label="Remarks"
-            value={remarks}
-            onChange={(event) => setRemarks(event.target.value)}
-            rows={3}
-          />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => setAdjustFor(null)}>
+        className="max-w-lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAdjustFor(null)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={adjustMutation.isPending}>
-              {adjustMutation.isPending ? 'Saving…' : 'Apply adjustment'}
+            <Button
+              type="submit"
+              form="adjust-stock-form"
+              loading={adjustMutation.isPending}
+              disabled={adjustMutation.isPending}
+            >
+              {adjustMutation.isPending ? 'Applying…' : 'Apply Adjustment'}
             </Button>
+          </>
+        }
+      >
+        <form id="adjust-stock-form" className="space-y-4" onSubmit={onAdjustSubmit}>
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <Input
+              label="Quantity Delta"
+              type="number"
+              required
+              placeholder="e.g. +50 or -10"
+              hint="Enter positive integer to add stock (+), negative integer to reduce (-)"
+              value={quantityDelta}
+              onChange={(event) => setQuantityDelta(event.target.value)}
+            />
+            <Textarea
+              label="Adjustment Justification / Reason"
+              placeholder="e.g. Physical inventory audit discrepancy, damaged batch removal..."
+              value={remarks}
+              onChange={(event) => setRemarks(event.target.value)}
+              rows={3}
+            />
           </div>
         </form>
       </Modal>

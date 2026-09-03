@@ -22,6 +22,10 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'reports:all',
     'sales:manage',
     'attendance:manage',
+    'leaves:manage',
+    'employees:view',
+    'holidays:manage',
+    'leave-types:manage',
     'settings:manage',
     'audit:view',
     'profile:own',
@@ -49,6 +53,9 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'sales:manage',
     'attendance:manage',
     'attendance:own',
+    'leaves:own',
+    'leaves:manage',
+    'employees:view',
     'profile:own',
   ],
   MR: [
@@ -64,6 +71,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'reports:own',
     'sales:own',
     'attendance:own',
+    'leaves:own',
     'profile:own',
   ],
 };

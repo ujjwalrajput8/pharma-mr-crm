@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { AttendanceController } from '../controllers/AttendanceController';
 import {
+  attendanceCalendarQuerySchema,
+  attendanceSummaryQuerySchema,
   checkInSchema,
   checkOutSchema,
   listAttendanceQuerySchema,
@@ -9,6 +11,7 @@ import {
 import { AppRoles } from '../constants';
 import { authenticate } from '../middlewares/authenticate.middleware';
 import { authorize } from '../middlewares/authorize.middleware';
+import { requirePermission } from '../middlewares/requirePermission.middleware';
 import { validateRequest } from '../middlewares/validate.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 
@@ -17,18 +20,47 @@ const controller = AttendanceController.getInstance();
 
 router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR));
 
-router.get('/', validateRequest(listAttendanceQuerySchema, 'query'), asyncHandler(controller.list));
-router.get('/today', asyncHandler(controller.today));
+const canUseAttendance = requirePermission('attendance:own', 'attendance:manage');
+
+router.get(
+  '/',
+  canUseAttendance,
+  validateRequest(listAttendanceQuerySchema, 'query'),
+  asyncHandler(controller.list),
+);
+router.get('/today', canUseAttendance, asyncHandler(controller.today));
+router.get(
+  '/calendar',
+  canUseAttendance,
+  validateRequest(attendanceCalendarQuerySchema, 'query'),
+  asyncHandler(controller.calendar),
+);
+router.get(
+  '/summary',
+  canUseAttendance,
+  validateRequest(attendanceSummaryQuerySchema, 'query'),
+  asyncHandler(controller.summary),
+);
 router.get(
   '/field-users',
-  authorize(AppRoles.ADMIN, AppRoles.MANAGER),
+  requirePermission('attendance:manage'),
   asyncHandler(controller.fieldUsers),
 );
-router.post('/check-in', validateRequest(checkInSchema), asyncHandler(controller.checkIn));
-router.post('/check-out', validateRequest(checkOutSchema), asyncHandler(controller.checkOut));
+router.post(
+  '/check-in',
+  requirePermission('attendance:own'),
+  validateRequest(checkInSchema),
+  asyncHandler(controller.checkIn),
+);
+router.post(
+  '/check-out',
+  requirePermission('attendance:own'),
+  validateRequest(checkOutSchema),
+  asyncHandler(controller.checkOut),
+);
 router.post(
   '/manage',
-  authorize(AppRoles.ADMIN, AppRoles.MANAGER),
+  requirePermission('attendance:manage'),
   validateRequest(manageAttendanceSchema),
   asyncHandler(controller.manage),
 );

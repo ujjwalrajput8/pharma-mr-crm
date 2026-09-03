@@ -19,6 +19,10 @@ import {
   BookOpen,
   Map,
   Shield,
+  CalendarCheck2,
+  PartyPopper,
+  IdCard,
+  FileSliders,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -71,6 +75,13 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'Field',
   },
   {
+    label: 'Leave',
+    path: '/leave',
+    icon: CalendarCheck2,
+    permissions: ['leaves:own', 'leaves:manage'],
+    section: 'Field',
+  },
+  {
     label: 'Appointments',
     path: '/appointments',
     icon: CalendarDays,
@@ -83,6 +94,27 @@ export const NAV_ITEMS: NavItem[] = [
     icon: ClipboardList,
     permissions: ['visits:manage', 'visits:own'],
     section: 'Field',
+  },
+  {
+    label: 'Employees',
+    path: '/employees',
+    icon: IdCard,
+    permissions: ['employees:view'],
+    section: 'People',
+  },
+  {
+    label: 'Holiday Calendar',
+    path: '/holidays',
+    icon: PartyPopper,
+    permissions: ['holidays:manage'],
+    section: 'People',
+  },
+  {
+    label: 'Leave Policy',
+    path: '/leave-policy',
+    icon: FileSliders,
+    permissions: ['leave-types:manage'],
+    section: 'People',
   },
   {
     label: 'Users & Hierarchy',

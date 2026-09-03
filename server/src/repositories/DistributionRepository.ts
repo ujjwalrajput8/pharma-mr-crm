@@ -16,6 +16,7 @@ export class DistributionRepository {
     page: number;
     limit: number;
     mrId?: number;
+    mrIds?: number[];
     medicineId?: number;
     visitId?: number;
     from?: Date;

@@ -174,12 +174,14 @@ export class AuthService {
     email: string,
     role: string,
     fullName: string,
+    permissions: string[] = [],
   ): AuthUser {
     return {
       id,
       email,
       role: role as AppRole,
       fullName,
+      permissions,
     };
   }
 

@@ -86,6 +86,43 @@ enum WorkType {
   HOLIDAY
 }
 
+/// Physical stock count lifecycle (kept separate from TourPlanStatus).
+enum StockCountStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  LOCKED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// Half-day support for a single-day leave request.
+enum LeaveDayPart {
+  FULL
+  FIRST_HALF
+  SECOND_HALF
+}
+
+enum HolidayType {
+  NATIONAL
+  FESTIVAL
+  REGIONAL
+  COMPANY
+  WEEKLY_OFF
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
 /// Append-only ledger transaction types
 enum StockTxnType {
   OPENING
@@ -159,6 +196,9 @@ model User {
   stockTxnsCreated   StockTxn[]         @relation("StockTxnCreator")
   stockCounts        StockCount[]
   auditLogs          AuditLog[]
+  leaveRequests      LeaveRequest[]     @relation("UserLeaves")
+  approvedLeaves     LeaveRequest[]     @relation("LeaveApprover")
+  leaveBalances      LeaveBalance[]     @relation("UserLeaveBalances")
 
   @@index([role])
   @@index([status])
@@ -168,6 +208,7 @@ model User {
   @@map("users")
 }
 
+/// Employee (HR) profile — one per MR / Manager account.
 model MrProfile {
   id           Int       @id @default(autoincrement())
   userId       Int       @unique
@@ -175,6 +216,28 @@ model MrProfile {
   address      String?
   joiningDate  DateTime? @db.Date
   assignedArea String?
+
+  // ── HR / personal ──
+  designation    String?
+  dob            DateTime? @db.Date
+  gender         Gender?
+  bloodGroup     String?
+  maritalStatus  String?
+  qualification  String?
+  emergencyName  String?
+  emergencyPhone String?
+  photoUrl       String?
+
+  // ── Statutory / payout (needed for TA-DA settlement) ──
+  panNumber     String?
+  aadhaarNumber String?
+  bankName      String?
+  bankAccountNo String?
+  bankIfsc      String?
+
+  // ── Exit ──
+  exitDate   DateTime? @db.Date
+  exitReason String?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -229,6 +292,7 @@ model Territory {
   doctors  Doctor[]
   chemists MedicalStore[]
   tourPlanDays TourPlanDay[]
+  holidays Holiday[]
 
   @@index([parentId])
   @@index([type])
@@ -480,10 +544,10 @@ model StockBalance {
 }
 
 model StockCount {
-  id        Int            @id @default(autoincrement())
+  id        Int              @id @default(autoincrement())
   userId    Int
-  countDate DateTime       @db.Date
-  status    TourPlanStatus @default(DRAFT)
+  countDate DateTime         @db.Date
+  status    StockCountStatus @default(DRAFT)
   remark    String?
 
   createdAt DateTime  @default(now())
@@ -536,6 +600,10 @@ model Attendance {
   serverAt        DateTime?
   photoUrl        String?
   status          AttendanceStatus @default(PRESENT)
+  /// What kind of work the day was (field / office / joint / leave) — separate from status.
+  workType        WorkType?
+  /// Set when this row was auto-marked by an approved leave request.
+  leaveRequestId  Int?
   flagReason      String?
   approvedById    Int?
   locationNote    String?
@@ -554,6 +622,8 @@ model Attendance {
   @@index([userId])
   @@index([attDate])
   @@index([status])
+  @@index([workType])
+  @@index([leaveRequestId])
   @@index([deletedAt])
   @@map("attendances")
 }
@@ -850,4 +920,130 @@ model UserPermission {
   @@unique([userId, permission])
   @@index([userId])
   @@map("user_permissions")
+}
+
+// ─── Leave & holidays (HR) ────────────────────────────────────────────────────
+
+/// Leave category master — CL / SL / EL / LWP / Comp-off. Quota drives yearly balance.
+model LeaveType {
+  id              Int          @id @default(autoincrement())
+  code            String       @unique
+  name            String
+  /// Days granted per calendar year (0 = unlimited / unpaid types like LWP).
+  annualQuota     Decimal      @default(0) @db.Decimal(5, 1)
+  isPaid          Boolean      @default(true)
+  carryForward    Boolean      @default(false)
+  maxCarryForward Decimal      @default(0) @db.Decimal(5, 1)
+  allowHalfDay    Boolean      @default(true)
+  requiresProof   Boolean      @default(false)
+  /// Chip / calendar colour in the UI.
+  colorHex        String       @default("#0f766e")
+  description     String?
+  status          RecordStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy Int?
+  updatedBy Int?
+  deletedAt DateTime?
+
+  requests LeaveRequest[]
+  balances LeaveBalance[]
+
+  @@index([status])
+  @@index([deletedAt])
+  @@map("leave_types")
+}
+
+/// MR / Manager applies → reporting manager (or Admin) approves → attendance auto-marked LEAVE.
+model LeaveRequest {
+  id             Int          @id @default(autoincrement())
+  userId         Int
+  leaveTypeId    Int
+  fromDate       DateTime     @db.Date
+  toDate         DateTime     @db.Date
+  dayPart        LeaveDayPart @default(FULL)
+  /// Working days consumed (holidays + Sundays excluded, half-day = 0.5).
+  days           Decimal      @db.Decimal(5, 1)
+  reason         String
+  contactPhone   String?
+  attachmentUrl  String?
+  status         LeaveStatus  @default(PENDING)
+  approvedById   Int?
+  actedAt        DateTime?
+  decisionRemark String?
+  cancelledAt    DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy Int?
+  updatedBy Int?
+  deletedAt DateTime?
+
+  user       User      @relation("UserLeaves", fields: [userId], references: [id], onDelete: Cascade)
+  leaveType  LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+  approvedBy User?     @relation("LeaveApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([leaveTypeId])
+  @@index([status])
+  @@index([fromDate])
+  @@index([toDate])
+  @@index([deletedAt])
+  @@map("leave_requests")
+}
+
+/// Per user / type / year ledger. `used` is recalculated from APPROVED requests — never hand-edited.
+model LeaveBalance {
+  id          Int     @id @default(autoincrement())
+  userId      Int
+  leaveTypeId Int
+  year        Int
+  /// Carried forward from last year.
+  opening     Decimal @default(0) @db.Decimal(5, 1)
+  /// Quota granted this year (defaults to LeaveType.annualQuota).
+  allocated   Decimal @default(0) @db.Decimal(5, 1)
+  used        Decimal @default(0) @db.Decimal(5, 1)
+  encashed    Decimal @default(0) @db.Decimal(5, 1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy Int?
+  updatedBy Int?
+
+  user      User      @relation("UserLeaveBalances", fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leaveTypeId, year])
+  @@index([userId])
+  @@index([year])
+  @@map("leave_balances")
+}
+
+/// Company holiday calendar. Territory-scoped rows override the company-wide list.
+model Holiday {
+  id          Int          @id @default(autoincrement())
+  holidayDate DateTime     @db.Date
+  name        String
+  type        HolidayType  @default(NATIONAL)
+  territoryId Int?
+  /// Optional / restricted holiday — does not auto-mark attendance.
+  isOptional  Boolean      @default(false)
+  description String?
+  status      RecordStatus @default(ACTIVE)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  createdBy Int?
+  updatedBy Int?
+  deletedAt DateTime?
+
+  territory Territory? @relation(fields: [territoryId], references: [id], onDelete: SetNull)
+
+  @@unique([holidayDate, name])
+  @@index([holidayDate])
+  @@index([territoryId])
+  @@index([status])
+  @@index([deletedAt])
+  @@map("holidays")
 }

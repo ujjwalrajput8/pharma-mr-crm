@@ -18,6 +18,7 @@ export class MedicineIssueRepository {
     page: number;
     limit: number;
     mrId?: number;
+    mrIds?: number[];
     medicineId?: number;
   }) {
     return this.stockTxns.listIssues(params);

@@ -35,14 +35,12 @@ export class StockRepository {
     return StockRepository.instance;
   }
 
-  private async getDefaultWarehouseId(): Promise<number> {
+/** `null` when no default warehouse is configured yet. */
+  private async findDefaultWarehouseId(): Promise<number | null> {
     const setting = await this.settings.findByKey(DEFAULT_WAREHOUSE_SETTING);
-    if (!setting) throw new Error('DEFAULT_WAREHOUSE_NOT_CONFIGURED');
+    if (!setting) return null;
     const warehouseId = Number(setting.value);
-    if (!Number.isInteger(warehouseId) || warehouseId <= 0) {
-      throw new Error('DEFAULT_WAREHOUSE_NOT_CONFIGURED');
-    }
-    return warehouseId;
+    return Number.isInteger(warehouseId) && warehouseId > 0 ? warehouseId : null;
   }
 
   public async list(params: {
@@ -51,7 +49,9 @@ export class StockRepository {
     search?: string;
     lowOnly?: boolean;
   }): Promise<{ items: WarehouseStockRow[]; total: number }> {
-    const warehouseId = await this.getDefaultWarehouseId();
+    const warehouseId = await this.findDefaultWarehouseId();
+    // Nothing configured yet → an empty list, not a 500 on the Stock screen.
+    if (warehouseId === null) return { items: [], total: 0 };
     return this.stockTxns.listWarehouseBalances({
       warehouseId,
       page: params.page,
@@ -62,7 +62,8 @@ export class StockRepository {
   }
 
   public async findByMedicineId(medicineId: number): Promise<WarehouseStockRow | null> {
-    const warehouseId = await this.getDefaultWarehouseId();
+    const warehouseId = await this.findDefaultWarehouseId();
+    if (warehouseId === null) return null;
     const { items } = await this.stockTxns.listWarehouseBalances({
       warehouseId,
       page: 1,

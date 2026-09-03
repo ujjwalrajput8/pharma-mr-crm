@@ -115,7 +115,7 @@ export function MedicineIssuesPage() {
       />
       {error ? <Alert message={error} /> : null}
 
-      <Card className="p-4">
+      <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}
@@ -176,69 +176,90 @@ export function MedicineIssuesPage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Issue Medicine to MR"
-        description="Company stock decreases; MR stock increases."
+        title="Issue Sample Stock to MR"
+        description="Allocate promotional and sample inventory from warehouse to field representative bag stock."
+        className="max-w-2xl"
         footer={
           <>
             <Button variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" form="medicine-issue-form" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Issuing…' : 'Issue'}
+            <Button type="submit" form="medicine-issue-form" loading={createMutation.isPending}>
+              {createMutation.isPending ? 'Transferring Stock…' : 'Issue Samples to MR'}
             </Button>
           </>
         }
       >
-        <form id="medicine-issue-form" className="grid gap-3 sm:grid-cols-2" onSubmit={onSubmit}>
-          <Select
-            label="MR"
-            required
-            value={form.mrId || ''}
-            onChange={(e) => setForm((p) => ({ ...p, mrId: Number(e.target.value) }))}
-          >
-            <option value="">Select MR</option>
-            {mrsQuery.data?.map((mr) => (
-              <option key={mr.id} value={mr.id}>
-                {mr.fullName}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Medicine"
-            required
-            value={form.medicineId || ''}
-            onChange={(e) => setForm((p) => ({ ...p, medicineId: Number(e.target.value) }))}
-          >
-            <option value="">Select medicine</option>
-            {medicinesQuery.data?.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} (stock {m.stock?.available ?? 0})
-              </option>
-            ))}
-          </Select>
-          <Input
-            label="Quantity"
-            type="number"
-            min={1}
-            required
-            value={form.quantity}
-            onChange={(e) => setForm((p) => ({ ...p, quantity: Number(e.target.value) }))}
-          />
-          <Input
-            label="Batch"
-            value={form.batchNumber}
-            onChange={(e) => setForm((p) => ({ ...p, batchNumber: e.target.value }))}
-          />
-          <DatePicker
-            label="Issue Date"
-            value={form.issueDate}
-            onChange={(value) => setForm((p) => ({ ...p, issueDate: value }))}
-          />
-          <Input
-            label="Remarks"
-            value={form.remarks}
-            onChange={(e) => setForm((p) => ({ ...p, remarks: e.target.value }))}
-          />
+        <form id="medicine-issue-form" className="space-y-4" onSubmit={onSubmit}>
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
+              Recipient MR & Product
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Select
+                label="Target Field Representative (MR)"
+                required
+                value={form.mrId || ''}
+                onChange={(e) => setForm((p) => ({ ...p, mrId: Number(e.target.value) }))}
+              >
+                <option value="">Select Medical Representative</option>
+                {mrsQuery.data?.map((mr) => (
+                  <option key={mr.id} value={mr.id}>
+                    {mr.fullName} ({mr.email})
+                  </option>
+                ))}
+              </Select>
+              <Select
+                label="Medicine / Molecule"
+                required
+                value={form.medicineId || ''}
+                onChange={(e) => setForm((p) => ({ ...p, medicineId: Number(e.target.value) }))}
+              >
+                <option value="">Select Medicine</option>
+                {medicinesQuery.data?.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name} (Warehouse Available: {m.stock?.available ?? 0})
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-teal-500" />
+              Quantity & Transfer Log
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Issue Quantity"
+                type="number"
+                min={1}
+                required
+                placeholder="1"
+                value={form.quantity}
+                onChange={(e) => setForm((p) => ({ ...p, quantity: Number(e.target.value) }))}
+              />
+              <Input
+                label="Batch Number"
+                placeholder="e.g. BATCH-2026-01"
+                value={form.batchNumber}
+                onChange={(e) => setForm((p) => ({ ...p, batchNumber: e.target.value }))}
+              />
+              <DatePicker
+                label="Issue Date"
+                value={form.issueDate}
+                onChange={(value) => setForm((p) => ({ ...p, issueDate: value }))}
+              />
+              <Input
+                label="Transfer Remarks / Voucher"
+                placeholder="e.g. Monthly sample allocation for territory"
+                value={form.remarks}
+                onChange={(e) => setForm((p) => ({ ...p, remarks: e.target.value }))}
+              />
+            </div>
+          </div>
         </form>
       </Modal>
     </div>

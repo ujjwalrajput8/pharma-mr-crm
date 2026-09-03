@@ -91,7 +91,7 @@ export function StoresPage() {
 
       {error ? <Alert message={error} /> : null}
 
-      <Card className="p-4">
+      <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}
@@ -162,51 +162,74 @@ export function StoresPage() {
         open={open}
         onClose={() => setOpen(false)}
         title="Add Medical Store"
-        description="Save partner pharmacy / medical store details."
+        description="Register a partner pharmacy or retail medical store with GST and drug license credentials."
+        className="max-w-2xl"
         footer={
           <>
             <Button variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" form="create-store-form" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Saving…' : 'Save Store'}
+            <Button type="submit" form="create-store-form" loading={createMutation.isPending}>
+              {createMutation.isPending ? 'Registering Store…' : 'Save Medical Store'}
             </Button>
           </>
         }
       >
-        <form id="create-store-form" className="grid gap-3 sm:grid-cols-2" onSubmit={onCreate}>
-          <Input
-            label="Store name"
-            required
-            value={form.name}
-            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-          />
-          <Input
-            label="Owner name"
-            value={form.ownerName}
-            onChange={(e) => setForm((prev) => ({ ...prev, ownerName: e.target.value }))}
-          />
-          <Input
-            label="GST number"
-            value={form.gstNumber}
-            onChange={(e) => setForm((prev) => ({ ...prev, gstNumber: e.target.value }))}
-          />
-          <Input
-            label="Drug license number"
-            value={form.drugLicenseNumber}
-            onChange={(e) => setForm((prev) => ({ ...prev, drugLicenseNumber: e.target.value }))}
-          />
-          <Input
-            label="Phone"
-            value={form.phone}
-            onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-          />
-          <Input
-            className="sm:col-span-2"
-            label="City"
-            value={form.city}
-            onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
-          />
+        <form id="create-store-form" className="space-y-4" onSubmit={onCreate}>
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
+              Store & Licensing Information
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Medical Store Name"
+                required
+                placeholder="e.g. Apollo Pharmacy / Sanjeevani Medicos"
+                value={form.name}
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              />
+              <Input
+                label="Owner / Pharmacist Name"
+                placeholder="e.g. Ramesh Chandra"
+                value={form.ownerName}
+                onChange={(e) => setForm((prev) => ({ ...prev, ownerName: e.target.value }))}
+              />
+              <Input
+                label="GST Identification Number"
+                placeholder="e.g. 07AAAAA0000A1Z5"
+                value={form.gstNumber}
+                onChange={(e) => setForm((prev) => ({ ...prev, gstNumber: e.target.value }))}
+              />
+              <Input
+                label="Drug License Number (DL)"
+                placeholder="e.g. DL-20B/21B-12345"
+                value={form.drugLicenseNumber}
+                onChange={(e) => setForm((prev) => ({ ...prev, drugLicenseNumber: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-teal-500" />
+              Contact & Location
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                label="Store Contact Phone"
+                placeholder="+91 98765 11111"
+                value={form.phone}
+                onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+              />
+              <Input
+                label="City / Territory"
+                placeholder="e.g. Varanasi, Prayagraj"
+                value={form.city}
+                onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
+              />
+            </div>
+          </div>
         </form>
       </Modal>
 

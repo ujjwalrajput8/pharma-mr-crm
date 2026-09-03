@@ -9,6 +9,11 @@ export interface AuthUser {
   email: string;
   role: AppRole;
   fullName: string;
+  /**
+   * Effective permission keys, resolved from the DB on every request so that an
+   * Admin revoking a Manager's access takes effect without waiting for token expiry.
+   */
+  permissions: string[];
 }
 
 export interface AccessTokenPayload {

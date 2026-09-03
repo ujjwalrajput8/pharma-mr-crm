@@ -199,64 +199,90 @@ export function DashboardPage() {
         } overview with schedule calendar.`}
       />
 
-      <Card className="flex flex-wrap gap-1.5 p-3">
+      {/* Quick shortcuts pill strip */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs">
+        <span className="text-[11px] font-bold text-[var(--color-muted)] uppercase tracking-wider px-3 hidden sm:inline">
+          Quick Actions
+        </span>
         {can('myday:own') ? (
           <Link
             to="/my-day"
-            className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition-all hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] active:scale-95 shadow-2xs"
           >
-            My Day
+            ☀️ My Day
           </Link>
         ) : null}
         {can('approvals:team') ? (
           <Link
             to="/approvals"
-            className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition-all hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] active:scale-95 shadow-2xs"
           >
-            Approvals
+            ✓ Approvals
           </Link>
         ) : null}
         {canAny(['tour-plan:own', 'tour-plan:manage']) ? (
           <Link
             to="/tour-plan"
-            className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition-all hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] active:scale-95 shadow-2xs"
           >
-            Tour Plan
+            🗺️ Tour Plan
           </Link>
         ) : null}
         {can('mystock:own') ? (
           <Link
             to="/my-stock"
-            className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition-all hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] active:scale-95 shadow-2xs"
           >
-            My Stock
+            📦 My Stock
           </Link>
         ) : null}
         {can('ledger:view') ? (
           <Link
             to="/ledger"
-            className="rounded-[var(--radius-sm)] border border-[var(--color-border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--color-ink)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)]"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition-all hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] active:scale-95 shadow-2xs"
           >
-            Ledger
+            📒 Ledger
           </Link>
         ) : null}
-      </Card>
+      </div>
 
+      {/* Modern Metric Stat Cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summaryQuery.isLoading
           ? Array.from({ length: 8 }).map((_, i) => <StatCardSkeleton key={i} />)
           : cards.map((item) => {
               const Icon = item.icon;
               return (
-                <Link key={item.key} to={item.to}>
-                  <Card className="h-full p-5 transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]">
-                    <div className="mb-3 inline-flex rounded-xl bg-[var(--color-primary-soft)] p-2.5 text-[var(--color-primary)]">
-                      <Icon size={18} />
+                <Link key={item.key} to={item.to} className="group">
+                  <Card className="h-full p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-[var(--color-primary)]/40 relative overflow-hidden">
+                    <div className="flex items-start justify-between">
+                      <div className="rounded-xl bg-[var(--color-primary-soft)] p-3 text-[var(--color-primary)] transition-transform duration-200 group-hover:scale-110 shadow-2xs">
+                        <Icon size={20} />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)] group-hover:text-[var(--color-primary)] transition-colors">
+                        View →
+                      </span>
                     </div>
-                    <p className="text-sm text-[var(--color-muted)]">{item.label}</p>
-                    <p className="mt-1 text-3xl font-semibold text-[var(--color-ink)]">
-                      {values[item.key] ?? 0}
+                    <p className="mt-3.5 text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
+                      {item.label}
                     </p>
+                    {(() => {
+                      const val = values[item.key];
+                      if (typeof val === 'number') {
+                        return (
+                          <p className="mt-1 text-3xl font-extrabold tracking-tight text-[var(--color-ink)] tabular-nums">
+                            {item.key.toLowerCase().includes('sales')
+                              ? `₹${val.toLocaleString()}`
+                              : val.toLocaleString()}
+                          </p>
+                        );
+                      }
+                      return (
+                        <p className="mt-1 text-3xl font-extrabold tracking-tight text-[var(--color-ink)] tabular-nums">
+                          {val ?? 0}
+                        </p>
+                      );
+                    })()}
                   </Card>
                 </Link>
               );
@@ -267,12 +293,14 @@ export function DashboardPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           {summaryQuery.data.insights.topPerformingMrs?.length ? (
             <Card className="p-5">
-              <h3 className="mb-3 text-base font-semibold">Top Performing MR</h3>
-              <ul className="space-y-2 text-sm">
+              <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                🏆 Top Performing MR
+              </h3>
+              <ul className="divide-y divide-[var(--color-border)] text-sm">
                 {summaryQuery.data.insights.topPerformingMrs.map((row) => (
-                  <li key={row.mrId} className="flex justify-between gap-3 border-b border-[var(--color-border)] py-2 last:border-0">
-                    <span>{row.fullName}</span>
-                    <span className="text-[var(--color-muted)]">
+                  <li key={row.mrId} className="flex justify-between items-center py-2.5">
+                    <span className="font-semibold text-[var(--color-ink)]">{row.fullName}</span>
+                    <span className="text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-primary-soft)] px-2.5 py-1 rounded-full">
                       {row.visits} visits · ₹{row.sales.toFixed(0)}
                     </span>
                   </li>
@@ -282,12 +310,16 @@ export function DashboardPage() {
           ) : null}
           {summaryQuery.data.insights.topPrescribedMedicines?.length ? (
             <Card className="p-5">
-              <h3 className="mb-3 text-base font-semibold">Top Prescribed / Sampled Medicines</h3>
-              <ul className="space-y-2 text-sm">
+              <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                💊 Top Prescribed / Sampled Medicines
+              </h3>
+              <ul className="divide-y divide-[var(--color-border)] text-sm">
                 {summaryQuery.data.insights.topPrescribedMedicines.map((row) => (
-                  <li key={row.medicineId} className="flex justify-between gap-3 border-b border-[var(--color-border)] py-2 last:border-0">
-                    <span>{row.name}</span>
-                    <span className="text-[var(--color-muted)]">{row.samples} samples</span>
+                  <li key={row.medicineId} className="flex justify-between items-center py-2.5">
+                    <span className="font-semibold text-[var(--color-ink)]">{row.name}</span>
+                    <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-full">
+                      {row.samples} samples
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -295,12 +327,16 @@ export function DashboardPage() {
           ) : null}
           {summaryQuery.data.insights.mrWiseSales?.length ? (
             <Card className="p-5">
-              <h3 className="mb-3 text-base font-semibold">MR-wise Sales</h3>
-              <ul className="space-y-2 text-sm">
+              <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                💼 MR-wise Sales
+              </h3>
+              <ul className="divide-y divide-[var(--color-border)] text-sm">
                 {summaryQuery.data.insights.mrWiseSales.map((row) => (
-                  <li key={row.mrId} className="flex justify-between gap-3 border-b border-[var(--color-border)] py-2 last:border-0">
-                    <span>{row.fullName}</span>
-                    <span className="font-medium">₹{row.amount.toFixed(2)}</span>
+                  <li key={row.mrId} className="flex justify-between items-center py-2.5">
+                    <span className="font-semibold text-[var(--color-ink)]">{row.fullName}</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      ₹{row.amount.toFixed(2)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -308,12 +344,16 @@ export function DashboardPage() {
           ) : null}
           {summaryQuery.data.insights.medicineWiseSales?.length ? (
             <Card className="p-5">
-              <h3 className="mb-3 text-base font-semibold">Medicine-wise Sales</h3>
-              <ul className="space-y-2 text-sm">
+              <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                🧪 Medicine-wise Sales
+              </h3>
+              <ul className="divide-y divide-[var(--color-border)] text-sm">
                 {summaryQuery.data.insights.medicineWiseSales.map((row) => (
-                  <li key={row.medicineId} className="flex justify-between gap-3 border-b border-[var(--color-border)] py-2 last:border-0">
-                    <span>{row.name}</span>
-                    <span className="font-medium">₹{row.amount.toFixed(2)}</span>
+                  <li key={row.medicineId} className="flex justify-between items-center py-2.5">
+                    <span className="font-semibold text-[var(--color-ink)]">{row.name}</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                      ₹{row.amount.toFixed(2)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -321,22 +361,29 @@ export function DashboardPage() {
           ) : null}
           {summaryQuery.data.insights.performanceGraph?.length ? (
             <Card className="p-5 lg:col-span-2">
-              <h3 className="mb-3 text-base font-semibold">Monthly Performance (visits/day)</h3>
-              <div className="flex h-40 items-end gap-1">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
+                  📊 Monthly Performance (Visits / Day)
+                </h3>
+                <span className="text-xs text-[var(--color-muted)] font-medium">Daily activity breakdown</span>
+              </div>
+              <div className="flex h-44 items-end gap-1.5 pt-4">
                 {summaryQuery.data.insights.performanceGraph.map((point) => {
                   const max = Math.max(
                     ...summaryQuery.data!.insights!.performanceGraph!.map((p) => p.visits),
                     1,
                   );
-                  const height = Math.max(8, Math.round((point.visits / max) * 100));
+                  const height = Math.max(10, Math.round((point.visits / max) * 100));
                   return (
-                    <div key={point.date} className="flex flex-1 flex-col items-center gap-1">
+                    <div key={point.date} className="group relative flex flex-1 flex-col items-center gap-1.5 h-full justify-end">
+                      <div className="absolute -top-7 hidden group-hover:block z-10 rounded-md bg-[var(--color-ink)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--color-surface)] shadow-sm whitespace-nowrap">
+                        {point.date}: {point.visits} visits
+                      </div>
                       <div
-                        className="w-full rounded-t bg-[var(--color-primary)]"
+                        className="w-full rounded-t-md bg-gradient-to-t from-[var(--color-primary)] to-[var(--color-primary-hover)] transition-all duration-200 group-hover:brightness-110 group-hover:shadow-xs"
                         style={{ height: `${height}%` }}
-                        title={`${point.date}: ${point.visits}`}
                       />
-                      <span className="text-[10px] text-[var(--color-muted)]">
+                      <span className="text-[10px] font-semibold text-[var(--color-muted)]">
                         {point.date.slice(8)}
                       </span>
                     </div>

@@ -29,7 +29,7 @@ export function DistributionsPage() {
         read-only distribution history.
       </Card>
 
-      <Card className="p-4">
+      <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}

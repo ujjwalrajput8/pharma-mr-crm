@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
 import { useClientTable } from '@/hooks/useClientTable';
-import { Select } from '@/components/ui/Field';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
@@ -205,27 +204,24 @@ export function AppointmentsPage() {
         }
       />
 
-      <Card className="p-4">
-        <div className="max-w-xs">
-          <Select
-            label="Filter by status"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as AppointmentStatus | '')}
-          >
-            <option value="">All statuses</option>
-            <option value="PENDING">Pending</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="CANCELLED">Cancelled</option>
-            <option value="RESCHEDULED">Rescheduled</option>
-          </Select>
-        </div>
-      </Card>
-
-      <Card className="p-4">
+      <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}
           placeholder="Search appointments…"
+          actions={
+            <select
+              className="h-9 w-full sm:w-44 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-xs font-semibold text-[var(--color-ink)] outline-none shadow-xs transition focus:border-[var(--color-primary)] cursor-pointer"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as AppointmentStatus | '')}
+            >
+              <option value="">All statuses</option>
+              <option value="PENDING">Pending</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CANCELLED">Cancelled</option>
+              <option value="RESCHEDULED">Rescheduled</option>
+            </select>
+          }
         />
         <DataTable
           columns={columns}

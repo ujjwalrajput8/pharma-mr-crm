@@ -25,6 +25,8 @@ export class SaleRepository {
     page: number;
     limit: number;
     mrId?: number;
+    /** Team scope for Managers — ignored when a single `mrId` is given. */
+    mrIds?: number[];
     medicineId?: number;
     doctorId?: number;
     medicalStoreId?: number;
@@ -33,7 +35,11 @@ export class SaleRepository {
   }) {
     const where: Prisma.SaleWhereInput = {
       deletedAt: null,
-      ...(params.mrId ? { mrId: params.mrId } : {}),
+      ...(params.mrId
+        ? { mrId: params.mrId }
+        : params.mrIds
+          ? { mrId: { in: params.mrIds } }
+          : {}),
       ...(params.medicineId ? { medicineId: params.medicineId } : {}),
       ...(params.doctorId ? { doctorId: params.doctorId } : {}),
       ...(params.medicalStoreId ? { medicalStoreId: params.medicalStoreId } : {}),

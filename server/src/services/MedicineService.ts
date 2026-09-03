@@ -27,7 +27,7 @@ export class MedicineService {
 
   public async list(query: ListMedicinesQueryDto) {
     const { items, total } = await this.medicines.list(query);
-    const warehouseId = await this.ledger.getDefaultWarehouseId();
+    const warehouseId = await this.ledger.findDefaultWarehouseId();
     const enriched = await Promise.all(
       items.map(async (item) => {
         const stats = await this.stockTxns.getWarehouseMedicineStats(warehouseId, item.id);
@@ -48,7 +48,7 @@ export class MedicineService {
   public async getById(id: number) {
     const medicine = await this.medicines.findById(id);
     if (!medicine) throw new NotFoundError('Medicine not found');
-    const warehouseId = await this.ledger.getDefaultWarehouseId();
+    const warehouseId = await this.ledger.findDefaultWarehouseId();
     const stats = await this.stockTxns.getWarehouseMedicineStats(warehouseId, id);
     return this.toPublic(medicine, stats);
   }
@@ -56,7 +56,7 @@ export class MedicineService {
   public async getDetails(id: number) {
     const medicine = await this.medicines.findById(id);
     if (!medicine) throw new NotFoundError('Medicine not found');
-    const warehouseId = await this.ledger.getDefaultWarehouseId();
+    const warehouseId = await this.ledger.findDefaultWarehouseId();
     const [bundle, stats, mrHoldings] = await Promise.all([
       this.medicines.getDetailBundle(id),
       this.stockTxns.getWarehouseMedicineStats(warehouseId, id),

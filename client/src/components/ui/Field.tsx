@@ -3,7 +3,9 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
   ReactNode,
+  ComponentType,
 } from 'react';
+import { ChevronDown, AlertCircle } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { fieldControlClass, fieldLabelClass } from '@/components/ui/formStyles';
 
@@ -13,18 +15,46 @@ interface FieldShellProps {
   htmlFor: string;
   hint?: string;
   required?: boolean;
+  optional?: boolean;
+  error?: string | null;
   children: ReactNode;
 }
 
-function FieldShell({ label, className, htmlFor, hint, required, children }: FieldShellProps) {
+function FieldShell({
+  label,
+  className,
+  htmlFor,
+  hint,
+  required,
+  optional,
+  error,
+  children,
+}: FieldShellProps) {
   return (
-    <div className={cn('block', className)}>
-      <label htmlFor={htmlFor} className={cn(fieldLabelClass, 'flex items-center gap-1')}>
-        {label}
-        {required ? <span className="text-[var(--color-danger)]">*</span> : null}
-      </label>
-      <div className="mt-1.5">{children}</div>
-      {hint ? <p className="mt-1 text-[11px] text-[var(--color-muted)]">{hint}</p> : null}
+    <div className={cn('group/field block', className)}>
+      <div className={cn(fieldLabelClass, 'mb-1.5')}>
+        <label htmlFor={htmlFor} className="flex items-center gap-1 cursor-pointer font-medium text-[var(--color-ink)]">
+          <span>{label}</span>
+          {required ? (
+            <span className="text-[var(--color-danger)] text-sm leading-none font-bold" title="Required">
+              *
+            </span>
+          ) : optional ? (
+            <span className="text-[10px] font-normal text-[var(--color-muted)] tracking-normal">
+              (optional)
+            </span>
+          ) : null}
+        </label>
+      </div>
+      <div className="relative">{children}</div>
+      {error ? (
+        <p className="mt-1.5 flex items-center gap-1 text-xs text-[var(--color-danger)] font-medium animate-fade-in">
+          <AlertCircle size={13} className="shrink-0" />
+          <span>{error}</span>
+        </p>
+      ) : hint ? (
+        <p className="mt-1.5 text-[11px] leading-normal text-[var(--color-muted)]">{hint}</p>
+      ) : null}
     </div>
   );
 }
@@ -33,6 +63,9 @@ interface FieldProps {
   label: string;
   className?: string;
   hint?: string;
+  error?: string | null;
+  optional?: boolean;
+  icon?: ComponentType<{ size?: number; className?: string }>;
 }
 
 export function Input({
@@ -42,6 +75,9 @@ export function Input({
   type,
   hint,
   required,
+  error,
+  optional,
+  icon: Icon,
   ...props
 }: FieldProps & InputHTMLAttributes<HTMLInputElement>) {
   if (type === 'date' || type === 'time' || type === 'datetime-local') {
@@ -55,8 +91,27 @@ export function Input({
       htmlFor={inputId}
       hint={hint}
       required={required}
+      optional={optional}
+      error={error}
     >
-      <input id={inputId} type={type} required={required} className={fieldControlClass} {...props} />
+      <div className="relative flex items-center">
+        {Icon ? (
+          <div className="pointer-events-none absolute left-3.5 flex items-center text-[var(--color-muted)] transition-colors group-focus-within/field:text-[var(--color-primary)]">
+            <Icon size={16} />
+          </div>
+        ) : null}
+        <input
+          id={inputId}
+          type={type}
+          required={required}
+          className={cn(
+            fieldControlClass,
+            Icon && 'pl-10',
+            error && 'border-[var(--color-danger)] focus:border-[var(--color-danger)] focus:ring-[var(--color-danger)]/15',
+          )}
+          {...props}
+        />
+      </div>
     </FieldShell>
   );
 }
@@ -68,6 +123,9 @@ export function Select({
   children,
   hint,
   required,
+  error,
+  optional,
+  icon: Icon,
   ...props
 }: FieldProps & SelectHTMLAttributes<HTMLSelectElement>) {
   const selectId = id ?? props.name ?? label;
@@ -78,10 +136,32 @@ export function Select({
       htmlFor={selectId}
       hint={hint}
       required={required}
+      optional={optional}
+      error={error}
     >
-      <select id={selectId} required={required} className={fieldControlClass} {...props}>
-        {children}
-      </select>
+      <div className="relative flex items-center">
+        {Icon ? (
+          <div className="pointer-events-none absolute left-3.5 flex items-center text-[var(--color-muted)] transition-colors group-focus-within/field:text-[var(--color-primary)]">
+            <Icon size={16} />
+          </div>
+        ) : null}
+        <select
+          id={selectId}
+          required={required}
+          className={cn(
+            fieldControlClass,
+            'appearance-none pr-10 cursor-pointer',
+            Icon && 'pl-10',
+            error && 'border-[var(--color-danger)] focus:border-[var(--color-danger)] focus:ring-[var(--color-danger)]/15',
+          )}
+          {...props}
+        >
+          {children}
+        </select>
+        <div className="pointer-events-none absolute right-3 flex items-center text-[var(--color-muted)]">
+          <ChevronDown size={16} />
+        </div>
+      </div>
     </FieldShell>
   );
 }
@@ -92,6 +172,8 @@ export function Textarea({
   id,
   hint,
   required,
+  error,
+  optional,
   ...props
 }: FieldProps & TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const areaId = id ?? props.name ?? label;
@@ -102,13 +184,20 @@ export function Textarea({
       htmlFor={areaId}
       hint={hint}
       required={required}
+      optional={optional}
+      error={error}
     >
       <textarea
         id={areaId}
         required={required}
-        className={cn(fieldControlClass, 'h-auto min-h-[5.5rem] resize-y py-2 leading-relaxed')}
+        className={cn(
+          fieldControlClass,
+          'h-auto min-h-[5.5rem] resize-y py-2.5 leading-relaxed',
+          error && 'border-[var(--color-danger)] focus:border-[var(--color-danger)] focus:ring-[var(--color-danger)]/15',
+        )}
         {...props}
       />
     </FieldShell>
   );
 }
+
