@@ -1,45 +1,50 @@
-import { DataTable, Td } from '@/components/ui/DataTable';
-import { Badge, Card, PageHeader, StatTile } from '@/components/ui/Page';
-import { daysUntilExpiry, MOCK_MY_STOCK } from '@/mocks/fieldForce';
+import { Link } from 'react-router-dom';
+import { Package, Truck } from 'lucide-react';
+import { Button } from '@/components/ui/Button';
+import { NotWiredYet } from '@/components/ui/NotWiredYet';
+import { PageHeader } from '@/components/ui/Page';
 
 export function MyStockPage() {
-  const totalQty = MOCK_MY_STOCK.reduce((sum, row) => sum + row.qty, 0);
-  const nearExpiry = MOCK_MY_STOCK.filter((row) => daysUntilExpiry(row.expiryDate) <= 90).length;
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="My stock"
-        description="Carrying stock by product and batch. Balance is ledger-derived."
+        description="Sample stock you are carrying, by product and batch."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <StatTile label="Units on hand" value={totalQty} />
-        <StatTile label="Near expiry (≤90d)" value={nearExpiry} />
-      </div>
-
-      <Card>
-        <DataTable columns={['Product', 'Batch', 'Expiry', 'On hand', 'Risk']}>
-          {MOCK_MY_STOCK.map((row) => {
-            const days = daysUntilExpiry(row.expiryDate);
-            const risky = days <= 90;
-            return (
-              <tr
-                key={`${row.productName}-${row.batchNo}`}
-                className="transition-colors hover:bg-[var(--color-bg)]/80"
-              >
-                <Td className="font-medium">{row.productName}</Td>
-                <Td className="font-mono text-xs">{row.batchNo}</Td>
-                <Td>{row.expiryDate}</Td>
-                <Td className="font-semibold">{row.qty}</Td>
-                <Td>
-                  {risky ? <Badge tone="warning">{days}d</Badge> : <Badge tone="success">OK</Badge>}
-                </Td>
-              </tr>
-            );
-          })}
-        </DataTable>
-      </Card>
+      <NotWiredYet
+        icon={Package}
+        title="Per-MR stock balance endpoint is missing"
+        summary="Stock balances are stored per holder, so the numbers exist — there is just no endpoint yet that returns the balance for the signed-in MR. Meanwhile, Issue to MR and Sample Given show what came in and what went out."
+        planned={[
+          'Batch-wise on-hand quantity for your own bag',
+          'Expiry warning for batches close to their expiry date',
+          'Return-to-warehouse and expiry write-off requests',
+          'Acknowledge stock a manager has issued to you',
+        ]}
+        ready={[
+          'stock_balances rows keyed by holder (USER / WAREHOUSE / DOCTOR)',
+          'Append-only stock_txns ledger behind every movement',
+          'RETURN, EXPIRY_WRITEOFF and LOST transaction types',
+          'Batch model with mfg / expiry dates',
+        ]}
+        footer={
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Link to="/medicine-issues">
+              <Button variant="secondary" size="sm">
+                <Truck size={14} />
+                Stock issued to me
+              </Button>
+            </Link>
+            <Link to="/distributions">
+              <Button variant="secondary" size="sm">
+                <Package size={14} />
+                Samples I gave
+              </Button>
+            </Link>
+          </div>
+        }
+      />
     </div>
   );
 }

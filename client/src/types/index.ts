@@ -61,6 +61,11 @@ export type Permission =
   | 'sales:own'
   | 'attendance:own'
   | 'attendance:manage'
+  | 'leaves:own'
+  | 'leaves:manage'
+  | 'employees:view'
+  | 'holidays:manage'
+  | 'leave-types:manage'
   | 'settings:manage'
   | 'audit:view'
   | 'profile:own';

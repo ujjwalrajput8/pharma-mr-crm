@@ -1,65 +1,50 @@
-import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { CalendarCheck2, Map, Stethoscope } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { Badge, Card, PageHeader } from '@/components/ui/Page';
-import { MOCK_TOUR_DAYS, type MockTourDay } from '@/mocks/fieldForce';
-
-const statusTone: Record<MockTourDay['status'], 'neutral' | 'primary' | 'success' | 'danger'> = {
-  draft: 'neutral',
-  submitted: 'primary',
-  approved: 'success',
-  rejected: 'danger',
-};
+import { NotWiredYet } from '@/components/ui/NotWiredYet';
+import { PageHeader } from '@/components/ui/Page';
 
 export function TourPlanPage() {
-  const [status, setStatus] = useState<'draft' | 'submitted' | 'approved'>('draft');
-  const [days] = useState(MOCK_TOUR_DAYS);
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <PageHeader
         title="Tour plan"
         description="Monthly plan → manager approval → day-wise call list."
-        actions={
-          status === 'draft' ? (
-            <Button onClick={() => setStatus('submitted')}>Submit</Button>
-          ) : status === 'submitted' ? (
-            <Button variant="secondary" onClick={() => setStatus('approved')}>
-              Preview approve
-            </Button>
-          ) : (
-            <Badge tone="success">Approved</Badge>
-          )
-        }
       />
 
-      <Card className="flex flex-wrap items-end justify-between gap-3 px-4 py-3.5">
-        <div>
-          <p className="text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-            Plan month
-          </p>
-          <p className="mt-1 text-base font-semibold">August 2026</p>
-        </div>
-        <Badge tone={statusTone[status]}>{status}</Badge>
-      </Card>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {days.map((day) => (
-          <Card key={day.date} className="p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="font-semibold tabular-nums">{day.date}</p>
-                <p className="mt-0.5 text-sm text-[var(--color-muted)]">
-                  {day.beat} · {day.workType}
-                </p>
-              </div>
-              <Badge tone={statusTone[day.status]}>{day.status}</Badge>
-            </div>
-            <p className="mt-3 text-sm text-[var(--color-ink)]">
-              {day.doctors.length > 0 ? day.doctors.join(', ') : 'No doctor calls'}
-            </p>
-          </Card>
-        ))}
-      </div>
+      <NotWiredYet
+        icon={Map}
+        title="Monthly tour plan (MTP) is next up"
+        summary="The database models are already designed and migrated — what is missing is the API and the planning grid. Territory master needs CRUD first, since a plan day is beat-wise."
+        planned={[
+          'Month grid: pick a beat and the doctors / chemists to call each day',
+          'Draft → Submit → manager Approve / Reject, then locked',
+          'Joint-work days tagged with the accompanying manager',
+          'Approved plan feeds My Day and the coverage-compliance report',
+        ]}
+        ready={[
+          'tour_plans, tour_plan_days, tour_plan_calls tables + status enum',
+          'Territory tree model (STATE / DISTRICT / HQ / BEAT)',
+          'Doctor assignment per MR, with visit frequency and category',
+          'Approvals inbox that the submitted plan will land in',
+        ]}
+        footer={
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Link to="/doctors">
+              <Button variant="secondary" size="sm">
+                <Stethoscope size={14} />
+                Assigned doctors
+              </Button>
+            </Link>
+            <Link to="/appointments">
+              <Button variant="secondary" size="sm">
+                <CalendarCheck2 size={14} />
+                Plan via appointments
+              </Button>
+            </Link>
+          </div>
+        }
+      />
     </div>
   );
 }

@@ -28,6 +28,11 @@ import { TourPlanPage } from '@/pages/TourPlanPage';
 import { MyStockPage } from '@/pages/MyStockPage';
 import { LedgerPage } from '@/pages/LedgerPage';
 import { ManagerPermissionsPage } from '@/pages/ManagerPermissionsPage';
+import { LeavePage } from '@/pages/LeavePage';
+import { LeavePolicyPage } from '@/pages/LeavePolicyPage';
+import { HolidaysPage } from '@/pages/HolidaysPage';
+import { EmployeesPage } from '@/pages/EmployeesPage';
+import { EmployeeProfilePage } from '@/pages/EmployeeProfilePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -84,6 +89,51 @@ export default function App() {
                   element={
                     <RequirePermission permissions={['tour-plan:manage', 'tour-plan:own']}>
                       <TourPlanPage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/leave"
+                  element={
+                    <RequirePermission permissions={['leaves:own', 'leaves:manage']}>
+                      <LeavePage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/employees"
+                  element={
+                    <RequirePermission permissions={['employees:view']}>
+                      <EmployeesPage />
+                    </RequirePermission>
+                  }
+                />
+                {/* Own record is reachable for every role — the page falls back to /employees/me. */}
+                <Route
+                  path="/employees/:id"
+                  element={
+                    <RequirePermission permissions={['employees:view', 'profile:own']}>
+                      <EmployeeProfilePage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/holidays"
+                  element={
+                    <RequirePermission permissions={['holidays:manage']}>
+                      <HolidaysPage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/leave-policy"
+                  element={
+                    <RequirePermission permissions={['leave-types:manage']}>
+                      <LeavePolicyPage />
                     </RequirePermission>
                   }
                 />
