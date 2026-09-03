@@ -6,6 +6,7 @@ import {
   type StockTxnClient,
 } from '../repositories/StockTxnRepository';
 import { SettingRepository } from '../repositories/SettingRepository';
+import { BadRequestError } from '../errors/AppError';
 
 const DEFAULT_WAREHOUSE_SETTING = 'stock.default_warehouse_id';
 
@@ -27,16 +28,26 @@ export class StockLedgerService {
     return StockLedgerService.instance;
   }
 
+/**
+   * Required for any stock *write*. Reads must use `findDefaultWarehouseId()`
+   * so a not-yet-configured install shows empty stock instead of a 500.
+   */
   public async getDefaultWarehouseId(): Promise<number> {
-    const setting = await this.settings.findByKey(DEFAULT_WAREHOUSE_SETTING);
-    if (!setting) {
-      throw new Error('DEFAULT_WAREHOUSE_NOT_CONFIGURED');
-    }
-    const warehouseId = Number(setting.value);
-    if (!Number.isInteger(warehouseId) || warehouseId <= 0) {
-      throw new Error('DEFAULT_WAREHOUSE_NOT_CONFIGURED');
+    const warehouseId = await this.findDefaultWarehouseId();
+    if (warehouseId === null) {
+      throw new BadRequestError(
+        'No default warehouse configured. Set the "stock.default_warehouse_id" setting to a warehouse id.',
+      );
     }
     return warehouseId;
+  }
+
+  /** `null` when the setting is missing or malformed — safe for read paths. */
+  public async findDefaultWarehouseId(): Promise<number | null> {
+    const setting = await this.settings.findByKey(DEFAULT_WAREHOUSE_SETTING);
+    if (!setting) return null;
+    const warehouseId = Number(setting.value);
+    return Number.isInteger(warehouseId) && warehouseId > 0 ? warehouseId : null;
   }
 
   public async postTxn(

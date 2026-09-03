@@ -5,6 +5,19 @@ import { StockTxnRepository } from '../repositories/StockTxnRepository';
 
 const DEFAULT_WAREHOUSE_SETTING = 'stock.default_warehouse_id';
 
+/**
+ * Narrows a report query to one MR, or to a Manager's whole team when no single MR is picked.
+ * Without this, a Manager holding "all reports" would read company-wide numbers.
+ */
+function mrScope(
+  filters: { mrId?: number; mrIds?: number[] } | undefined,
+  key: string,
+): Record<string, number | { in: number[] }> {
+  if (filters?.mrId) return { [key]: filters.mrId };
+  if (filters?.mrIds) return { [key]: { in: filters.mrIds } };
+  return {};
+}
+
 export class ReportRepository {
   private static instance: ReportRepository | null = null;
 
@@ -31,12 +44,12 @@ export class ReportRepository {
   public async appointmentStats(
     from: Date,
     to: Date,
-    filters?: { mrId?: number; doctorId?: number; status?: string },
+    filters?: { mrId?: number; mrIds?: number[]; doctorId?: number; status?: string },
   ) {
     const where = {
       deletedAt: null as null,
       date: { gte: from, lte: to },
-      ...(filters?.mrId ? { mrId: filters.mrId } : {}),
+      ...mrScope(filters, 'mrId'),
       ...(filters?.doctorId ? { doctorId: filters.doctorId } : {}),
       ...(filters?.status ? { status: filters.status as never } : {}),
     };
@@ -63,12 +76,12 @@ export class ReportRepository {
   public async visitStats(
     from: Date,
     to: Date,
-    filters?: { mrId?: number; doctorId?: number },
+    filters?: { mrId?: number; mrIds?: number[]; doctorId?: number },
   ) {
     const where = {
       deletedAt: null as null,
       visitDate: { gte: from, lte: to },
-      ...(filters?.mrId ? { mrId: filters.mrId } : {}),
+      ...mrScope(filters, 'mrId'),
       ...(filters?.doctorId ? { doctorId: filters.doctorId } : {}),
     };
 
@@ -95,14 +108,16 @@ export class ReportRepository {
   public async distributionStats(
     from: Date,
     to: Date,
-    filters?: { mrId?: number; doctorId?: number; medicineId?: number },
+    filters?: { mrId?: number; mrIds?: number[]; doctorId?: number; medicineId?: number },
   ) {
     const where = {
       txnType: StockTxnTypes.SAMPLE_GIVEN,
       txnDate: { gte: from, lte: to },
       ...(filters?.mrId
         ? { fromHolderType: HolderTypes.USER, fromHolderId: filters.mrId }
-        : {}),
+        : filters?.mrIds
+          ? { fromHolderType: HolderTypes.USER, fromHolderId: { in: filters.mrIds } }
+          : {}),
       ...(filters?.doctorId
         ? { toHolderType: HolderTypes.DOCTOR, toHolderId: filters.doctorId }
         : {}),
@@ -147,12 +162,12 @@ export class ReportRepository {
     return this.stockTxns.warehouseStockReport(warehouseId);
   }
 
-  public async mrPerformance(from: Date, to: Date, mrId?: number) {
+  public async mrPerformance(from: Date, to: Date, mrId?: number, mrIds?: number[]) {
     const mrs = await this.prisma.user.findMany({
       where: {
         role: 'MR',
         deletedAt: null,
-        ...(mrId ? { id: mrId } : {}),
+        ...(mrId ? { id: mrId } : mrIds ? { id: { in: mrIds } } : {}),
       },
       select: {
         id: true,
@@ -207,14 +222,14 @@ export class ReportRepository {
     return results;
   }
 
-  public async doctorVisitReport(from: Date, to: Date, mrId?: number) {
+  public async doctorVisitReport(from: Date, to: Date, mrId?: number, mrIds?: number[]) {
     const visits = await this.prisma.visit.groupBy({
       by: ['doctorId'],
       where: {
         deletedAt: null,
         visitDate: { gte: from, lte: to },
         doctorId: { not: null },
-        ...(mrId ? { mrId } : {}),
+        ...(mrId ? { mrId } : mrIds ? { mrId: { in: mrIds } } : {}),
       },
       _count: { doctorId: true },
       orderBy: { _count: { doctorId: 'desc' } },
@@ -373,12 +388,18 @@ export class ReportRepository {
   public async salesReport(
     from: Date,
     to: Date,
-    filters?: { mrId?: number; doctorId?: number; medicineId?: number; medicalStoreId?: number },
+    filters?: {
+      mrId?: number;
+      mrIds?: number[];
+      doctorId?: number;
+      medicineId?: number;
+      medicalStoreId?: number;
+    },
   ) {
     const where = {
       deletedAt: null as null,
       invoiceDate: { gte: from, lte: to },
-      ...(filters?.mrId ? { mrId: filters.mrId } : {}),
+      ...mrScope(filters, 'mrId'),
       ...(filters?.doctorId ? { doctorId: filters.doctorId } : {}),
       ...(filters?.medicineId ? { medicineId: filters.medicineId } : {}),
       ...(filters?.medicalStoreId ? { medicalStoreId: filters.medicalStoreId } : {}),

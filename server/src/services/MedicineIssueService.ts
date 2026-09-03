@@ -4,6 +4,7 @@ import { MedicineIssueRepository } from '../repositories/MedicineIssueRepository
 import { StockTxnRepository } from '../repositories/StockTxnRepository';
 import { AppRoles, HolderTypes } from '../constants';
 import { StockLedgerService } from './StockLedgerService';
+import { TeamScopeService } from './TeamScopeService';
 import type { AuthUser } from '../types/auth.types';
 
 /**
@@ -15,6 +16,7 @@ export class MedicineIssueService {
     private readonly issues = MedicineIssueRepository.getInstance(),
     private readonly stockTxns = StockTxnRepository.getInstance(),
     private readonly ledger = StockLedgerService.getInstance(),
+    private readonly scope = TeamScopeService.getInstance(),
   ) {}
   public static getInstance(): MedicineIssueService {
     if (!MedicineIssueService.instance) MedicineIssueService.instance = new MedicineIssueService();
@@ -22,10 +24,11 @@ export class MedicineIssueService {
   }
 
   public async list(query: ListMedicineIssuesQueryDto, actor: AuthUser) {
+    const mrFilter = await this.scope.resolveMrFilter(actor, query.mrId);
     const { items, total } = await this.issues.list({
       page: query.page,
       limit: query.limit,
-      mrId: actor.role === AppRoles.MR ? actor.id : query.mrId,
+      ...mrFilter,
       medicineId: query.medicineId,
     });
     return {
@@ -50,6 +53,9 @@ export class MedicineIssueService {
       where: { id: dto.mrId, role: AppRoles.MR, deletedAt: null },
     });
     if (!mr) throw new NotFoundError('MR not found');
+
+    // A Manager can only load stock into their own reporting line.
+    await this.scope.assertCanSee(actor, dto.mrId);
 
     const warehouseId = await this.ledger.getDefaultWarehouseId();
     const batch = await this.stockTxns.resolveBatchForIssue({

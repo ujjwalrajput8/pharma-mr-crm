@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
 import type {
+  AttendanceCalendarQueryDto,
+  AttendanceSummaryQueryDto,
   CheckInDto,
   CheckOutDto,
   ListAttendanceQueryDto,
@@ -53,5 +55,19 @@ export class AttendanceController {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const rows = await this.attendance.fieldUsers(req.user);
     ApiResponse.success(res, rows, 'Field users');
+  };
+
+  public calendar = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const query = (req.validatedQuery ?? req.query) as AttendanceCalendarQueryDto;
+    const result = await this.attendance.calendar(query, req.user);
+    ApiResponse.success(res, result, 'Attendance calendar');
+  };
+
+  public summary = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const query = (req.validatedQuery ?? req.query) as AttendanceSummaryQueryDto;
+    const result = await this.attendance.summary(query, req.user);
+    ApiResponse.success(res, result, 'Attendance summary');
   };
 }

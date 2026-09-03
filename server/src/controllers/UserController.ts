@@ -31,6 +31,12 @@ export class UserController {
     ApiResponse.success(res, result.items, 'Users retrieved', 200, result.meta);
   };
 
+  /** Managers available as a reporting parent (for the create / edit form). */
+  public managerOptions = async (_req: Request, res: Response): Promise<void> => {
+    const rows = await this.users.listManagerOptions();
+    ApiResponse.success(res, rows, 'Manager options');
+  };
+
   public getById = async (req: Request, res: Response): Promise<void> => {
     const user = await this.users.getById(Number(req.params.id));
     ApiResponse.success(res, user, 'User retrieved');
@@ -39,7 +45,7 @@ export class UserController {
   public create = async (req: Request, res: Response): Promise<void> => {
     const actorId = this.requireActor(req);
     const user = await this.users.createMr(req.body as CreateMrDto, actorId);
-    ApiResponse.created(res, user, 'MR account created');
+    ApiResponse.created(res, user, `${user.role === 'MANAGER' ? 'Manager' : 'MR'} account created`);
   };
 
   public update = async (req: Request, res: Response): Promise<void> => {

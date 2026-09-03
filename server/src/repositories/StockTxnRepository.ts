@@ -266,7 +266,11 @@ export class StockTxnRepository {
     return { items: items.slice(start, start + params.limit), total };
   }
 
-  public async getWarehouseMedicineStats(warehouseId: number, medicineId: number) {
+  public async getWarehouseMedicineStats(warehouseId: number | null, medicineId: number) {
+    // No default warehouse configured yet — report zeros rather than failing the screen.
+    if (warehouseId === null) {
+      return { openingStock: 0, issued: 0, returned: 0, available: 0 };
+    }
     const [opening, issued, returned, available] = await Promise.all([
       this.prisma.stockTxn.aggregate({
         where: {
@@ -350,6 +354,8 @@ export class StockTxnRepository {
     page: number;
     limit: number;
     mrId?: number;
+    /** Team scope for Managers — ignored when a single `mrId` is given. */
+    mrIds?: number[];
     medicineId?: number;
     visitId?: number;
     from?: Date;
@@ -360,7 +366,9 @@ export class StockTxnRepository {
       refType: 'VISIT',
       ...(params.mrId
         ? { fromHolderType: HolderTypes.USER, fromHolderId: params.mrId }
-        : {}),
+        : params.mrIds
+          ? { fromHolderType: HolderTypes.USER, fromHolderId: { in: params.mrIds } }
+          : {}),
       ...(params.medicineId ? { medicineId: params.medicineId } : {}),
       ...(params.visitId ? { refId: params.visitId } : {}),
       ...(params.from || params.to
@@ -441,12 +449,18 @@ export class StockTxnRepository {
     page: number;
     limit: number;
     mrId?: number;
+    /** Team scope for Managers — ignored when a single `mrId` is given. */
+    mrIds?: number[];
     medicineId?: number;
   }) {
     const where: Prisma.StockTxnWhereInput = {
       txnType: StockTxnTypes.ISSUE,
       toHolderType: HolderTypes.USER,
-      ...(params.mrId ? { toHolderId: params.mrId } : {}),
+      ...(params.mrId
+        ? { toHolderId: params.mrId }
+        : params.mrIds
+          ? { toHolderId: { in: params.mrIds } }
+          : {}),
       ...(params.medicineId ? { medicineId: params.medicineId } : {}),
     };
 

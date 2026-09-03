@@ -2,6 +2,7 @@ import { AppRoles } from '../constants';
 import type { ReportQueryDto } from '../dto/report.dto';
 import { BadRequestError, ForbiddenError } from '../errors/AppError';
 import { ReportRepository } from '../repositories/ReportRepository';
+import { TeamScopeService } from './TeamScopeService';
 import type { AuthUser } from '../types/auth.types';
 
 function startOfDay(date: Date): Date {
@@ -59,7 +60,10 @@ function resolveRange(query: ReportQueryDto): { from: Date; to: Date; label: str
 export class ReportService {
   private static instance: ReportService | null = null;
 
-  private constructor(private readonly reports = ReportRepository.getInstance()) {}
+  private constructor(
+    private readonly reports = ReportRepository.getInstance(),
+    private readonly scope = TeamScopeService.getInstance(),
+  ) {}
 
   public static getInstance(): ReportService {
     if (!ReportService.instance) {
@@ -69,11 +73,9 @@ export class ReportService {
   }
 
   public async getReport(query: ReportQueryDto, actor: AuthUser) {
-    const scopedMrId = actor.role === AppRoles.MR ? actor.id : query.mrId;
-
-    if (actor.role === AppRoles.MR && query.mrId && query.mrId !== actor.id) {
-      throw new ForbiddenError('You can only view your own reports');
-    }
+    // Resolves to { mrId } for a picked MR, or { mrIds } for a Manager's whole team.
+    const mrScopeFilter = await this.scope.resolveMrFilter(actor, query.mrId);
+    const scopedMrId = mrScopeFilter.mrId;
 
     if (query.type === 'mr-performance' && actor.role === AppRoles.MR) {
       throw new ForbiddenError('MR performance report is available to administrators only');
@@ -85,7 +87,7 @@ export class ReportService {
 
     const range = resolveRange(query);
     const filters = {
-      mrId: scopedMrId,
+      ...mrScopeFilter,
       doctorId: query.doctorId,
       medicineId: query.medicineId,
       medicalStoreId: query.medicalStoreId,
@@ -111,7 +113,12 @@ export class ReportService {
     }
 
     if (query.type === 'mr-performance') {
-      const rows = await this.reports.mrPerformance(range.from, range.to, scopedMrId);
+      const rows = await this.reports.mrPerformance(
+        range.from,
+        range.to,
+        scopedMrId,
+        mrScopeFilter.mrIds,
+      );
       return {
         type: query.type,
         range: rangeMeta,
@@ -138,7 +145,12 @@ export class ReportService {
     }
 
     if (query.type === 'doctor-visits') {
-      const rows = await this.reports.doctorVisitReport(range.from, range.to, scopedMrId);
+      const rows = await this.reports.doctorVisitReport(
+        range.from,
+        range.to,
+        scopedMrId,
+        mrScopeFilter.mrIds,
+      );
       return {
         type: query.type,
         range: rangeMeta,

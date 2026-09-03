@@ -8,16 +8,31 @@ export interface UserListParams {
   search?: string;
   status?: string;
   role?: string;
+  /** Used when no single role is requested — e.g. MR + MANAGER together. */
+  roles?: string[];
 }
+
+const profileSelect = {
+  id: true,
+  employeeCode: true,
+  designation: true,
+  address: true,
+  joiningDate: true,
+  assignedArea: true,
+} as const;
+
+const managerSelect = { id: true, fullName: true, email: true, role: true } as const;
 
 export type UserWithProfile = User & {
   mrProfile: {
     id: number;
     employeeCode: string;
+    designation: string | null;
     address: string | null;
     joiningDate: Date | null;
     assignedArea: string | null;
   } | null;
+  manager?: { id: number; fullName: string; email: string; role: string } | null;
 };
 
 export class UserRepository {
@@ -35,14 +50,14 @@ export class UserRepository {
   public findByEmail(email: string): Promise<UserWithProfile | null> {
     return this.prisma.user.findFirst({
       where: { email: email.toLowerCase(), deletedAt: null },
-      include: { mrProfile: true },
+      include: { mrProfile: { select: profileSelect }, manager: { select: managerSelect } },
     });
   }
 
   public findById(id: number): Promise<UserWithProfile | null> {
     return this.prisma.user.findFirst({
       where: { id, deletedAt: null },
-      include: { mrProfile: true },
+      include: { mrProfile: { select: profileSelect }, manager: { select: managerSelect } },
     });
   }
 
@@ -50,6 +65,7 @@ export class UserRepository {
     user: Prisma.UserCreateInput;
     profile: {
       employeeCode: string;
+      designation?: string;
       address?: string;
       joiningDate?: Date | null;
       assignedArea?: string;
@@ -64,7 +80,7 @@ export class UserRepository {
           create: input.profile,
         },
       },
-      include: { mrProfile: true },
+      include: { mrProfile: { select: profileSelect }, manager: { select: managerSelect } },
     });
   }
 
@@ -76,7 +92,7 @@ export class UserRepository {
     return this.prisma.user.update({
       where: { id },
       data,
-      include: { mrProfile: true },
+      include: { mrProfile: { select: profileSelect }, manager: { select: managerSelect } },
     });
   }
 
@@ -94,7 +110,11 @@ export class UserRepository {
   public async list(params: UserListParams): Promise<{ items: UserWithProfile[]; total: number }> {
     const where: Prisma.UserWhereInput = {
       deletedAt: null,
-      ...(params.role ? { role: params.role as Prisma.EnumRoleFilter['equals'] } : { role: AppRoles.MR }),
+      ...(params.role
+        ? { role: params.role as Prisma.EnumRoleFilter['equals'] }
+        : params.roles
+          ? { role: { in: params.roles as Prisma.EnumRoleFilter['in'] } }
+          : { role: AppRoles.MR }),
       ...(params.status
         ? { status: params.status as Prisma.EnumUserStatusFilter['equals'] }
         : {}),
@@ -105,6 +125,7 @@ export class UserRepository {
               { email: { contains: params.search, mode: 'insensitive' } },
               { phone: { contains: params.search, mode: 'insensitive' } },
               { mrProfile: { employeeCode: { contains: params.search, mode: 'insensitive' } } },
+              { mrProfile: { designation: { contains: params.search, mode: 'insensitive' } } },
               { mrProfile: { assignedArea: { contains: params.search, mode: 'insensitive' } } },
             ],
           }
@@ -117,7 +138,7 @@ export class UserRepository {
         orderBy: { createdAt: 'desc' },
         skip: (params.page - 1) * params.limit,
         take: params.limit,
-        include: { mrProfile: true },
+        include: { mrProfile: { select: profileSelect }, manager: { select: managerSelect } },
       }),
       this.prisma.user.count({ where }),
     ]);
@@ -138,6 +159,48 @@ export class UserRepository {
       select: { id: true },
     });
     return rows.map((row) => row.id);
+  }
+
+  /**
+   * Whole reporting sub-tree below a user (RSM → ASM → MR), excluding the root.
+   * Breadth-first with a depth cap so a bad `managerId` cycle can never spin forever.
+   */
+  public async listDescendantIds(managerId: number, maxDepth = 6): Promise<number[]> {
+    const collected = new Set<number>();
+    let frontier = [managerId];
+
+    for (let depth = 0; depth < maxDepth && frontier.length > 0; depth += 1) {
+      const rows = await this.prisma.user.findMany({
+        where: { managerId: { in: frontier }, deletedAt: null, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      frontier = rows.map((row) => row.id).filter((id) => !collected.has(id));
+      for (const id of frontier) collected.add(id);
+    }
+
+    collected.delete(managerId);
+    return [...collected];
+  }
+
+  /** Active MRs / Managers visible to a manager (self + sub-tree) or everyone for Admin. */
+  public listTeamMembers(userIds?: number[]) {
+    return this.prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        role: { in: ['MR', 'MANAGER'] },
+        ...(userIds ? { id: { in: userIds } } : {}),
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        status: true,
+        managerId: true,
+        mrProfile: { select: { employeeCode: true, designation: true, assignedArea: true } },
+      },
+      orderBy: { fullName: 'asc' },
+    });
   }
 
   public findManyByIds(ids: number[]) {

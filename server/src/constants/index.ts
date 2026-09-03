@@ -96,3 +96,58 @@ export const TOKEN_TYPES = {
   ACCESS: 'access',
   REFRESH: 'refresh',
 } as const;
+
+export const WorkTypes = {
+  FIELD: 'FIELD',
+  OFFICE: 'OFFICE',
+  JOINT_WORK: 'JOINT_WORK',
+  LEAVE: 'LEAVE',
+  HOLIDAY: 'HOLIDAY',
+} as const;
+
+export type WorkType = (typeof WorkTypes)[keyof typeof WorkTypes];
+
+export const LeaveStatuses = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  CANCELLED: 'CANCELLED',
+} as const;
+
+export type LeaveStatus = (typeof LeaveStatuses)[keyof typeof LeaveStatuses];
+
+export const LeaveDayParts = {
+  FULL: 'FULL',
+  FIRST_HALF: 'FIRST_HALF',
+  SECOND_HALF: 'SECOND_HALF',
+} as const;
+
+export type LeaveDayPart = (typeof LeaveDayParts)[keyof typeof LeaveDayParts];
+
+export const HolidayTypes = {
+  NATIONAL: 'NATIONAL',
+  FESTIVAL: 'FESTIVAL',
+  REGIONAL: 'REGIONAL',
+  COMPANY: 'COMPANY',
+  WEEKLY_OFF: 'WEEKLY_OFF',
+} as const;
+
+export type HolidayType = (typeof HolidayTypes)[keyof typeof HolidayTypes];
+
+export const Genders = {
+  MALE: 'MALE',
+  FEMALE: 'FEMALE',
+  OTHER: 'OTHER',
+} as const;
+
+export type Gender = (typeof Genders)[keyof typeof Genders];
+
+export const StockCountStatuses = {
+  DRAFT: 'DRAFT',
+  SUBMITTED: 'SUBMITTED',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  LOCKED: 'LOCKED',
+} as const;
+
+export type StockCountStatus = (typeof StockCountStatuses)[keyof typeof StockCountStatuses];

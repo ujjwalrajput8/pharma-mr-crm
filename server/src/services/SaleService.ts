@@ -2,6 +2,7 @@ import { AppRoles } from '../constants';
 import type { CreateSaleDto, ListSalesQueryDto } from '../dto/sale.dto';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors/AppError';
 import { SaleRepository } from '../repositories/SaleRepository';
+import { TeamScopeService } from './TeamScopeService';
 import { PrismaService } from '../prisma/PrismaService';
 import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../types/auth.types';
@@ -11,6 +12,7 @@ export class SaleService {
   private constructor(
     private readonly sales = SaleRepository.getInstance(),
     private readonly prisma = PrismaService.getClient(),
+    private readonly scope = TeamScopeService.getInstance(),
   ) {}
   public static getInstance(): SaleService {
     if (!SaleService.instance) SaleService.instance = new SaleService();
@@ -18,10 +20,11 @@ export class SaleService {
   }
 
   public async list(query: ListSalesQueryDto, actor: AuthUser) {
+    const mrFilter = await this.scope.resolveMrFilter(actor, query.mrId);
     const { items, total } = await this.sales.list({
       page: query.page,
       limit: query.limit,
-      mrId: actor.role === AppRoles.MR ? actor.id : query.mrId,
+      ...mrFilter,
       medicineId: query.medicineId,
       doctorId: query.doctorId,
       medicalStoreId: query.medicalStoreId,
@@ -49,6 +52,9 @@ export class SaleService {
     if (actor.role === AppRoles.MR && dto.mrId && dto.mrId !== actor.id) {
       throw new ForbiddenError('You can only create sales for yourself');
     }
+
+    // Managers may only book POB against their own reporting line.
+    await this.scope.assertCanSee(actor, mrId);
 
     const medicine = await this.prisma.medicine.findFirst({
       where: { id: dto.medicineId, deletedAt: null },

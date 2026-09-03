@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { UnauthorizedError } from '../errors/AppError';
 import { AuthService } from '../services/AuthService';
+import { PermissionService } from '../services/PermissionService';
 import { TokenService } from '../services/TokenService';
 import { UserStatuses, type AppRole } from '../constants';
 import { UserRepository } from '../repositories/UserRepository';
@@ -31,11 +32,15 @@ export async function authenticate(
       throw new UnauthorizedError('User not found or inactive');
     }
 
+    // Resolved per request (not baked into the JWT) so permission edits apply at once.
+    const permissions = await PermissionService.getInstance().resolveForUser(user.id);
+
     req.user = {
       id: user.id,
       email: user.email,
       role: user.role as AppRole,
       fullName: user.fullName,
+      permissions,
     };
 
     next();

@@ -1,6 +1,6 @@
-import { AppRoles } from '../constants';
 import type { ListDistributionsQueryDto } from '../dto/distribution.dto';
 import { DistributionRepository } from '../repositories/DistributionRepository';
+import { TeamScopeService } from './TeamScopeService';
 import type { AuthUser } from '../types/auth.types';
 
 function parseDateStart(value: string): Date {
@@ -18,7 +18,10 @@ function parseDateEnd(value: string): Date {
 export class DistributionService {
   private static instance: DistributionService | null = null;
 
-  private constructor(private readonly distributions = DistributionRepository.getInstance()) {}
+  private constructor(
+    private readonly distributions = DistributionRepository.getInstance(),
+    private readonly scope = TeamScopeService.getInstance(),
+  ) {}
 
   public static getInstance(): DistributionService {
     if (!DistributionService.instance) {
@@ -28,12 +31,13 @@ export class DistributionService {
   }
 
   public async list(query: ListDistributionsQueryDto, actor: AuthUser) {
+    const mrFilter = await this.scope.resolveMrFilter(actor, query.mrId);
     const { items, total } = await this.distributions.list({
       page: query.page,
       limit: query.limit,
       medicineId: query.medicineId,
       visitId: query.visitId,
-      mrId: actor.role === AppRoles.MR ? actor.id : undefined,
+      ...mrFilter,
       from: query.from ? parseDateStart(query.from) : undefined,
       to: query.to ? parseDateEnd(query.to) : undefined,
     });
