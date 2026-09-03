@@ -1,4 +1,15 @@
 # Render — Pharma MR CRM
+#
+# Live services (note the URLs do NOT match the names below — Render appended
+# suffixes when they were first created):
+#   API      https://pharma-mr-crm.onrender.com
+#   Frontend https://pharma-mr-crm-1.onrender.com
+#
+# IMPORTANT: if these services were created by hand in the Render dashboard
+# (not by applying this Blueprint), Render IGNORES this file. The deployed API
+# currently reports env=development even though NODE_ENV=production is set
+# below, which means exactly that. Until the services are Blueprint-managed,
+# every setting here must also be set in the dashboard. See docs/DEPLOY.md.
 
 services:
   - type: web
@@ -6,17 +17,29 @@ services:
     runtime: node
     rootDir: server
     plan: free
-    # migrate deploy: only applies NEW pending migrations (no-op if none).
-    # seed: idempotent admin + role_permissions upsert every deploy.
+    # Deploy on every push to the tracked branch.
+    autoDeploy: true
     buildCommand: npm install && npm run build
-    preDeployCommand: npx prisma migrate deploy && npx prisma db seed
-    startCommand: npm start
+    # The database step runs at boot, not as preDeployCommand, because
+    # preDeployCommand requires a paid instance type — on the free plan it never
+    # runs, so migrations silently never happen and the new code 500s on every
+    # authenticated request ("column mr_profiles.designation does not exist").
+    #
+    # `npm run db:deploy` = baseline (once) → migrate deploy → bootstrap seed.
+    # Idempotent, and it exits non-zero so a bad schema stops the boot rather
+    # than serving a broken app.
+    startCommand: npm run db:deploy && npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
+        # Must be production: the refresh cookie only gets Secure + SameSite=None
+        # in production, and the frontend is on a different origin.
         value: production
       - key: CORS_ORIGIN
         value: https://pharma-mr-crm-1.onrender.com,http://localhost:5173
+      # IST — every attendance / leave day is derived from this.
+      - key: APP_TIMEZONE_OFFSET_MINUTES
+        value: "330"
       - key: DATABASE_URL
         sync: false
       - key: JWT_ACCESS_SECRET
@@ -24,22 +47,41 @@ services:
       - key: JWT_REFRESH_SECRET
         sync: false
 
-  # Frontend SPA — rewrite all paths to index.html so /dashboard reload works
+  # Frontend SPA
   - type: web
     name: pharma-mr-crm-1
     runtime: static
     rootDir: client
     plan: free
+    autoDeploy: true
     buildCommand: npm install && npm run build
     staticPublishPath: dist
+    envVars:
+      # Vite inlines this AT BUILD TIME. Without it the client falls back to the
+      # relative "/api/v1", which resolves against the static host itself and
+      # returns Render's plain "Not Found" — so login cannot work at all.
+      - key: VITE_API_BASE_URL
+        value: https://pharma-mr-crm.onrender.com/api/v1
+    # Reload on /login must serve index.html instead of 404.
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
 
-# Notes:
+# Notes
+# -----
 # - Prisma uses provider "prisma-client-js" → @prisma/client (CommonJS-safe).
-# - Do NOT use provider "prisma-client" with output "../generated/prisma"
+#   Do NOT switch to provider "prisma-client" with output "../generated/prisma"
 #   (that emits ESM + import.meta and breaks "type": "commonjs" / npm start).
-# - Schema: `npx prisma migrate deploy` (pending only). Seed: admin + permissions.
-# - Frontend: SPA rewrite /* → /index.html (also client/public/_redirects).
+#
+# - Schema history: this database was first created with `prisma db push`, so it
+#   has tables but no _prisma_migrations rows. Plain `prisma migrate deploy`
+#   fails on that with P3005. `server/scripts/db-deploy.cjs` baselines it once,
+#   then behaves like a normal migrate deploy on every deploy after.
+#
+# - Seed is bootstrap only: role permissions, the Admin login, attendance config
+#   and one warehouse. It creates no business data, so it is safe every deploy.
+#
+# - SPA fallback is configured twice on purpose: `routes` here (Blueprint-managed
+#   services) and client/public/_redirects → dist/_redirects (which must use LF
+#   line endings — a trailing CR makes Render skip the rule).

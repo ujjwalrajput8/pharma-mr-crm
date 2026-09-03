@@ -2,10 +2,13 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  BarChart3,
   CalendarDays,
+  ChevronRight,
   ClipboardList,
   Package,
   Stethoscope,
+  Trophy,
   Users,
 } from 'lucide-react';
 import { AppointmentDetailsDialog } from '@/components/appointments/AppointmentDetailsDialog';
@@ -257,35 +260,33 @@ export function DashboardPage() {
               const Icon = item.icon;
               return (
                 <Link key={item.key} to={item.to} className="group">
-                  <Card className="h-full p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-md hover:border-[var(--color-primary)]/40 relative overflow-hidden">
-                    <div className="flex items-start justify-between">
-                      <div className="rounded-xl bg-[var(--color-primary-soft)] p-3 text-[var(--color-primary)] transition-transform duration-200 group-hover:scale-110 shadow-2xs">
-                        <Icon size={20} />
-                      </div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)] group-hover:text-[var(--color-primary)] transition-colors">
-                        View →
+                  <Card className="relative h-full overflow-hidden p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--color-primary)]/40 hover:shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[11px] font-bold tracking-wider text-[var(--color-muted)] uppercase">
+                        {item.label}
+                      </p>
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary-soft)] text-[var(--color-primary)] transition-colors group-hover:bg-[var(--color-primary)] group-hover:text-white">
+                        <Icon size={14} />
                       </span>
                     </div>
-                    <p className="mt-3.5 text-xs font-semibold tracking-wide text-[var(--color-muted)] uppercase">
-                      {item.label}
-                    </p>
                     {(() => {
                       const val = values[item.key];
-                      if (typeof val === 'number') {
-                        return (
-                          <p className="mt-1 text-3xl font-extrabold tracking-tight text-[var(--color-ink)] tabular-nums">
-                            {item.key.toLowerCase().includes('sales')
-                              ? `₹${val.toLocaleString()}`
-                              : val.toLocaleString()}
-                          </p>
-                        );
-                      }
+                      const shown =
+                        typeof val === 'number'
+                          ? item.key.toLowerCase().includes('sales')
+                            ? `₹${val.toLocaleString('en-IN')}`
+                            : val.toLocaleString('en-IN')
+                          : (val ?? 0);
                       return (
-                        <p className="mt-1 text-3xl font-extrabold tracking-tight text-[var(--color-ink)] tabular-nums">
-                          {val ?? 0}
+                        <p className="mt-1.5 text-2xl font-bold tracking-tight text-[var(--color-ink)] tabular-nums">
+                          {shown}
                         </p>
                       );
                     })()}
+                    <span className="mt-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold text-[var(--color-muted)]/70 transition-colors group-hover:text-[var(--color-primary)]">
+                      Open
+                      <ChevronRight size={10} />
+                    </span>
                   </Card>
                 </Link>
               );
@@ -297,7 +298,8 @@ export function DashboardPage() {
           {summaryQuery.data.insights.topPerformingMrs?.length ? (
             <Card className="p-5">
               <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
-                🏆 Top Performing MR
+                <Trophy size={13} className="mb-px inline text-[var(--color-warning)]" /> Top
+                performing MR
               </h3>
               <ul className="divide-y divide-[var(--color-border)] text-sm">
                 {summaryQuery.data.insights.topPerformingMrs.map((row) => (
@@ -366,7 +368,8 @@ export function DashboardPage() {
             <Card className="p-5 lg:col-span-2">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
-                  📊 Monthly Performance (Visits / Day)
+                  <BarChart3 size={13} className="mb-px inline text-[var(--color-primary)]" />{' '}
+                  Monthly performance (visits / day)
                 </h3>
                 <span className="text-xs text-[var(--color-muted)] font-medium">Daily activity breakdown</span>
               </div>

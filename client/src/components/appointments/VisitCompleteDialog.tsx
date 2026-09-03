@@ -187,10 +187,10 @@ export function VisitCompleteDialog({
             />
             <Select label="Visit Outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)}>
               <option value="">Select visit outcome</option>
-              <option value="POSITIVE">🟢 Positive (High Prescription Intent)</option>
-              <option value="NEUTRAL">🟡 Neutral (Agreed to evaluate)</option>
-              <option value="FOLLOW_UP">🔵 Needs Follow-up Visit</option>
-              <option value="NOT_INTERESTED">🔴 Not Interested</option>
+              <option value="POSITIVE">Positive — high prescription intent</option>
+              <option value="NEUTRAL">Neutral — agreed to evaluate</option>
+              <option value="FOLLOW_UP">Needs a follow-up visit</option>
+              <option value="NOT_INTERESTED">Not interested</option>
             </Select>
             <DatePicker label="Next Follow-up Date" value={nextFollowUp} onChange={setNextFollowUp} />
             <Textarea
