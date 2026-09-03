@@ -93,13 +93,40 @@ static host. Set it on the frontend service and **redeploy** (rebuild).
 
 ### 3. Reloading `/login` returns "Not Found"
 
-A static host serves files; `/login` is not a file. Two things fix it, and both
-should be in place:
+A static host serves files; `/login` is not a file, so it 404s unless the host is
+told to fall back to `index.html`.
 
-- Dashboard **Rewrite** rule `/*` → `/index.html`
-- `client/public/_redirects` (copied to `dist/_redirects` by Vite) — this file
-  **must use LF line endings**. It previously had CRLF, and the trailing `\r`
-  made the rule unparseable, so it was skipped.
+**Render does not support Netlify-style `_redirects`.** The repo used to carry
+`client/public/_redirects`; it was published as a normal asset and had no effect —
+you can prove it by fetching it:
+
+```bash
+curl -s https://pharma-mr-crm-1.onrender.com/_redirects
+# 200 with the file's text = it is just a public file, not routing config
+```
+
+It has been deleted to stop it looking like the problem was handled.
+
+Render offers exactly two working options:
+
+**Option A — dashboard rule (use this if the services were made by hand):**
+
+> Static site `pharma-mr-crm-1` → **Redirects/Rewrites** → **Add Rule**
+> - Source: `/*`
+> - Destination: `/index.html`
+> - Action: **Rewrite** (not Redirect)
+
+**Option B — let the Blueprint own the services**, so the `routes` block in
+`render.yaml` applies. Note this only works if the services are Blueprint-managed;
+if `GET /health` reports `"env":"development"` while `render.yaml` sets
+`NODE_ENV=production`, they are not, and `render.yaml` is being ignored entirely.
+
+Verify after either fix:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://pharma-mr-crm-1.onrender.com/login
+# 200, not 404
+```
 
 ---
 

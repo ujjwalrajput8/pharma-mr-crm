@@ -82,6 +82,7 @@ services:
 # - Seed is bootstrap only: role permissions, the Admin login, attendance config
 #   and one warehouse. It creates no business data, so it is safe every deploy.
 #
-# - SPA fallback is configured twice on purpose: `routes` here (Blueprint-managed
-#   services) and client/public/_redirects → dist/_redirects (which must use LF
-#   line endings — a trailing CR makes Render skip the rule).
+# - SPA fallback: the `routes` block above only applies when the services are
+#   Blueprint-managed. Render does NOT support Netlify-style _redirects (it just
+#   publishes the file), so for dashboard-created services add the rewrite there:
+#   Redirects/Rewrites → Source /* → Destination /index.html → Action Rewrite.
