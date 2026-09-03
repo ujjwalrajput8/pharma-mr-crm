@@ -81,6 +81,17 @@ export const attendanceSummaryQuerySchema = z.object({
   month: dateOnly.optional(),
 });
 
+/**
+ * Clears a flagged check-in after a manager has looked at it. Keeps the flag
+ * text in remarks so the history survives, and stamps who reviewed it.
+ */
+export const reviewFlagSchema = z.object({
+  /** ACCEPT keeps the day as-is; REJECT marks it absent. */
+  outcome: z.enum(['ACCEPT', 'REJECT']).default('ACCEPT'),
+  remarks: z.string().max(500).optional(),
+});
+
+export type ReviewFlagDto = z.infer<typeof reviewFlagSchema>;
 export type CheckInDto = z.infer<typeof checkInSchema>;
 export type CheckOutDto = z.infer<typeof checkOutSchema>;
 export type ListAttendanceQueryDto = z.infer<typeof listAttendanceQuerySchema>;

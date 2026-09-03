@@ -3,6 +3,7 @@ import type {
   ApplyLeaveDto,
   CancelLeaveDto,
   DecideLeaveDto,
+  GrantCompOffDto,
   LeaveBalanceQueryDto,
   ListLeavesQueryDto,
   SetLeaveBalanceDto,
@@ -18,6 +19,7 @@ import {
 import { LeaveRepository, type LeaveRequestRow } from '../repositories/LeaveRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import { AttendanceRepository } from '../repositories/AttendanceRepository';
+import { AuditService } from './AuditService';
 import { HolidayService } from './HolidayService';
 import { TeamScopeService } from './TeamScopeService';
 import {
@@ -94,6 +96,7 @@ export class LeaveService {
     private readonly attendance = AttendanceRepository.getInstance(),
     private readonly holidays = HolidayService.getInstance(),
     private readonly scope = TeamScopeService.getInstance(),
+    private readonly audits = AuditService.getInstance(),
   ) {}
 
   public static getInstance(): LeaveService {
@@ -458,6 +461,79 @@ export class LeaveService {
         remaining: row.unlimited ? 0 : row.remaining,
       })),
     );
+  }
+
+  /**
+   * Grants comp-off days. Any `leaves:manage` holder can credit their own team —
+   * that is the whole point: an ASM compensates a Sunday worked in the field
+   * without waiting on an Admin. The grant is added to the year's allocation and
+   * written to the audit log with the worked date.
+   */
+  public async grantCompOff(dto: GrantCompOffDto, actor: AuthUser) {
+    if (actor.role === AppRoles.MR) {
+      throw new ForbiddenError('Only a manager or administrator can grant comp-off');
+    }
+    if (dto.userId === actor.id && actor.role !== AppRoles.ADMIN) {
+      throw new ForbiddenError('You cannot grant comp-off to yourself');
+    }
+    await this.scope.assertCanSee(actor, dto.userId);
+
+    const target = await this.users.findById(dto.userId);
+    if (!target || target.deletedAt) throw new NotFoundError('Employee not found');
+
+    const type = dto.leaveTypeId
+      ? await this.leaves.findTypeById(dto.leaveTypeId)
+      : await this.leaves.findTypeByCode('COMP_OFF');
+    if (!type || type.status !== 'ACTIVE') {
+      throw new BadRequestError(
+        'No active COMP_OFF leave type found. Add one under Leave policy first.',
+      );
+    }
+
+    const year = currentYear();
+    const existing = (await this.leaves.listBalances(dto.userId, year)).find(
+      (row) => row.leaveTypeId === type.id,
+    );
+    const allocated = Number(existing?.allocated ?? 0) + dto.days;
+    const used = await this.leaves.sumApprovedDays(dto.userId, type.id, year);
+
+    const row = await this.leaves.upsertBalance({
+      userId: dto.userId,
+      leaveTypeId: type.id,
+      year,
+      opening: Number(existing?.opening ?? 0),
+      allocated,
+      used,
+      actorId: actor.id,
+    });
+
+    await this.audits.log({
+      userId: actor.id,
+      action: 'GRANT_COMP_OFF',
+      entity: 'LeaveBalance',
+      entityId: String(row.id),
+      metadata: {
+        employeeId: dto.userId,
+        employee: target.fullName,
+        days: dto.days,
+        againstDate: dto.againstDate ?? null,
+        allocatedNow: allocated,
+        year,
+        reason: dto.reason,
+      },
+    });
+
+    return {
+      userId: dto.userId,
+      employeeName: target.fullName,
+      leaveTypeId: type.id,
+      code: type.code,
+      year,
+      granted: dto.days,
+      allocated,
+      used,
+      remaining: Math.max(0, Number(row.opening) + allocated - used),
+    };
   }
 
   public async setBalance(dto: SetLeaveBalanceDto, actor: AuthUser) {

@@ -15,6 +15,7 @@ import holidaysRoutes from '../routes/holidays.routes';
 import leavesRoutes from '../routes/leaves.routes';
 import medicineIssuesRoutes from '../routes/medicine-issues.routes';
 import medicinesRoutes from '../routes/medicines.routes';
+import notificationsRoutes from '../routes/notifications.routes';
 import permissionsRoutes from '../routes/permissions.routes';
 import reportsRoutes from '../routes/reports.routes';
 import salesRoutes from '../routes/sales.routes';
@@ -60,6 +61,7 @@ export function createApiRouter(): Router {
     ['medicine-issues', medicineIssuesRoutes],
     ['sales', salesRoutes],
     ['attendance', attendanceRoutes],
+    ['notifications', notificationsRoutes],
     ['leaves', leavesRoutes],
     ['holidays', holidaysRoutes],
     ['reports', reportsRoutes],

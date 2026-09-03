@@ -4,6 +4,7 @@ import {
   applyLeaveSchema,
   cancelLeaveSchema,
   decideLeaveSchema,
+  grantCompOffSchema,
   leaveBalanceQuerySchema,
   listLeavesQuerySchema,
   setLeaveBalanceSchema,
@@ -56,6 +57,13 @@ router.post(
   requirePermission('leave-types:manage'),
   validateRequest(setLeaveBalanceSchema),
   asyncHandler(controller.setBalance),
+);
+// A Manager can credit comp-off to their own team without Admin involvement.
+router.post(
+  '/comp-off',
+  requirePermission('leaves:manage'),
+  validateRequest(grantCompOffSchema),
+  asyncHandler(controller.grantCompOff),
 );
 
 router.get('/pending-count', requirePermission('leaves:manage'), asyncHandler(controller.pendingCount));

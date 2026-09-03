@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ClipboardList,
   Clock3,
+  Gift,
   HeartPulse,
   IdCard,
   IndianRupee,
@@ -47,6 +48,7 @@ import {
   type EmployeeProfile,
   type EmployeeProfilePayload,
 } from '@/services/employees.service';
+import { GrantCompOffDialog } from '@/components/leave/GrantCompOffDialog';
 import { ATTENDANCE_STATUS_META, attendanceApi } from '@/services/attendance.service';
 import { LEAVE_STATUS_TONE, type LeaveStatus } from '@/services/leaves.service';
 import { formatDisplayDate } from '@/utils/datetime';
@@ -92,12 +94,14 @@ export function EmployeeProfilePage() {
   const employeeId = Number(id);
   const { user, can } = useAuth();
   const canEdit = can('users:manage');
+  const canGrantCompOff = can('leaves:manage');
   const queryClient = useQueryClient();
   const toast = useToast();
 
   const [tab, setTab] = useState<TabValue>('overview');
   const [month, setMonth] = useState(currentMonthKey());
   const [editOpen, setEditOpen] = useState(false);
+  const [compOffOpen, setCompOffOpen] = useState(false);
   const [edit, setEdit] = useState<EmployeeProfilePayload>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -465,6 +469,14 @@ export function EmployeeProfilePage() {
             title={`Balance — ${profile.leave.year}`}
             description="Used days come from approved requests only."
             icon={Clock3}
+            actions={
+              canGrantCompOff && !isSelf ? (
+                <Button size="sm" variant="soft" onClick={() => setCompOffOpen(true)}>
+                  <Gift size={13} />
+                  Grant comp-off
+                </Button>
+              ) : null
+            }
           >
             <div className="space-y-3.5">
               {profile.leave.balances.map((balance) => (
@@ -603,6 +615,12 @@ export function EmployeeProfilePage() {
           </SectionCard>
         </div>
       ) : null}
+
+      <GrantCompOffDialog
+        open={compOffOpen}
+        onClose={() => setCompOffOpen(false)}
+        employee={{ id: profile.id, fullName: profile.fullName }}
+      />
 
       {/* ── Edit modal ───────────────────────────────────────────────────── */}
       <Modal

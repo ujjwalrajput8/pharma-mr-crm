@@ -9,6 +9,7 @@ import {
   Inbox,
   Paperclip,
   Ban,
+  Gift,
   ScrollText,
   User,
   XCircle,
@@ -43,6 +44,7 @@ import {
   type LeaveStatus,
 } from '@/services/leaves.service';
 import { employeesApi } from '@/services/employees.service';
+import { GrantCompOffDialog } from '@/components/leave/GrantCompOffDialog';
 import { formatDisplayDate, toIsoDate } from '@/utils/datetime';
 
 type TabValue = 'mine' | 'team';
@@ -74,6 +76,7 @@ export function LeavePage() {
 
   const [tab, setTab] = useState<TabValue>(canApplyOwn ? 'mine' : 'team');
   const [applyOpen, setApplyOpen] = useState(false);
+  const [compOffOpen, setCompOffOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<LeaveRequest | null>(null);
@@ -157,6 +160,8 @@ export function LeavePage() {
       queryClient.invalidateQueries({ queryKey: ['leave-balances'] }),
       queryClient.invalidateQueries({ queryKey: ['attendance'] }),
       queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      // Without this the approved request lingers in the bell until the next poll.
+      queryClient.invalidateQueries({ queryKey: ['notifications'] }),
     ]);
   }
 
@@ -227,14 +232,24 @@ export function LeavePage() {
         title="Leave"
         description="Apply, track balance and approve your team's leave. Approved leave marks attendance automatically."
         actions={
-          (canApplyOwn || canManage) && hasPolicy ? (
-            <Button onClick={() => setApplyOpen(true)}>
-              <CalendarPlus size={15} />
-              Apply for leave
-            </Button>
-          ) : null
+          <>
+            {canManage && hasPolicy ? (
+              <Button variant="secondary" onClick={() => setCompOffOpen(true)}>
+                <Gift size={15} />
+                Grant comp-off
+              </Button>
+            ) : null}
+            {(canApplyOwn || canManage) && hasPolicy ? (
+              <Button size="lg" onClick={() => setApplyOpen(true)}>
+                <CalendarPlus size={15} />
+                Apply for leave
+              </Button>
+            ) : null}
+          </>
         }
       />
+
+      <GrantCompOffDialog open={compOffOpen} onClose={() => setCompOffOpen(false)} />
 
       {/* No leave types configured yet — nobody can apply until the policy exists. */}
       {!typesQuery.isLoading && !hasPolicy ? (

@@ -7,6 +7,7 @@ import {
   checkOutSchema,
   listAttendanceQuerySchema,
   manageAttendanceSchema,
+  reviewFlagSchema,
 } from '../dto/attendance.dto';
 import { AppRoles } from '../constants';
 import { authenticate } from '../middlewares/authenticate.middleware';
@@ -63,6 +64,12 @@ router.post(
   requirePermission('attendance:manage'),
   validateRequest(manageAttendanceSchema),
   asyncHandler(controller.manage),
+);
+router.post(
+  '/:id/review-flag',
+  requirePermission('attendance:manage'),
+  validateRequest(reviewFlagSchema),
+  asyncHandler(controller.reviewFlag),
 );
 
 export default router;

@@ -19,6 +19,17 @@ export const authApi = {
     await api.post('/auth/logout');
   },
 
+  /**
+   * Employee changes their own password. The server revokes every session on
+   * success, so the caller must send the user back to the login screen.
+   */
+  async changePassword(payload: {
+    currentPassword: string;
+    newPassword: string;
+  }): Promise<void> {
+    await api.post('/auth/change-password', payload);
+  },
+
   async refresh(): Promise<AuthSessionPayload> {
     const { data } = await api.post<ApiSuccess<AuthSessionPayload>>('/auth/refresh');
     return data.data;

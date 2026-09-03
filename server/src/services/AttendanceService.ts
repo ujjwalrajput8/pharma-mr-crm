@@ -6,6 +6,7 @@ import type {
   CheckOutDto,
   ListAttendanceQueryDto,
   ManageAttendanceDto,
+  ReviewFlagDto,
 } from '../dto/attendance.dto';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../errors/AppError';
 import { AttendanceRepository } from '../repositories/AttendanceRepository';
@@ -229,6 +230,47 @@ export class AttendanceService {
       actorId: actor.id,
     });
     return this.toPublic(row);
+  }
+
+  /**
+   * Resolves a flagged check-in. Until this exists a flag never clears, so the
+   * approvals inbox and the bell keep showing it forever — which is exactly the
+   * "I already looked at it" complaint.
+   */
+  public async reviewFlag(id: number, dto: ReviewFlagDto, actor: AuthUser) {
+    if (!canManage(actor.role)) {
+      throw new ForbiddenError('Only Admin or Manager can review flagged check-ins');
+    }
+
+    const row = await this.attendance.findById(id);
+    if (!row) throw new NotFoundError('Attendance entry not found');
+    if (!row.flagReason) {
+      throw new BadRequestError('This entry is not flagged');
+    }
+    await this.scope.assertCanSee(actor, row.userId);
+
+    const trail = [row.remarks, `Flag reviewed by ${actor.fullName}: ${row.flagReason}`, dto.remarks]
+      .filter(Boolean)
+      .join(' · ')
+      .slice(0, 480);
+
+    const updated = await this.attendance.update(id, {
+      // Clearing flagReason is what removes it from the inbox and the bell.
+      flagReason: null,
+      approvedBy: { connect: { id: actor.id } },
+      remarks: trail,
+      ...(dto.outcome === 'REJECT'
+        ? {
+            status: AttendanceStatuses.ABSENT,
+            checkInAt: null,
+            checkOutAt: null,
+            workingMins: null,
+          }
+        : {}),
+      updatedBy: actor.id,
+    });
+
+    return this.toPublic(updated);
   }
 
   public async fieldUsers(actor: AuthUser) {

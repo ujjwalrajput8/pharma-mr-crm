@@ -3,6 +3,7 @@ import type {
   ApplyLeaveDto,
   CancelLeaveDto,
   DecideLeaveDto,
+  GrantCompOffDto,
   LeaveBalanceQueryDto,
   ListLeavesQueryDto,
   SetLeaveBalanceDto,
@@ -74,6 +75,12 @@ export class LeaveController {
     const query = (req.validatedQuery ?? req.query) as LeaveBalanceQueryDto;
     const result = await this.leaves.balances(query, req.user);
     ApiResponse.success(res, result, 'Leave balances');
+  };
+
+  public grantCompOff = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const row = await this.leaves.grantCompOff(req.body as GrantCompOffDto, req.user);
+    ApiResponse.success(res, row, `${row.granted} comp-off day(s) granted to ${row.employeeName}`);
   };
 
   public setBalance = async (req: Request, res: Response): Promise<void> => {

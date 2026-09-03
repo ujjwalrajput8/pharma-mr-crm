@@ -1,36 +1,35 @@
 import { cn } from '@/utils/cn';
 
-/** Shared form field label — clean, crisp modern typography */
+/**
+ * Field styling. Inputs sit on the page background rather than the card surface
+ * so they read as something you type into, and the focus ring is a single soft
+ * halo instead of a hard outline — that is most of what separates a form that
+ * feels current from one that feels like a 2015 admin panel.
+ */
+
 export const fieldLabelClass =
-  'text-xs font-semibold tracking-tight text-[var(--color-ink)]/90 select-none flex items-center justify-between';
+  'text-[11.5px] font-semibold tracking-[-0.005em] text-[var(--color-ink)]/75 select-none flex items-center justify-between';
 
-/** Shared control surface used by Input, Select, Date/Time, SearchableSelect */
 export const fieldControlClass = cn(
-  'h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]',
-  'px-3.5 text-sm text-[var(--color-ink)] outline-none shadow-xs transition-all duration-200',
-  'placeholder:text-[var(--color-muted)]/60',
-  'hover:border-[var(--color-border-strong)] hover:shadow-sm',
-  'focus:border-[var(--color-primary)] focus:ring-4 focus:ring-[var(--color-primary)]/15 focus:bg-[var(--color-surface)] focus:shadow-sm',
-  'disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-[var(--color-bg)]',
+  'h-10 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/70',
+  'px-3.5 text-[13px] text-[var(--color-ink)] outline-none transition-all duration-150',
+  'placeholder:text-[var(--color-muted)]/55',
+  'hover:border-[var(--color-border-strong)] hover:bg-[var(--color-bg)]',
+  'focus:border-[var(--color-primary)]/70 focus:bg-[var(--color-surface)] focus:ring-[3px] focus:ring-[var(--color-primary)]/12',
+  'disabled:cursor-not-allowed disabled:opacity-55 disabled:bg-[var(--color-surface-subtle)]',
 );
 
-/** Modern Select control with custom SVG chevron */
-export const fieldSelectClass = cn(
-  fieldControlClass,
-  'appearance-none pr-10 cursor-pointer',
-  'bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))]',
-  'bg-no-repeat bg-[right_12px_center]',
-);
+/** Select control with a custom chevron rendered by the Field component. */
+export const fieldSelectClass = cn(fieldControlClass, 'appearance-none pr-10 cursor-pointer');
 
-/** Trigger surface for custom popovers (DatePicker, TimePicker, SearchableSelect) */
+/** Trigger surface for custom popovers (DatePicker, TimePicker, SearchableSelect). */
 export const fieldControlTriggerClass = cn(
   fieldControlClass,
   'inline-flex items-center justify-between text-left font-normal cursor-pointer',
 );
 
-/** Form card section helper */
+/** Light panel used to group related fields without boxing them in. */
 export const formSectionCardClass = cn(
-  'rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 shadow-xs backdrop-blur-xs',
-  'transition-all duration-200 hover:border-[var(--color-border-strong)]',
+  'rounded-2xl border border-[var(--color-border)]/70 bg-[var(--color-bg)]/40 p-4',
+  'transition-colors duration-200',
 );
-
