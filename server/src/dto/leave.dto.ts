@@ -96,6 +96,21 @@ export const setLeaveBalanceSchema = z.object({
   allocated: z.coerce.number().min(0).max(365),
 });
 
+/**
+ * Credit comp-off days to an employee, usually against approved Sunday or
+ * holiday fieldwork. Adds to the yearly grant rather than editing "used".
+ */
+export const grantCompOffSchema = z.object({
+  userId: idSchema,
+  days: z.coerce.number().min(0.5).max(30),
+  /** The worked date being compensated — shown in the reason trail. */
+  againstDate: dateOnly.optional(),
+  reason: z.string().min(3, 'Say what this is for').max(500),
+  /** Defaults to the current leave type marked COMP_OFF. */
+  leaveTypeId: idSchema.optional(),
+});
+
+export type GrantCompOffDto = z.infer<typeof grantCompOffSchema>;
 export type ApplyLeaveDto = z.infer<typeof applyLeaveSchema>;
 export type ListLeavesQueryDto = z.infer<typeof listLeavesQuerySchema>;
 export type DecideLeaveDto = z.infer<typeof decideLeaveSchema>;

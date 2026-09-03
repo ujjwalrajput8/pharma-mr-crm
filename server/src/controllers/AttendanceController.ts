@@ -6,6 +6,7 @@ import type {
   CheckOutDto,
   ListAttendanceQueryDto,
   ManageAttendanceDto,
+  ReviewFlagDto,
 } from '../dto/attendance.dto';
 import { UnauthorizedError } from '../errors/AppError';
 import { AttendanceService } from '../services/AttendanceService';
@@ -55,6 +56,16 @@ export class AttendanceController {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const rows = await this.attendance.fieldUsers(req.user);
     ApiResponse.success(res, rows, 'Field users');
+  };
+
+  public reviewFlag = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const row = await this.attendance.reviewFlag(
+      Number(req.params.id),
+      req.body as ReviewFlagDto,
+      req.user,
+    );
+    ApiResponse.success(res, row, 'Flag cleared');
   };
 
   public calendar = async (req: Request, res: Response): Promise<void> => {

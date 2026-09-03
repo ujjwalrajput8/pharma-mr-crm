@@ -124,6 +124,36 @@ export const leavesApi = {
     >('/leaves/balances', { params });
     return data.data;
   },
+  async grantCompOff(payload: {
+    userId: number;
+    days: number;
+    againstDate?: string;
+    reason: string;
+  }): Promise<{
+    userId: number;
+    employeeName: string;
+    code: string;
+    year: number;
+    granted: number;
+    allocated: number;
+    used: number;
+    remaining: number;
+  }> {
+    const { data } = await api.post<
+      ApiSuccess<{
+        userId: number;
+        employeeName: string;
+        code: string;
+        year: number;
+        granted: number;
+        allocated: number;
+        used: number;
+        remaining: number;
+      }>
+    >('/leaves/comp-off', payload);
+    return data.data;
+  },
+
   async setBalance(payload: {
     userId: number;
     leaveTypeId: number;

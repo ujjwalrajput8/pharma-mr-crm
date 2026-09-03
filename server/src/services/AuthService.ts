@@ -169,6 +169,27 @@ export class AuthService {
     return header.slice(7).trim() || undefined;
   }
 
+  /**
+   * Employee changes their own password. Every other session is revoked so a
+   * stolen refresh token cannot outlive the change.
+   */
+  public async changePassword(
+    userId: number,
+    dto: { currentPassword: string; newPassword: string },
+  ): Promise<void> {
+    const user = await this.users.findById(userId);
+    if (!user) throw new UnauthorizedError('User not found');
+
+    const matches = await this.passwords.compare(dto.currentPassword, user.passwordHash);
+    if (!matches) {
+      throw new UnauthorizedError('Current password is incorrect');
+    }
+
+    const passwordHash = await this.passwords.hash(dto.newPassword);
+    await this.users.update(userId, { passwordHash, updatedBy: userId });
+    await this.refreshTokens.revokeAllForUser(userId);
+  }
+
   private toAuthUser(
     id: number,
     email: string,

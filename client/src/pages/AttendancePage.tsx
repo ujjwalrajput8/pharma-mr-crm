@@ -186,6 +186,7 @@ export function AttendancePage() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['attendance'] }),
       queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['notifications'] }),
     ]);
   }
 

@@ -42,12 +42,21 @@ Setup detail: [SETUP.md](./SETUP.md)
 
 ## 2. Demo login accounts
 
-Seed se sirf Admin banta hai. Manager / MR aap Users se create karo.
+Seed **sirf bootstrap** hai — Admin login, role permissions, attendance config aur ek
+Main Warehouse. **Koi business data nahi banata** (na doctor, na product, na attendance,
+na leave type, na holiday) kyunki wahi seed production pe bhi chalti hai.
+
+**Manager aur MR dono Users & Hierarchy se bante hain** (role dropdown + "Reports to"
+dropdown). Leave types aur holidays Admin **Leave Policy** aur **Holiday Calendar** se
+banata hai — ye pehla setup step hai, warna MR leave apply nahi kar payega.
 
 | Role | Email | Password | Client ko kya dikhana |
 |------|--------|----------|------------------------|
-| **Admin** | `admin@pharma-mr.local` | `Admin@12345` | Masters, users, Manager permissions, reports |
+| **Admin** | `admin@pharma-mr.local` | `Admin@12345` | Masters, users, employees, leave policy, holidays, reports |
 | **Manager / MR** | (UI se create) | (jo set karo) | Team / field workflows |
+
+**Order:** pehle Manager banao → phir MR banao aur uska "Reports to" us Manager pe set karo.
+Team scoping isi hierarchy se chalti hai — Manager ko sirf apni reporting line dikhti hai.
 
 Extra MRs (same password `Mr@12345`):
 
@@ -82,7 +91,10 @@ Login: `admin@pharma-mr.local` / `Admin@12345`
 | **Chemists / Stores** | Chemist / stockist master |
 | **Products** | Medicine / product master |
 | **Stock Balances / Issue to MR / Ledger** | Warehouse stock, MR ko issue, ledger history |
-| **Attendance** | Sabki attendance dekhna + Late / Absent manage |
+| **Attendance** | Sabki attendance + monthly register calendar + Late/Absent/Leave correction |
+| **Employees** | Har employee ka pura record: joining, leave balance, attendance, field activity |
+| **Holiday Calendar** | Saal ke holidays (leave count inse skip hota hai) |
+| **Leave Policy** | Leave types + quota + per-employee entitlement |
 | **Reports / Sales** | Commercial overview |
 | **Settings / Audit Log** | Company settings, system audit |
 
@@ -108,8 +120,9 @@ Login: `asm.west@jovance.local` / `Manager@12345`
 
 | Menu | Yahan se kya manage hota hai |
 |------|------------------------------|
-| **Approvals** | Team ke pending approvals inbox |
-| **Attendance** | Apna check-in + team Late / Absent mark |
+| **Approvals** | Team ke pending leave requests + flagged check-ins (real data) |
+| **Leave** | Apna leave + team ka leave approve / reject |
+| **Attendance** | Apna check-in + team register + Late / Absent correction |
 | **Tour Plan** | Team tour plan approve / manage |
 | **Appointments / Visits** | Team field activity |
 | **Issue to MR / Stock** | MR ko sample stock dena |
@@ -127,7 +140,8 @@ Login: `rahul.mr@jovance.local` / `Mr@12345`
 | Menu | Yahan se kya manage hota hai |
 |------|------------------------------|
 | **My Day** | Aaj ka field plan / focus |
-| **Attendance** | Apna check-in (GPS fields) |
+| **Attendance** | GPS check-in / check-out + apna monthly register |
+| **Leave** | Leave apply + balance (kitna bacha hai) |
 | **Tour Plan** | Apna monthly tour plan |
 | **Appointments** | Doctor appointments |
 | **Visits / DCR** | Visit entry (appointment ke baad) |
@@ -181,11 +195,16 @@ Quantity seedha change nahi — har movement `stock_txns` ledger mein record hot
 
 | Capability | Admin | Manager | MR |
 |------------|:-----:|:-------:|:--:|
-| Users / MR create | Yes | No* | No |
+| Users / accounts create | Yes | No* | No |
 | Manager permissions | Yes | No | No |
-| Team approvals | Yes | Yes | No |
+| Team approvals (leave, flags) | Yes | Yes | No |
 | Own My Day / check-in | No | Yes | Yes |
-| Manage team attendance | Yes | Yes | No |
+| Apply for own leave | No | Yes | Yes |
+| Approve team leave | Yes | Yes* | No |
+| Manage team attendance | Yes | Yes* | No |
+| Employee profiles | All | Own team* | Only own |
+| Edit HR record (PAN, bank) | Yes | No | No |
+| Holiday calendar / leave policy | Yes | No | No |
 | Issue stock to MR | Yes | Yes* | No |
 | Own visits / samples | No | Optional* | Yes |
 | Settings / Audit | Yes | No | No |
@@ -208,6 +227,20 @@ A. Design: append-only ledger. History rehti hai.
 **Q. Mobile / offline?**  
 A. Ab web panel. Mobile / offline next phase.
 
+**Q. Leave kaise chalti hai?**
+A. MR apply karta hai → reporting Manager approve karta hai → un working days ki attendance
+apne aap **LEAVE** mark ho jaati hai aur balance kam ho jaata hai. Sunday aur holiday count
+nahi hote. Approved leave wale din manager direct edit nahi kar sakta — pehle leave cancel
+karni padegi (register aur leave ledger kabhi alag nahi hote).
+
+**Q. Leave quota kaun set karta hai?**
+A. Admin → **Leave Policy**. Type-wise quota, aur zarurat ho to per-employee entitlement
+(opening + granted) override.
+
+**Q. Fake GPS / galat check-in?**
+A. Check-in block nahi hota — **flag** hota hai (mock location, kharab accuracy, device clock
+mismatch) aur Manager ke **Approvals** inbox mein review ke liye aa jaata hai.
+
 **Q. Kitne roles?**  
 A. ADMIN · MANAGER (ASM/RSM) · MR.
 
@@ -216,12 +249,15 @@ A. ADMIN · MANAGER (ASM/RSM) · MR.
 ## 8. Demo checklist (print / keep open)
 
 - [ ] Docker + server + client running
+- [ ] `npx prisma migrate deploy` + `npm run prisma:seed` chal gaya
 - [ ] Health OK (`/health`)
-- [ ] Admin login + Users page
+- [ ] Admin login → Users & Hierarchy se **Manager** banao, phir uske under **MR**
 - [ ] **Manager Access** customize → Manager sidebar change
-- [ ] Manager attendance / approvals dikhao
-- [ ] MR My Day + Attendance + Visits dikhao
-- [ ] Stock / Ledger ek baar open karke “ledger” concept bolo
+- [ ] MR se **Leave apply** → Manager se **approve** → Attendance register pe LEAVE dikhao
+- [ ] MR ka **Employees → profile** kholo: leave balance + attendance + field activity
+- [ ] **Holiday Calendar** mein ek holiday add karke leave day-count pe asar dikhao
+- [ ] MR **GPS check-in** → flag aaye to Approvals inbox dikhao
+- [ ] Stock / Ledger ek baar open karke "ledger" concept bolo
 - [ ] Logout/login se role switch clear dikhao
 
 ---
@@ -232,11 +268,45 @@ A. ADMIN · MANAGER (ASM/RSM) · MR.
 |------|------|
 | Login | `/login` |
 | Dashboard | `/dashboard` |
-| Users (MR) | `/users` |
+| Users & Hierarchy | `/users` |
 | Manager permissions | `/manager-permissions` |
+| Employees | `/employees` |
+| Employee profile | `/employees/:id` |
 | Attendance | `/attendance` |
+| Leave | `/leave` |
+| Leave policy | `/leave-policy` |
+| Holiday calendar | `/holidays` |
+| Approvals | `/approvals` |
 | My Day | `/my-day` |
 | Ledger | `/ledger` |
+
+---
+
+## 10. First-run setup (naya deploy ke baad, isi order mein)
+
+Seed business data nahi banata, to demo se pehle ye karo:
+
+1. **Leave Policy** → leave types add karo (CL 12, SL 12, EL 15…)
+2. **Holiday Calendar** → saal ke holidays add karo (leave count inse skip hota hai)
+3. **Users & Hierarchy** → pehle Manager, phir uske under MR (+ "Reports to")
+4. **Employees** → har employee ka HR record complete karo (joining date, PAN, bank)
+5. **Products / Doctors / Chemists** → masters
+6. **Issue to MR** → MR ke bag mein sample stock
+
+---
+
+## 11. Abhi backend se connected nahi (client ko saaf bolo)
+
+Ye chaar screens ab **fake data nahi dikhati** — saaf "backend not connected" panel
+dikhati hain, jisme likha hai kya aayega aur kya pehle se ready hai:
+
+- **Tour Plan** — DB models ready hain, API + planning grid baaki
+- **My Day** — call list approved tour plan se aayegi
+- **My Stock** — per-MR balance endpoint baaki (balances DB mein hain)
+- **Ledger Explorer** — stock_txns likhi ja rahi hai, read query baaki
+
+Roadmap: **TA/DA expense claim, RCPA, target-vs-achievement, photo upload,
+notifications, offline PWA**.
 
 ---
 

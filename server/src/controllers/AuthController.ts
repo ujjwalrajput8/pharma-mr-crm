@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
 import { ApiResponse } from '../utils/ApiResponse';
-import type { LoginDto } from '../dto/auth.dto';
-import { BadRequestError } from '../errors/AppError';
+import type { ChangePasswordDto, LoginDto } from '../dto/auth.dto';
+import { BadRequestError, UnauthorizedError } from '../errors/AppError';
 
 const REFRESH_COOKIE = 'refreshToken';
 
@@ -86,6 +86,14 @@ export class AuthController {
     await this.authService.logout(bodyToken ?? cookieToken);
     res.clearCookie(REFRESH_COOKIE, this.refreshCookieOptions());
     ApiResponse.success(res, null, 'Logged out');
+  };
+
+  public changePassword = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    await this.authService.changePassword(req.user.id, req.body as ChangePasswordDto);
+    // Every session was revoked, so the client must sign in again.
+    res.clearCookie(REFRESH_COOKIE, this.refreshCookieOptions());
+    ApiResponse.success(res, null, 'Password changed. Please sign in again.');
   };
 
   public me = async (req: Request, res: Response): Promise<void> => {

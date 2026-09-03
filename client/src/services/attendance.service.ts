@@ -129,6 +129,20 @@ export const attendanceApi = {
     const { data } = await api.post<ApiSuccess<Attendance>>('/attendance/manage', payload);
     return data.data;
   },
+  /**
+   * Resolves a flagged check-in. Clearing the flag is what removes it from the
+   * approvals inbox and the notification bell.
+   */
+  async reviewFlag(
+    id: number,
+    payload: { outcome: 'ACCEPT' | 'REJECT'; remarks?: string },
+  ): Promise<Attendance> {
+    const { data } = await api.post<ApiSuccess<Attendance>>(
+      `/attendance/${id}/review-flag`,
+      payload,
+    );
+    return data.data;
+  },
   async fieldUsers(): Promise<
     Array<{ id: number; fullName: string; email: string; role: string; employeeCode: string | null }>
   > {

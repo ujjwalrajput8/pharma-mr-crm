@@ -23,6 +23,7 @@ import {
 } from '@/components/dashboard/DashboardCalendar';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { Card, PageHeader } from '@/components/ui/Page';
+import { NeedsAttention } from '@/components/dashboard/NeedsAttention';
 import { StatCardSkeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/api/client';
@@ -198,6 +199,8 @@ export function DashboardPage() {
               : 'Field'
         } overview with schedule calendar.`}
       />
+
+      <NeedsAttention />
 
       {/* Quick shortcuts pill strip */}
       <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs">

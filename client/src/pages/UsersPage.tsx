@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Plus } from 'lucide-react';
+import {
+  BriefcaseBusiness,
+  ChevronRight,
+  IdCard,
+  KeyRound,
+  MapPin,
+  Stethoscope,
+  UserPlus,
+} from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
@@ -8,6 +16,8 @@ import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/Da
 import { useClientTable } from '@/hooks/useClientTable';
 import { Input, Select } from '@/components/ui/Field';
 import { Avatar } from '@/components/ui/Avatar';
+import { ChoiceCards } from '@/components/ui/ChoiceCards';
+import { FormSection } from '@/components/ui/Modal';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
@@ -113,9 +123,9 @@ export function UsersPage() {
         title="Users & Hierarchy"
         description="Create MR and Manager (ASM / RSM) logins and set who reports to whom."
         actions={
-          <Button onClick={() => setOpen(true)}>
-            <Plus size={16} />
-            Add account
+          <Button size="lg" onClick={() => setOpen(true)}>
+            <UserPlus size={15} />
+            Add employee
           </Button>
         }
       />
@@ -240,8 +250,9 @@ export function UsersPage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Add account"
-        description="Create an MR or a Manager (ASM / RSM) login, with its place in the reporting hierarchy."
+        title="Add employee"
+        description="Create the login and place it in the reporting hierarchy. HR details like PAN and bank can be filled later from the employee record."
+        icon={UserPlus}
         className="max-w-2xl"
         footer={
           <>
@@ -256,28 +267,69 @@ export function UsersPage() {
           </>
         }
       >
-        <form id="create-mr-form" className="space-y-4" onSubmit={onCreate}>
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
-              Account Credentials
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Select
-                label="Role"
+        <form id="create-mr-form" className="space-y-6" onSubmit={onCreate}>
+          <ChoiceCards
+            label="What kind of account is this?"
+            required
+            value={form.role}
+            onChange={(role) => setForm((prev) => ({ ...prev, role }))}
+            choices={[
+              {
+                value: 'MR' as const,
+                label: 'Medical Representative',
+                description: 'Works a beat — visits, samples, POB, own leave',
+                icon: Stethoscope,
+              },
+              {
+                value: 'MANAGER' as const,
+                label: 'Manager (ASM / RSM)',
+                description: 'Approves leave and sees their whole team',
+                icon: BriefcaseBusiness,
+              },
+            ]}
+          />
+
+          <FormSection title="Who they are" icon={IdCard}>
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <Input
+                label="Full name"
                 required
-                value={form.role}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    role: e.target.value as CreateMrPayload['role'],
-                  }))
+                placeholder="Vikramaditya Singh"
+                value={form.fullName}
+                onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
+              />
+              <Input
+                label="Employee code"
+                required
+                placeholder="MR-2026-042"
+                value={form.employeeCode}
+                onChange={(e) => setForm((prev) => ({ ...prev, employeeCode: e.target.value }))}
+              />
+              <Input
+                label="Designation"
+                optional
+                placeholder={
+                  form.role === 'MANAGER' ? 'Area Sales Manager' : 'Medical Representative'
                 }
-                hint="Managers approve leave and see their whole team"
-              >
-                <option value="MR">Medical Representative</option>
-                <option value="MANAGER">Manager (ASM / RSM)</option>
-              </Select>
+                value={form.designation ?? ''}
+                onChange={(e) => setForm((prev) => ({ ...prev, designation: e.target.value }))}
+              />
+              <Input
+                label="Contact phone"
+                optional
+                placeholder="98765 00000"
+                value={form.phone}
+                onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+              />
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="Where they sit"
+            subtitle="Team scoping follows this reporting line"
+            icon={MapPin}
+          >
+            <div className="grid gap-3.5 sm:grid-cols-2">
               <Select
                 label="Reports to"
                 value={form.managerId ? String(form.managerId) : ''}
@@ -289,7 +341,7 @@ export function UsersPage() {
                 }
                 hint={
                   form.role === 'MANAGER'
-                    ? 'A Manager may report to another Manager (ASM → RSM)'
+                    ? 'A Manager reports to another Manager (ASM → RSM)'
                     : 'The ASM this MR reports to'
                 }
               >
@@ -302,76 +354,49 @@ export function UsersPage() {
                 ))}
               </Select>
               <Input
-                label="Employee Code"
-                required
-                placeholder="e.g. MR-2026-042"
-                value={form.employeeCode}
-                onChange={(e) => setForm((prev) => ({ ...prev, employeeCode: e.target.value }))}
+                label="Beat / area"
+                optional
+                placeholder="Ahmedabad Central"
+                value={form.assignedArea}
+                onChange={(e) => setForm((prev) => ({ ...prev, assignedArea: e.target.value }))}
+              />
+              <DatePicker
+                label="Joining date"
+                value={form.joiningDate ?? ''}
+                onChange={(joiningDate) => setForm((prev) => ({ ...prev, joiningDate }))}
               />
               <Input
-                label="Designation"
-                placeholder="e.g. Medical Representative"
-                value={form.designation ?? ''}
-                onChange={(e) => setForm((prev) => ({ ...prev, designation: e.target.value }))}
+                label="Address"
+                optional
+                placeholder="City / residence"
+                value={form.address}
+                onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
               />
+            </div>
+          </FormSection>
+
+          <FormSection title="How they sign in" icon={KeyRound}>
+            <div className="grid gap-3.5 sm:grid-cols-2">
               <Input
-                label="Full Name"
-                required
-                placeholder="e.g. Vikramaditya Singh"
-                value={form.fullName}
-                onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-              />
-              <Input
-                label="Work Email"
+                label="Work email"
                 type="email"
                 required
-                placeholder="representative@jovance.com"
+                placeholder="name@jovance.com"
                 value={form.email}
                 onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
               />
               <Input
-                label="Temporary Password"
+                label="Starting password"
                 type="password"
                 required
                 minLength={8}
                 placeholder="Min 8 characters"
                 value={form.password}
                 onChange={(e) => setForm((prev) => ({ ...prev, password: e.target.value }))}
+                hint="They can change it themselves from My Profile"
               />
             </div>
-          </div>
-
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-teal-500" />
-              Territory & Contact
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                label="Assigned Territory / Area"
-                placeholder="e.g. North Zone - Lucknow HQ"
-                value={form.assignedArea}
-                onChange={(e) => setForm((prev) => ({ ...prev, assignedArea: e.target.value }))}
-              />
-              <Input
-                label="Contact Phone"
-                placeholder="+91 98765 00000"
-                value={form.phone}
-                onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-              />
-              <DatePicker
-                label="Joining Date"
-                value={form.joiningDate ?? ''}
-                onChange={(joiningDate) => setForm((prev) => ({ ...prev, joiningDate }))}
-              />
-              <Input
-                label="Residential Address"
-                placeholder="HQ City / Residence"
-                value={form.address}
-                onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
-              />
-            </div>
-          </div>
+          </FormSection>
         </form>
       </Modal>
 

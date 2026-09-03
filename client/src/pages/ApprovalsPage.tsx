@@ -8,6 +8,8 @@ import {
   ChevronRight,
   Inbox,
   MapPin,
+  ShieldCheck,
+  UserX,
   XCircle,
 } from 'lucide-react';
 import { getApiErrorMessage } from '@/api/client';
@@ -28,7 +30,7 @@ import {
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
 import { DAY_PART_LABEL, leavesApi, type LeaveRequest } from '@/services/leaves.service';
-import { attendanceApi } from '@/services/attendance.service';
+import { attendanceApi, type Attendance } from '@/services/attendance.service';
 import { formatDisplayDate } from '@/utils/datetime';
 
 export function ApprovalsPage() {
@@ -43,6 +45,11 @@ export function ApprovalsPage() {
     status: 'APPROVED' | 'REJECTED';
   } | null>(null);
   const [remark, setRemark] = useState('');
+  const [flagTarget, setFlagTarget] = useState<{
+    row: Attendance;
+    outcome: 'ACCEPT' | 'REJECT';
+  } | null>(null);
+  const [flagRemark, setFlagRemark] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const leavesQuery = useQuery({
@@ -84,6 +91,31 @@ export function ApprovalsPage() {
         queryClient.invalidateQueries({ queryKey: ['leaves'] }),
         queryClient.invalidateQueries({ queryKey: ['leave-balances'] }),
         queryClient.invalidateQueries({ queryKey: ['attendance'] }),
+        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+      ]);
+    },
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  /**
+   * Clears a flag once a manager has looked at it. Without this the same
+   * check-in stays in the inbox and the bell for two weeks.
+   */
+  const reviewFlagMutation = useMutation({
+    mutationFn: (input: { id: number; outcome: 'ACCEPT' | 'REJECT'; remarks?: string }) =>
+      attendanceApi.reviewFlag(input.id, { outcome: input.outcome, remarks: input.remarks }),
+    onSuccess: async (_row, input) => {
+      setFlagTarget(null);
+      setFlagRemark('');
+      setError(null);
+      toast.success(
+        input.outcome === 'ACCEPT' ? 'Check-in accepted' : 'Marked absent',
+        'Removed from your inbox.',
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['attendance'] }),
+        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
       ]);
     },
     onError: (err) => setError(getApiErrorMessage(err)),
@@ -270,17 +302,101 @@ export function ApprovalsPage() {
                       )}
                     </div>
                   </div>
-                  <Link to="/attendance" className="shrink-0">
-                    <Button size="sm" variant="secondary">
-                      Review register
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setFlagTarget({ row, outcome: 'ACCEPT' });
+                        setFlagRemark('');
+                      }}
+                    >
+                      <ShieldCheck size={14} />
+                      Accept
                     </Button>
-                  </Link>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => {
+                        setFlagTarget({ row, outcome: 'REJECT' });
+                        setFlagRemark('');
+                      }}
+                    >
+                      <UserX size={14} />
+                      Mark absent
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </Card>
       ) : null}
+
+      <Modal
+        open={Boolean(flagTarget)}
+        onClose={() => {
+          setFlagTarget(null);
+          setFlagRemark('');
+        }}
+        title={flagTarget?.outcome === 'ACCEPT' ? 'Accept this check-in' : 'Mark the day absent'}
+        description={
+          flagTarget?.outcome === 'ACCEPT'
+            ? 'The day stays as recorded and the flag is cleared from your inbox. The original flag text is kept in the remarks for history.'
+            : 'The check-in is discarded and the day becomes Absent. The flag is cleared either way.'
+        }
+        icon={flagTarget?.outcome === 'ACCEPT' ? ShieldCheck : UserX}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setFlagTarget(null);
+                setFlagRemark('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={flagTarget?.outcome === 'ACCEPT' ? 'primary' : 'destructive'}
+              loading={reviewFlagMutation.isPending}
+              onClick={() =>
+                flagTarget &&
+                reviewFlagMutation.mutate({
+                  id: flagTarget.row.id,
+                  outcome: flagTarget.outcome,
+                  remarks: flagRemark.trim() || undefined,
+                })
+              }
+            >
+              {flagTarget?.outcome === 'ACCEPT' ? 'Accept check-in' : 'Mark absent'}
+            </Button>
+          </>
+        }
+      >
+        {error ? <Alert message={error} /> : null}
+        {flagTarget ? (
+          <dl className="mb-3">
+            <DetailRow label="Employee" value={flagTarget.row.mr?.fullName} />
+            <DetailRow label="Date" value={formatDisplayDate(flagTarget.row.workDate)} />
+            <DetailRow label="Flag" value={flagTarget.row.flagReason} />
+            <DetailRow
+              label="GPS accuracy"
+              value={flagTarget.row.accuracyM ? `±${Math.round(flagTarget.row.accuracyM)} m` : null}
+            />
+            <DetailRow
+              label="Mock location"
+              value={flagTarget.row.isMockLocation ? 'Yes — device reported a fake fix' : 'No'}
+            />
+          </dl>
+        ) : null}
+        <Textarea
+          label="Note"
+          optional
+          value={flagRemark}
+          onChange={(e) => setFlagRemark(e.target.value)}
+          placeholder="Spoke to Rahul — he was inside the hospital basement, weak signal."
+        />
+      </Modal>
 
       <Modal
         open={Boolean(decision)}
