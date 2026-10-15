@@ -29,11 +29,36 @@ export interface Attendance {
   latitude: number | null;
   longitude: number | null;
   accuracyM: number | null;
+  /** Metres from the territory geo-fence centre at check-in. */
+  geofenceDistanceM: number | null;
   isMockLocation: boolean;
   locationNote: string | null;
   remarks: string | null;
   flagReason: string | null;
   mr: { id: number; fullName: string; email: string; role?: string } | null;
+}
+
+export type RegularizationStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+export interface Regularization {
+  id: number;
+  userId: number;
+  employee: {
+    id: number;
+    fullName: string;
+    email: string;
+    role: string;
+    employeeCode: string | null;
+  } | null;
+  attDate: string;
+  requestedInAt: string | null;
+  requestedOutAt: string | null;
+  reason: string;
+  status: RegularizationStatus;
+  decisionRemark: string | null;
+  actedAt: string | null;
+  decidedBy: { id: number; fullName: string } | null;
+  createdAt: string;
 }
 
 export interface AttendanceCalendarDay {
@@ -143,6 +168,38 @@ export const attendanceApi = {
     );
     return data.data;
   },
+  /** Missed check-in / check-out fix — own for MR, team for managers. */
+  async listRegularizations(
+    params: { status?: RegularizationStatus; month?: string; userId?: number } = {},
+  ): Promise<Regularization[]> {
+    const { data } = await api.get<ApiSuccess<Regularization[]>>(
+      '/attendance/regularizations',
+      { params },
+    );
+    return data.data;
+  },
+  async createRegularization(payload: {
+    attDate: string;
+    requestedInAt?: string;
+    requestedOutAt?: string;
+    reason: string;
+  }): Promise<Regularization> {
+    const { data } = await api.post<ApiSuccess<Regularization>>(
+      '/attendance/regularizations',
+      payload,
+    );
+    return data.data;
+  },
+  async decideRegularization(
+    id: number,
+    payload: { status: 'APPROVED' | 'REJECTED'; remark?: string },
+  ): Promise<Regularization> {
+    const { data } = await api.post<ApiSuccess<Regularization>>(
+      `/attendance/regularizations/${id}/decide`,
+      payload,
+    );
+    return data.data;
+  },
   async fieldUsers(): Promise<
     Array<{ id: number; fullName: string; email: string; role: string; employeeCode: string | null }>
   > {
@@ -200,6 +257,16 @@ export const ATTENDANCE_STATUS_META: Record<
   OFFICE: { label: 'Office', tone: 'primary', color: 'var(--color-primary)' },
   JOINT_WORK: { label: 'Joint work', tone: 'primary', color: 'var(--color-cal-followup)' },
   FLAGGED: { label: 'Flagged', tone: 'warning', color: 'var(--color-warning)' },
+};
+
+export const REGULARIZATION_STATUS_TONE: Record<
+  RegularizationStatus,
+  'warning' | 'success' | 'danger' | 'neutral'
+> = {
+  PENDING: 'warning',
+  APPROVED: 'success',
+  REJECTED: 'danger',
+  CANCELLED: 'neutral',
 };
 
 export const WORK_TYPE_LABEL: Record<WorkType, string> = {

@@ -43,6 +43,36 @@ export const updateEmployeeProfileSchema = z.object({
   exitReason: nullableText(500),
 });
 
+/** ── Employee documents (Aadhaar / PAN / letters) ─────────────────────────── */
+
+export const EMPLOYEE_DOC_TYPES = [
+  'AADHAAR',
+  'PAN',
+  'OFFER_LETTER',
+  'DEGREE',
+  'CERTIFICATE',
+  'OTHER',
+] as const;
+
+const fileKeySchema = z
+  .string()
+  .regex(/^[0-9a-f]{32}(\.[a-z0-9]{1,10})?$/i, 'Invalid file key');
+
+export const createEmployeeDocumentSchema = z.object({
+  docType: z.enum(EMPLOYEE_DOC_TYPES),
+  title: z.string().min(2).max(120),
+  /** Key returned by POST /files (purpose `employee-doc`). */
+  fileKey: fileKeySchema,
+  note: z.string().max(300).optional(),
+});
+
+/** Avatar — sets MrProfile.photoUrl to `file:<key>`. */
+export const setAvatarSchema = z.object({
+  fileKey: fileKeySchema,
+});
+
+export type CreateEmployeeDocumentDto = z.infer<typeof createEmployeeDocumentSchema>;
+export type SetAvatarDto = z.infer<typeof setAvatarSchema>;
 export type ListEmployeesQueryDto = z.infer<typeof listEmployeesQuerySchema>;
 export type EmployeeProfileQueryDto = z.infer<typeof employeeProfileQuerySchema>;
 export type UpdateEmployeeProfileDto = z.infer<typeof updateEmployeeProfileSchema>;

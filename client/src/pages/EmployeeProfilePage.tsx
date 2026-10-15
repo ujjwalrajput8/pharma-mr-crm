@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -6,20 +6,28 @@ import {
   Banknote,
   BriefcaseBusiness,
   CalendarDays,
+  Camera,
   ClipboardList,
   Clock3,
+  Copy,
+  Eye,
+  FileText,
   Gift,
   HeartPulse,
   IdCard,
   IndianRupee,
+  KeyRound,
   Landmark,
   Mail,
   MapPin,
   PencilLine,
   Phone,
+  Plus,
   Stethoscope,
   Timer,
+  Trash2,
   TrendingUp,
+  Upload,
   UserRound,
 } from 'lucide-react';
 import { getApiErrorMessage } from '@/api/client';
@@ -44,17 +52,29 @@ import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
 import {
+  EMPLOYEE_DOC_TYPE_LABEL,
   employeesApi,
+  type EmployeeDocType,
+  type EmployeeDocument,
   type EmployeeProfile,
   type EmployeeProfilePayload,
 } from '@/services/employees.service';
 import { GrantCompOffDialog } from '@/components/leave/GrantCompOffDialog';
 import { ATTENDANCE_STATUS_META, attendanceApi } from '@/services/attendance.service';
 import { LEAVE_STATUS_TONE, type LeaveStatus } from '@/services/leaves.service';
+import { authApi } from '@/services/auth.service';
+import { filesApi, openStoredFile, useStoredFileUrl } from '@/services/files.service';
 import { formatDisplayDate } from '@/utils/datetime';
 import { currentMonthKey, monthAnchorDate } from '@/utils/month';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
-type TabValue = 'overview' | 'attendance' | 'leave' | 'records';
+type TabValue = 'overview' | 'attendance' | 'leave' | 'records' | 'documents';
+
+const emptyDocForm = {
+  docType: 'AADHAAR' as EmployeeDocType,
+  title: '',
+  note: '',
+};
 
 /** Flattens a profile into the editable HR field set. */
 function toEditForm(profile: EmployeeProfile): EmployeeProfilePayload {
@@ -104,6 +124,17 @@ export function EmployeeProfilePage() {
   const [compOffOpen, setCompOffOpen] = useState(false);
   const [edit, setEdit] = useState<EmployeeProfilePayload>({});
   const [error, setError] = useState<string | null>(null);
+  const [docFormOpen, setDocFormOpen] = useState(false);
+  const [docForm, setDocForm] = useState(emptyDocForm);
+  const [docFile, setDocFile] = useState<{ key: string; fileName: string } | null>(null);
+  const [docUploading, setDocUploading] = useState(false);
+  const [docDeleteTarget, setDocDeleteTarget] = useState<EmployeeDocument | null>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetUrl, setResetUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const isSelf = user?.id === employeeId;
 
@@ -123,7 +154,15 @@ export function EmployeeProfilePage() {
     enabled: tab === 'attendance' && Number.isFinite(employeeId),
   });
 
+  const documentsQuery = useQuery({
+    queryKey: ['employee', employeeId, 'documents'],
+    queryFn: () => employeesApi.listDocuments(employeeId),
+    enabled: tab === 'documents' && Number.isFinite(employeeId),
+  });
+
   const profile = profileQuery.data;
+  // `file:<key>` photo values need an authed blob URL; plain URLs pass through.
+  const photoUrl = useStoredFileUrl(profile?.personal.photoUrl);
 
   function openEdit(): void {
     if (!profile) return;
@@ -143,6 +182,91 @@ export function EmployeeProfilePage() {
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
+
+  async function onPickAvatar(files: FileList | null): Promise<void> {
+    const file = files?.[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      const info = await filesApi.upload(file, 'avatar');
+      await employeesApi.setAvatar(employeeId, info.key);
+      toast.success('Photo updated');
+      await queryClient.invalidateQueries({ queryKey: ['employee', employeeId] });
+      await queryClient.invalidateQueries({ queryKey: ['employee', 'me'] });
+    } catch (err) {
+      toast.error('Photo upload failed', getApiErrorMessage(err));
+    } finally {
+      setAvatarUploading(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  }
+
+  async function onPickDocFile(files: FileList | null): Promise<void> {
+    const file = files?.[0];
+    if (!file) return;
+    setDocUploading(true);
+    try {
+      const info = await filesApi.upload(file, 'employee-doc');
+      setDocFile({ key: info.key, fileName: info.fileName });
+      setError(null);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Upload failed'));
+    } finally {
+      setDocUploading(false);
+      if (docInputRef.current) docInputRef.current.value = '';
+    }
+  }
+
+  const addDocMutation = useMutation({
+    mutationFn: () =>
+      employeesApi.addDocument(employeeId, {
+        docType: docForm.docType,
+        title: docForm.title.trim(),
+        fileKey: docFile!.key,
+        note: docForm.note.trim() || undefined,
+      }),
+    onSuccess: async () => {
+      setDocFormOpen(false);
+      setDocForm(emptyDocForm);
+      setDocFile(null);
+      setError(null);
+      toast.success('Document added');
+      await queryClient.invalidateQueries({ queryKey: ['employee', employeeId, 'documents'] });
+    },
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  const removeDocMutation = useMutation({
+    mutationFn: (docId: number) => employeesApi.removeDocument(employeeId, docId),
+    onSuccess: async () => {
+      setDocDeleteTarget(null);
+      toast.success('Document removed');
+      await queryClient.invalidateQueries({ queryKey: ['employee', employeeId, 'documents'] });
+    },
+    onError: (err) => {
+      setDocDeleteTarget(null);
+      setError(getApiErrorMessage(err));
+    },
+  });
+
+  const resetLinkMutation = useMutation({
+    mutationFn: () => authApi.requestResetLink(employeeId),
+    onSuccess: (result) => {
+      setResetUrl(result.resetUrl);
+      setCopied(false);
+    },
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  async function copyResetUrl(): Promise<void> {
+    if (!resetUrl) return;
+    try {
+      await navigator.clipboard.writeText(resetUrl);
+      setCopied(true);
+    } catch {
+      toast.error('Copy failed', 'Select the link and copy it manually.');
+    }
+  }
 
   const calendarCells: MonthCalendarCell[] = useMemo(() => {
     const days = calendarQuery.data?.days ?? [];
@@ -218,10 +342,23 @@ export function EmployeeProfilePage() {
               </Button>
             </Link>
             {canEdit ? (
-              <Button onClick={openEdit}>
-                <PencilLine size={15} />
-                Edit record
-              </Button>
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setResetOpen(true);
+                    setResetUrl(null);
+                    setCopied(false);
+                  }}
+                >
+                  <KeyRound size={15} />
+                  Reset link
+                </Button>
+                <Button onClick={openEdit}>
+                  <PencilLine size={15} />
+                  Edit record
+                </Button>
+              </>
             ) : null}
           </>
         }
@@ -233,7 +370,30 @@ export function EmployeeProfilePage() {
       <Card className="p-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
-            <Avatar name={profile.fullName} photoUrl={profile.personal.photoUrl} size="xl" />
+            <div className="relative shrink-0">
+              <Avatar name={profile.fullName} photoUrl={photoUrl} size="xl" />
+              {isSelf || canEdit ? (
+                <>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => void onPickAvatar(e.target.files)}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Change photo"
+                    title="Change photo"
+                    disabled={avatarUploading}
+                    onClick={() => avatarInputRef.current?.click()}
+                    className="absolute -right-1 -bottom-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)] shadow-xs transition hover:text-[var(--color-primary)] disabled:opacity-60"
+                  >
+                    <Camera size={12} />
+                  </button>
+                </>
+              ) : null}
+            </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-xl font-bold tracking-tight">{profile.fullName}</h3>
@@ -315,6 +475,7 @@ export function EmployeeProfilePage() {
           { value: 'attendance', label: 'Attendance', icon: CalendarDays },
           { value: 'leave', label: 'Leave', icon: Clock3 },
           { value: 'records', label: 'Employment & bank', icon: IdCard },
+          { value: 'documents', label: 'Documents', icon: FileText },
         ]}
       />
 
@@ -616,10 +777,250 @@ export function EmployeeProfilePage() {
         </div>
       ) : null}
 
+      {/* ── Documents ────────────────────────────────────────────────────── */}
+      {tab === 'documents' ? (
+        <SectionCard
+          title="Documents"
+          description="Aadhaar, PAN, offer letter and other employee records."
+          icon={FileText}
+          actions={
+            canEdit ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setDocForm(emptyDocForm);
+                  setDocFile(null);
+                  setError(null);
+                  setDocFormOpen(true);
+                }}
+              >
+                <Plus size={13} />
+                Add document
+              </Button>
+            ) : null
+          }
+        >
+          {documentsQuery.isLoading ? (
+            <p className="py-6 text-center text-xs text-[var(--color-muted)]">
+              Loading documents…
+            </p>
+          ) : (documentsQuery.data ?? []).length === 0 ? (
+            <EmptyState
+              title="No documents on file"
+              description={
+                canEdit
+                  ? 'Upload Aadhaar, PAN or letters so the record is complete.'
+                  : 'Nothing has been uploaded for this employee yet.'
+              }
+            />
+          ) : (
+            <ul className="divide-y divide-[var(--color-border)]/70">
+              {(documentsQuery.data ?? []).map((doc) => (
+                <li
+                  key={doc.id}
+                  className="flex items-center justify-between gap-3 py-2.5"
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-primary-soft)] text-[var(--color-primary)]">
+                      <FileText size={14} />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold">{doc.title}</p>
+                        <Badge tone="primary" dot={false}>
+                          {EMPLOYEE_DOC_TYPE_LABEL[doc.docType] ?? doc.docType}
+                        </Badge>
+                      </div>
+                      <p className="truncate text-[11px] text-[var(--color-muted)]">
+                        {doc.note ?? `Added ${formatDisplayDate(doc.createdAt.slice(0, 10))}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void openStoredFile(doc.fileKey)}
+                    >
+                      <Eye size={13} />
+                      View
+                    </Button>
+                    {canEdit ? (
+                      <Button
+                        size="icon-sm"
+                        variant="danger"
+                        aria-label={`Remove ${doc.title}`}
+                        onClick={() => setDocDeleteTarget(doc)}
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
+      ) : null}
+
       <GrantCompOffDialog
         open={compOffOpen}
         onClose={() => setCompOffOpen(false)}
         employee={{ id: profile.id, fullName: profile.fullName }}
+      />
+
+      {/* ── Add document (admin) ─────────────────────────────────────────── */}
+      <Modal
+        open={docFormOpen}
+        onClose={() => {
+          setDocFormOpen(false);
+          setError(null);
+        }}
+        title="Add document"
+        description="Stored against this employee's record; visible to the employee and administrators."
+        icon={FileText}
+        className="max-w-lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDocFormOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              loading={addDocMutation.isPending}
+              disabled={!docFile || docForm.title.trim().length < 2}
+              onClick={() => addDocMutation.mutate()}
+            >
+              Save document
+            </Button>
+          </>
+        }
+      >
+        {error ? <Alert message={error} /> : null}
+        <div className="space-y-3.5">
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <Select
+              label="Type"
+              required
+              value={docForm.docType}
+              onChange={(e) =>
+                setDocForm((f) => ({ ...f, docType: e.target.value as EmployeeDocType }))
+              }
+            >
+              {(Object.keys(EMPLOYEE_DOC_TYPE_LABEL) as EmployeeDocType[]).map((type) => (
+                <option key={type} value={type}>
+                  {EMPLOYEE_DOC_TYPE_LABEL[type]}
+                </option>
+              ))}
+            </Select>
+            <Input
+              label="Title"
+              required
+              value={docForm.title}
+              onChange={(e) => setDocForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Aadhaar card (front + back)"
+            />
+          </div>
+          <Input
+            label="Note"
+            optional
+            value={docForm.note}
+            onChange={(e) => setDocForm((f) => ({ ...f, note: e.target.value }))}
+            placeholder="Verified against the original on 01 Oct"
+          />
+          <div>
+            <input
+              ref={docInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              className="hidden"
+              onChange={(e) => void onPickDocFile(e.target.files)}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                loading={docUploading}
+                onClick={() => docInputRef.current?.click()}
+              >
+                <Upload size={13} />
+                {docFile ? 'Replace file' : 'Upload file'}
+              </Button>
+              {docFile ? (
+                <span className="max-w-[16rem] truncate text-[11px] font-semibold text-[var(--color-primary)]">
+                  {docFile.fileName}
+                </span>
+              ) : (
+                <span className="text-[11px] text-[var(--color-muted)]">
+                  JPEG / PNG / WebP / PDF, up to 5 MB
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Password reset link (admin) ──────────────────────────────────── */}
+      <Modal
+        open={resetOpen}
+        onClose={() => setResetOpen(false)}
+        title={`Reset link — ${profile.fullName}`}
+        description="Generates a single-use link valid for 60 minutes. Hand it to the employee over a trusted channel — it is shown only once."
+        icon={KeyRound}
+        className="max-w-lg"
+        footer={
+          <Button variant="secondary" onClick={() => setResetOpen(false)}>
+            Close
+          </Button>
+        }
+      >
+        {error ? <Alert message={error} /> : null}
+        {resetUrl ? (
+          <div className="space-y-2.5">
+            <label className="block text-xs font-semibold text-[var(--color-muted)]">
+              Reset URL
+              <input
+                readOnly
+                value={resetUrl}
+                onFocus={(e) => e.target.select()}
+                className="mt-1.5 h-10 w-full rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 font-mono text-[11px] text-[var(--color-ink)] outline-none"
+              />
+            </label>
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={() => void copyResetUrl()}>
+                <Copy size={13} />
+                {copied ? 'Copied' : 'Copy link'}
+              </Button>
+              <span className="text-[11px] text-[var(--color-muted)]">
+                Signing in with it revokes every existing session.
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-start gap-3">
+            <p className="text-xs leading-relaxed text-[var(--color-muted)]">
+              No email is sent — you copy the link and give it to {profile.fullName} yourself
+              (WhatsApp, call, in person). The old password keeps working until the link is used.
+            </p>
+            <Button
+              loading={resetLinkMutation.isPending}
+              onClick={() => resetLinkMutation.mutate()}
+            >
+              <KeyRound size={14} />
+              Generate reset link
+            </Button>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(docDeleteTarget)}
+        title={`Remove ${docDeleteTarget?.title ?? 'document'}`}
+        description="The document is removed from the employee record. The uploaded file stays in storage for the audit trail."
+        confirmLabel="Remove"
+        loading={removeDocMutation.isPending}
+        onConfirm={() => docDeleteTarget && removeDocMutation.mutate(docDeleteTarget.id)}
+        onClose={() => setDocDeleteTarget(null)}
       />
 
       {/* ── Edit modal ───────────────────────────────────────────────────── */}

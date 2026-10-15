@@ -2,7 +2,7 @@ import { api } from '@/api/client';
 import type { ApiSuccess } from '@/types';
 
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
-export type LeaveDayPart = 'FULL' | 'FIRST_HALF' | 'SECOND_HALF';
+export type LeaveDayPart = 'FULL' | 'FIRST_HALF' | 'SECOND_HALF' | 'SHORT';
 
 export interface LeaveType {
   id: number;
@@ -13,6 +13,10 @@ export interface LeaveType {
   carryForward: boolean;
   maxCarryForward: number;
   allowHalfDay: boolean;
+  /** Few-hours leave (dayPart SHORT); consumed as hours / 8. */
+  allowShortLeave: boolean;
+  /** Sandwich rule — offs inside the range are also consumed. */
+  sandwichRule: boolean;
   requiresProof: boolean;
   colorHex: string;
   description: string | null;
@@ -40,6 +44,8 @@ export interface LeaveRequest {
   fromDate: string;
   toDate: string;
   dayPart: LeaveDayPart;
+  /** Hours off when dayPart is SHORT. */
+  hours: number | null;
   days: number;
   reason: string;
   contactPhone: string | null;
@@ -73,10 +79,24 @@ export interface ApplyLeavePayload {
   fromDate: string;
   toDate: string;
   dayPart: LeaveDayPart;
+  /** Required when dayPart is SHORT (0.5–4 hours). */
+  hours?: number;
   reason: string;
   contactPhone?: string;
   attachmentUrl?: string;
+  /** Key from filesApi.upload(file, 'leave-proof'). */
+  attachmentFileKey?: string;
   userId?: number;
+}
+
+export interface LeaveCalendarEntry {
+  userId: number;
+  fullName: string;
+  leaveType: { code: string; color: string };
+  fromDate: string;
+  toDate: string;
+  dayPart: LeaveDayPart;
+  status: 'PENDING' | 'APPROVED';
 }
 
 export interface ListLeavesParams {
@@ -114,6 +134,13 @@ export const leavesApi = {
   async pendingCount(): Promise<number> {
     const { data } = await api.get<ApiSuccess<{ count: number }>>('/leaves/pending-count');
     return data.data.count;
+  },
+  /** Team month view — APPROVED + PENDING leave overlapping `month` (YYYY-MM). */
+  async calendar(month: string): Promise<{ month: string; items: LeaveCalendarEntry[] }> {
+    const { data } = await api.get<
+      ApiSuccess<{ month: string; items: LeaveCalendarEntry[] }>
+    >('/leaves/calendar', { params: { month } });
+    return data.data;
   },
 
   async balances(
@@ -196,4 +223,5 @@ export const DAY_PART_LABEL: Record<LeaveDayPart, string> = {
   FULL: 'Full day',
   FIRST_HALF: 'First half',
   SECOND_HALF: 'Second half',
+  SHORT: 'Short leave',
 };

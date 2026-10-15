@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  BadgeCheck,
   Bell,
   BellOff,
   CalendarCheck2,
+  CalendarClock,
   CalendarDays,
+  CheckCheck,
   ChevronDown,
   Gift,
   KeyRound,
@@ -17,6 +20,7 @@ import {
   Sun,
   UserRound,
   UserX,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { useTheme } from '@/store/ThemeContext';
@@ -27,21 +31,26 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { NAV_ITEMS } from '@/constants/navigation';
 import {
   countActionable,
+  isStoredNotification,
+  isUnread,
   notificationsApi,
+  type AppNotification,
   type NotificationKind,
 } from '@/services/notifications.service';
 import { cn } from '@/utils/cn';
 
-const NOTIFICATION_ICON: Record<
-  NotificationKind,
-  typeof CalendarDays
-> = {
+const NOTIFICATION_ICON: Partial<Record<NotificationKind, typeof CalendarDays>> = {
   LEAVE_PENDING: CalendarDays,
   LEAVE_DECIDED: CalendarCheck2,
   ATTENDANCE_FLAGGED: MapPinOff,
   ATTENDANCE_MISSING: UserX,
   APPOINTMENT_TODAY: CalendarCheck2,
   DOCTOR_OCCASION: Gift,
+  REGULARIZATION_PENDING: CalendarClock,
+  REGULARIZATION_DECIDED: CalendarCheck2,
+  EXPENSE_PENDING: Wallet,
+  EXPENSE_DECIDED: Wallet,
+  EXPENSE_PAID: BadgeCheck,
 };
 
 const TONE_CLASS: Record<string, string> = {
@@ -93,6 +102,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
+  const queryClient = useQueryClient();
   const notificationsQuery = useQuery({
     queryKey: ['notifications'],
     queryFn: () => notificationsApi.list(),
@@ -102,6 +112,23 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   });
   const feed = notificationsQuery.data;
   const actionable = countActionable(feed);
+  const unreadStored = (feed?.items ?? []).filter(isUnread).length;
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => notificationsApi.markRead(id),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+  const markAllReadMutation = useMutation({
+    mutationFn: () => notificationsApi.markAllRead(),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+
+  function openNotification(item: AppNotification): void {
+    // Stored rows carry read state — clicking one clears its dot.
+    if (isUnread(item)) markReadMutation.mutate(item.id);
+    setNotifOpen(false);
+    navigate(item.href);
+  }
 
   const crumb = useMemo(() => {
     const match = NAV_ITEMS.find((item) => location.pathname.startsWith(item.path));
@@ -193,15 +220,28 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               </Button>
               {notifOpen ? (
                 <div className="absolute right-0 mt-2 w-[21rem] overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] animate-scale-in">
-                  <div className="flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-bg)]/40 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg)]/40 px-4 py-3">
                     <p className="text-[11px] font-bold tracking-wider text-[var(--color-ink)] uppercase">
                       Notifications
                     </p>
-                    {actionable > 0 ? (
-                      <span className="rounded-full bg-[var(--color-danger-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-danger)]">
-                        {actionable} need action
-                      </span>
-                    ) : null}
+                    <span className="flex items-center gap-2">
+                      {actionable > 0 ? (
+                        <span className="rounded-full bg-[var(--color-danger-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-danger)]">
+                          {actionable} need action
+                        </span>
+                      ) : null}
+                      {unreadStored > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => markAllReadMutation.mutate()}
+                          disabled={markAllReadMutation.isPending}
+                          className="inline-flex cursor-pointer items-center gap-1 text-[10px] font-bold text-[var(--color-primary)] hover:underline disabled:opacity-60"
+                        >
+                          <CheckCheck size={11} />
+                          Mark all read
+                        </button>
+                      ) : null}
+                    </span>
                   </div>
 
                   {notificationsQuery.isLoading ? (
@@ -222,15 +262,18 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                     <ul className="max-h-[22rem] divide-y divide-[var(--color-border)] overflow-y-auto">
                       {feed?.items.map((item) => {
                         const Icon = NOTIFICATION_ICON[item.kind] ?? Bell;
+                        const unread = isUnread(item);
+                        const read = isStoredNotification(item) && !unread;
                         return (
                           <li key={item.id}>
                             <button
                               type="button"
-                              onClick={() => {
-                                setNotifOpen(false);
-                                navigate(item.href);
-                              }}
-                              className="flex w-full cursor-pointer items-start gap-2.5 px-4 py-3 text-left transition-colors hover:bg-[var(--color-bg)]/60"
+                              onClick={() => openNotification(item)}
+                              className={cn(
+                                'flex w-full cursor-pointer items-start gap-2.5 px-4 py-3 text-left transition-colors hover:bg-[var(--color-bg)]/60',
+                                unread && 'bg-[var(--color-primary-soft)]/30',
+                                read && 'opacity-70',
+                              )}
                             >
                               <span
                                 className={cn(
@@ -241,8 +284,14 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                                 <Icon size={13} />
                               </span>
                               <span className="min-w-0 flex-1">
-                                <span className="block text-xs font-semibold text-[var(--color-ink)]">
-                                  {item.title}
+                                <span className="flex items-center gap-1.5 text-xs font-semibold text-[var(--color-ink)]">
+                                  {unread ? (
+                                    <span
+                                      aria-label="Unread"
+                                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-primary)]"
+                                    />
+                                  ) : null}
+                                  <span className="min-w-0 truncate">{item.title}</span>
                                 </span>
                                 <span className="mt-0.5 block text-[11px] leading-snug text-[var(--color-muted)]">
                                   {item.message}

@@ -23,6 +23,7 @@ import {
   PartyPopper,
   IdCard,
   FileSliders,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -82,6 +83,13 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'Field',
   },
   {
+    label: 'Expenses (TA/DA)',
+    path: '/expenses',
+    icon: Wallet,
+    permissions: ['expenses:own', 'expenses:manage'],
+    section: 'Field',
+  },
+  {
     label: 'Appointments',
     path: '/appointments',
     icon: CalendarDays,
@@ -135,6 +143,13 @@ export const NAV_ITEMS: NavItem[] = [
     path: '/doctors',
     icon: Stethoscope,
     permissions: ['doctors:manage', 'doctors:own'],
+    section: 'Masters',
+  },
+  {
+    label: 'Territories',
+    path: '/territories',
+    icon: Map,
+    permissions: ['territories:manage'],
     section: 'Masters',
   },
   {

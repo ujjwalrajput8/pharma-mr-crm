@@ -20,8 +20,11 @@ export const PERMISSION_CATALOG = [
   { key: 'employees:view', label: 'Employee directory & profiles', group: 'People' },
   { key: 'holidays:manage', label: 'Holiday calendar', group: 'People' },
   { key: 'leave-types:manage', label: 'Leave policy (types & quota)', group: 'People' },
+  { key: 'expenses:own', label: 'Own expense claims (TA/DA)', group: 'Field' },
+  { key: 'expenses:manage', label: 'Approve team expenses', group: 'Field' },
   { key: 'doctors:own', label: 'Assigned doctors', group: 'Masters' },
   { key: 'doctors:manage', label: 'Manage doctors', group: 'Masters' },
+  { key: 'territories:manage', label: 'Territories (HQ / beats)', group: 'Masters' },
   { key: 'stores:manage', label: 'Chemists / stores', group: 'Masters' },
   { key: 'medicines:manage', label: 'Products', group: 'Masters' },
   { key: 'batches:manage', label: 'Batches', group: 'Masters' },
@@ -34,6 +37,7 @@ export const PERMISSION_CATALOG = [
   { key: 'distributions:own', label: 'My samples', group: 'Stock' },
   { key: 'sales:manage', label: 'Sales / POB (team)', group: 'Commercial' },
   { key: 'sales:own', label: 'My sales', group: 'Commercial' },
+  { key: 'targets:manage', label: 'Sales targets', group: 'Commercial' },
   { key: 'reports:all', label: 'All reports', group: 'Commercial' },
   { key: 'reports:own', label: 'Own reports', group: 'Commercial' },
   { key: 'users:manage', label: 'Users & hierarchy', group: 'System' },
@@ -71,6 +75,9 @@ export const DEFAULT_MANAGER_PERMISSIONS: readonly PermissionKey[] = [
   'leaves:own',
   'leaves:manage',
   'employees:view',
+  'expenses:own',
+  'expenses:manage',
+  'targets:manage',
   'profile:own',
 ];
 
@@ -88,6 +95,7 @@ export const DEFAULT_MR_PERMISSIONS: readonly PermissionKey[] = [
   'sales:own',
   'attendance:own',
   'leaves:own',
+  'expenses:own',
   'profile:own',
 ];
 
@@ -99,5 +107,6 @@ export const DEFAULT_ADMIN_PERMISSIONS: readonly PermissionKey[] = PERMISSION_CA
     k !== 'myday:own' &&
     k !== 'attendance:own' &&
     k !== 'mystock:own' &&
-    k !== 'leaves:own',
+    k !== 'leaves:own' &&
+    k !== 'expenses:own',
 );

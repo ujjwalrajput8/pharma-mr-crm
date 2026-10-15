@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express';
 import type {
+  CreateEmployeeDocumentDto,
   EmployeeProfileQueryDto,
   ListEmployeesQueryDto,
+  SetAvatarDto,
   UpdateEmployeeProfileDto,
 } from '../dto/employee.dto';
 import { UnauthorizedError } from '../errors/AppError';
@@ -47,5 +49,40 @@ export class EmployeeController {
       req.user,
     );
     ApiResponse.success(res, row, 'Employee record updated');
+  };
+
+  // ── Documents ──────────────────────────────────────────────────────────────
+
+  public listDocuments = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const rows = await this.employees.listDocuments(Number(req.params.id), req.user);
+    ApiResponse.success(res, rows, 'Employee documents');
+  };
+
+  public addDocument = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const row = await this.employees.addDocument(
+      Number(req.params.id),
+      req.body as CreateEmployeeDocumentDto,
+      req.user,
+    );
+    ApiResponse.success(res, row, 'Document added', HttpStatus.CREATED);
+  };
+
+  public removeDocument = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    await this.employees.removeDocument(
+      Number(req.params.id),
+      Number(req.params.docId),
+      req.user,
+    );
+    ApiResponse.success(res, null, 'Document removed');
+  };
+
+  public setAvatar = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const dto = req.body as SetAvatarDto;
+    const row = await this.employees.setAvatar(Number(req.params.id), dto.fileKey, req.user);
+    ApiResponse.success(res, row, 'Photo updated');
   };
 }

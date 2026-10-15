@@ -17,3 +17,6 @@ prisma.config.d.ts
 prisma.config.d.ts.map
 prisma.config.js.map
 
+
+# User-uploaded files (FileStorageService)
+uploads/

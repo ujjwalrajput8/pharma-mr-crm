@@ -26,6 +26,9 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'employees:view',
     'holidays:manage',
     'leave-types:manage',
+    'territories:manage',
+    'targets:manage',
+    'expenses:manage',
     'settings:manage',
     'audit:view',
     'profile:own',
@@ -56,6 +59,9 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'leaves:own',
     'leaves:manage',
     'employees:view',
+    'expenses:own',
+    'expenses:manage',
+    'targets:manage',
     'profile:own',
   ],
   MR: [
@@ -72,6 +78,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'sales:own',
     'attendance:own',
     'leaves:own',
+    'expenses:own',
     'profile:own',
   ],
 };

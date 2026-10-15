@@ -34,4 +34,18 @@ export const authApi = {
     const { data } = await api.post<ApiSuccess<AuthSessionPayload>>('/auth/refresh');
     return data.data;
   },
+
+  /** Admin-only: mint a single-use reset link to hand over to the employee. */
+  async requestResetLink(userId: number): Promise<{ resetUrl: string; expiresAt: string }> {
+    const { data } = await api.post<ApiSuccess<{ resetUrl: string; expiresAt: string }>>(
+      '/auth/reset-requests',
+      { userId },
+    );
+    return data.data;
+  },
+
+  /** Public: redeem a reset link (?token=... on /reset-password). */
+  async resetPassword(payload: { token: string; newPassword: string }): Promise<void> {
+    await api.post('/auth/reset-password', payload);
+  },
 };

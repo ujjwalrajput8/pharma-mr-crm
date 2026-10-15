@@ -1,4 +1,4 @@
-import type { StockTxn } from '@prisma/client';
+import type { StockRefType, StockTxn } from '@prisma/client';
 import { HolderTypes, StockTxnTypes } from '../constants';
 import {
   StockTxnRepository,
@@ -73,6 +73,9 @@ export class StockLedgerService {
     txnDate: Date;
     note?: string;
     createdBy: number;
+    /** Defaults to MANUAL; imports pass RECEIPT + the GRN's stock_receipts id. */
+    refType?: StockRefType;
+    refId?: number;
     client?: StockTxnClient;
   }): Promise<StockTxn> {
     return this.postTxn(
@@ -84,7 +87,8 @@ export class StockLedgerService {
         qty: params.qty,
         toHolderType: HolderTypes.WAREHOUSE,
         toHolderId: params.warehouseId,
-        refType: 'MANUAL',
+        refType: params.refType ?? 'MANUAL',
+        refId: params.refId,
         note: params.note ?? 'Opening stock',
         createdBy: params.createdBy,
       },
@@ -163,6 +167,9 @@ export class StockLedgerService {
     txnDate: Date;
     note?: string;
     createdBy: number;
+    /** Defaults to MANUAL; a positive adjust with a receipt passes RECEIPT + its id. */
+    refType?: StockRefType;
+    refId?: number;
     client?: StockTxnClient;
   }): Promise<StockTxn> {
     const qty = Math.abs(params.quantityDelta);
@@ -176,7 +183,8 @@ export class StockLedgerService {
           qty,
           toHolderType: HolderTypes.WAREHOUSE,
           toHolderId: params.warehouseId,
-          refType: 'MANUAL',
+          refType: params.refType ?? 'MANUAL',
+          refId: params.refId,
           note: params.note,
           createdBy: params.createdBy,
         },
@@ -193,7 +201,8 @@ export class StockLedgerService {
         qty,
         fromHolderType: HolderTypes.WAREHOUSE,
         fromHolderId: params.warehouseId,
-        refType: 'MANUAL',
+        refType: params.refType ?? 'MANUAL',
+        refId: params.refId,
         note: params.note,
         createdBy: params.createdBy,
       },

@@ -3,13 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
+  BadgeCheck,
+  CalendarClock,
   CalendarRange,
   CheckCircle2,
   ChevronRight,
   Inbox,
   MapPin,
+  Paperclip,
   ShieldCheck,
   UserX,
+  Wallet,
   XCircle,
 } from 'lucide-react';
 import { getApiErrorMessage } from '@/api/client';
@@ -30,13 +34,30 @@ import {
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
 import { DAY_PART_LABEL, leavesApi, type LeaveRequest } from '@/services/leaves.service';
-import { attendanceApi, type Attendance } from '@/services/attendance.service';
+import {
+  attendanceApi,
+  type Attendance,
+  type Regularization,
+} from '@/services/attendance.service';
+import {
+  EXPENSE_CATEGORY_LABEL,
+  expensesApi,
+  formatInr,
+  type ExpenseClaim,
+} from '@/services/expenses.service';
+import { openStoredFile } from '@/services/files.service';
 import { formatDisplayDate } from '@/utils/datetime';
+
+function clockFromIso(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
 
 export function ApprovalsPage() {
   const { user, can } = useAuth();
   const canManageLeave = can('leaves:manage');
   const canManageAttendance = can('attendance:manage');
+  const canManageExpenses = can('expenses:manage');
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -50,6 +71,16 @@ export function ApprovalsPage() {
     outcome: 'ACCEPT' | 'REJECT';
   } | null>(null);
   const [flagRemark, setFlagRemark] = useState('');
+  const [regDecision, setRegDecision] = useState<{
+    row: Regularization;
+    status: 'APPROVED' | 'REJECTED';
+  } | null>(null);
+  const [regRemark, setRegRemark] = useState('');
+  const [expenseDecision, setExpenseDecision] = useState<{
+    row: ExpenseClaim;
+    status: 'APPROVED' | 'REJECTED';
+  } | null>(null);
+  const [expenseRemark, setExpenseRemark] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const leavesQuery = useQuery({
@@ -61,6 +92,16 @@ export function ApprovalsPage() {
     queryKey: ['attendance', 'list', 'approvals'],
     queryFn: () => attendanceApi.list(),
     enabled: canManageAttendance,
+  });
+  const regularizationsQuery = useQuery({
+    queryKey: ['attendance', 'regularizations', 'pending'],
+    queryFn: () => attendanceApi.listRegularizations({ status: 'PENDING' }),
+    enabled: canManageAttendance,
+  });
+  const expensesQuery = useQuery({
+    queryKey: ['expenses', 'pending'],
+    queryFn: () => expensesApi.list({ status: 'PENDING' }),
+    enabled: canManageExpenses,
   });
 
   const pendingLeaves = useMemo(
@@ -75,6 +116,15 @@ export function ApprovalsPage() {
   const flaggedAttendance = useMemo(
     () => (attendanceQuery.data ?? []).filter((row) => row.flagReason).slice(0, 20),
     [attendanceQuery.data],
+  );
+
+  const pendingRegularizations = useMemo(
+    () => (regularizationsQuery.data ?? []).filter((row) => row.userId !== user?.id),
+    [regularizationsQuery.data, user?.id],
+  );
+  const pendingExpenses = useMemo(
+    () => (expensesQuery.data ?? []).filter((row) => row.userId !== user?.id),
+    [expensesQuery.data, user?.id],
   );
 
   const decideMutation = useMutation({
@@ -121,7 +171,52 @@ export function ApprovalsPage() {
     onError: (err) => setError(getApiErrorMessage(err)),
   });
 
-  const totalPending = pendingLeaves.length + flaggedAttendance.length;
+  const regDecideMutation = useMutation({
+    mutationFn: (input: { id: number; status: 'APPROVED' | 'REJECTED'; remark?: string }) =>
+      attendanceApi.decideRegularization(input.id, {
+        status: input.status,
+        remark: input.remark,
+      }),
+    onSuccess: async (row) => {
+      setRegDecision(null);
+      setRegRemark('');
+      setError(null);
+      toast.success(
+        row.status === 'APPROVED'
+          ? 'Regularization approved — register corrected'
+          : 'Regularization rejected',
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['attendance'] }),
+        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+      ]);
+    },
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  const expenseDecideMutation = useMutation({
+    mutationFn: (input: { id: number; status: 'APPROVED' | 'REJECTED'; remark?: string }) =>
+      expensesApi.decide(input.id, { status: input.status, remark: input.remark }),
+    onSuccess: async (row) => {
+      setExpenseDecision(null);
+      setExpenseRemark('');
+      setError(null);
+      toast.success(
+        row.status === 'APPROVED' ? 'Expense approved' : 'Expense rejected',
+      );
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+        queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+      ]);
+    },
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  const totalPending =
+    pendingLeaves.length +
+    flaggedAttendance.length +
+    pendingRegularizations.length +
+    pendingExpenses.length;
 
   return (
     <div className="space-y-5">
@@ -132,11 +227,11 @@ export function ApprovalsPage() {
 
       {error && !decision ? <Alert message={error} /> : null}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatTile
           label="Awaiting you"
           value={totalPending}
-          hint="Leave + flagged check-ins"
+          hint="Everything pending below"
           icon={Inbox}
           tone={totalPending > 0 ? 'warning' : 'success'}
         />
@@ -152,6 +247,20 @@ export function ApprovalsPage() {
           hint="GPS / device-clock warnings"
           icon={AlertTriangle}
           tone={flaggedAttendance.length > 0 ? 'warning' : 'neutral'}
+        />
+        <StatTile
+          label="Regularizations"
+          value={pendingRegularizations.length}
+          hint="Missed punch fixes"
+          icon={CalendarClock}
+          tone={pendingRegularizations.length > 0 ? 'warning' : 'neutral'}
+        />
+        <StatTile
+          label="Expense claims"
+          value={pendingExpenses.length}
+          hint={formatInr(pendingExpenses.reduce((sum, row) => sum + row.amount, 0))}
+          icon={Wallet}
+          tone={pendingExpenses.length > 0 ? 'warning' : 'neutral'}
         />
       </div>
 
@@ -331,6 +440,298 @@ export function ApprovalsPage() {
           )}
         </Card>
       ) : null}
+
+      {/* ── Regularizations ──────────────────────────────────────────────── */}
+      {canManageAttendance ? (
+        <Card>
+          <CardHeader
+            title="Regularizations"
+            description="Missed check-in / check-out fixes — approving corrects the attendance register."
+            actions={
+              <Link to="/attendance">
+                <Button size="sm" variant="ghost">
+                  Attendance
+                  <ChevronRight size={13} />
+                </Button>
+              </Link>
+            }
+          />
+          {pendingRegularizations.length === 0 ? (
+            <EmptyState
+              title="No regularizations pending"
+              description="Missed-punch requests from your team appear here."
+            />
+          ) : (
+            <ul className="divide-y divide-[var(--color-border)]">
+              {pendingRegularizations.map((row) => (
+                <li
+                  key={row.id}
+                  className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    <Avatar name={row.employee?.fullName ?? '?'} />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold">{row.employee?.fullName ?? '—'}</p>
+                        <Badge tone="warning">{formatDisplayDate(row.attDate)}</Badge>
+                      </div>
+                      <p className="mt-0.5 font-mono text-[11px] text-[var(--color-muted)]">
+                        In {clockFromIso(row.requestedInAt)} · Out{' '}
+                        {clockFromIso(row.requestedOutAt)}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-xs text-[var(--color-muted)]">
+                        {row.reason}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setRegDecision({ row, status: 'APPROVED' });
+                        setRegRemark('');
+                      }}
+                    >
+                      <CheckCircle2 size={14} />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => {
+                        setRegDecision({ row, status: 'REJECTED' });
+                        setRegRemark('');
+                      }}
+                    >
+                      <XCircle size={14} />
+                      Reject
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
+
+      {/* ── Expense claims ───────────────────────────────────────────────── */}
+      {canManageExpenses ? (
+        <Card>
+          <CardHeader
+            title="Expense claims"
+            description="TA/DA waiting for your approval. Payout is settled from the Expenses page."
+            actions={
+              <Link to="/expenses">
+                <Button size="sm" variant="ghost">
+                  All expenses
+                  <ChevronRight size={13} />
+                </Button>
+              </Link>
+            }
+          />
+          {pendingExpenses.length === 0 ? (
+            <EmptyState
+              title="No expense claims pending"
+              description="Team TA/DA claims land here for approval."
+            />
+          ) : (
+            <ul className="divide-y divide-[var(--color-border)]">
+              {pendingExpenses.map((row) => (
+                <li
+                  key={row.id}
+                  className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex min-w-0 items-start gap-3">
+                    <Avatar name={row.employee?.fullName ?? '?'} />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-semibold">{row.employee?.fullName ?? '—'}</p>
+                        <Badge tone="warning">{formatInr(row.amount)}</Badge>
+                        <Badge tone="neutral">{EXPENSE_CATEGORY_LABEL[row.category]}</Badge>
+                      </div>
+                      <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                        {formatDisplayDate(row.expenseDate)}
+                        {row.distanceKm ? ` · ${row.distanceKm} km` : ''}
+                      </p>
+                      <p className="mt-1 line-clamp-2 text-xs text-[var(--color-muted)]">
+                        {row.description}
+                      </p>
+                      {row.receiptFileKey ? (
+                        <button
+                          type="button"
+                          onClick={() => void openStoredFile(row.receiptFileKey!)}
+                          className="mt-1 inline-flex cursor-pointer items-center gap-1 rounded-full bg-[var(--color-primary-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-primary)] hover:opacity-80"
+                        >
+                          <Paperclip size={10} />
+                          Receipt
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setExpenseDecision({ row, status: 'APPROVED' });
+                        setExpenseRemark('');
+                      }}
+                    >
+                      <BadgeCheck size={14} />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => {
+                        setExpenseDecision({ row, status: 'REJECTED' });
+                        setExpenseRemark('');
+                      }}
+                    >
+                      <XCircle size={14} />
+                      Reject
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
+
+      {/* ── Decide regularization ────────────────────────────────────────── */}
+      <Modal
+        open={Boolean(regDecision)}
+        onClose={() => {
+          setRegDecision(null);
+          setRegRemark('');
+        }}
+        title={
+          regDecision?.status === 'APPROVED' ? 'Approve regularization' : 'Reject regularization'
+        }
+        description={
+          regDecision?.status === 'APPROVED'
+            ? 'The attendance register for that day is corrected with the requested times.'
+            : 'The register stays unchanged; the employee sees your remark.'
+        }
+        icon={regDecision?.status === 'APPROVED' ? CheckCircle2 : XCircle}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setRegDecision(null);
+                setRegRemark('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={regDecision?.status === 'APPROVED' ? 'primary' : 'destructive'}
+              loading={regDecideMutation.isPending}
+              onClick={() =>
+                regDecision &&
+                regDecideMutation.mutate({
+                  id: regDecision.row.id,
+                  status: regDecision.status,
+                  remark: regRemark.trim() || undefined,
+                })
+              }
+            >
+              {regDecision?.status === 'APPROVED' ? 'Approve' : 'Reject'}
+            </Button>
+          </>
+        }
+      >
+        {error ? <Alert message={error} /> : null}
+        {regDecision ? (
+          <dl className="mb-3">
+            <DetailRow label="Employee" value={regDecision.row.employee?.fullName} />
+            <DetailRow label="Date" value={formatDisplayDate(regDecision.row.attDate)} />
+            <DetailRow label="Requested in" value={clockFromIso(regDecision.row.requestedInAt)} mono />
+            <DetailRow
+              label="Requested out"
+              value={clockFromIso(regDecision.row.requestedOutAt)}
+              mono
+            />
+            <DetailRow label="Reason" value={regDecision.row.reason} />
+          </dl>
+        ) : null}
+        <Textarea
+          label="Remark"
+          optional
+          value={regRemark}
+          onChange={(e) => setRegRemark(e.target.value)}
+          placeholder="Confirmed — he was at the CME till late."
+        />
+      </Modal>
+
+      {/* ── Decide expense ───────────────────────────────────────────────── */}
+      <Modal
+        open={Boolean(expenseDecision)}
+        onClose={() => {
+          setExpenseDecision(null);
+          setExpenseRemark('');
+        }}
+        title={expenseDecision?.status === 'APPROVED' ? 'Approve expense' : 'Reject expense'}
+        description={
+          expenseDecision?.status === 'APPROVED'
+            ? 'An administrator settles the payout after approval.'
+            : 'The employee sees your remark on the claim.'
+        }
+        icon={expenseDecision?.status === 'APPROVED' ? BadgeCheck : XCircle}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setExpenseDecision(null);
+                setExpenseRemark('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={expenseDecision?.status === 'APPROVED' ? 'primary' : 'destructive'}
+              loading={expenseDecideMutation.isPending}
+              onClick={() =>
+                expenseDecision &&
+                expenseDecideMutation.mutate({
+                  id: expenseDecision.row.id,
+                  status: expenseDecision.status,
+                  remark: expenseRemark.trim() || undefined,
+                })
+              }
+            >
+              {expenseDecision?.status === 'APPROVED' ? 'Approve' : 'Reject'}
+            </Button>
+          </>
+        }
+      >
+        {error ? <Alert message={error} /> : null}
+        {expenseDecision ? (
+          <dl className="mb-3">
+            <DetailRow label="Employee" value={expenseDecision.row.employee?.fullName} />
+            <DetailRow label="Date" value={formatDisplayDate(expenseDecision.row.expenseDate)} />
+            <DetailRow
+              label="Category"
+              value={EXPENSE_CATEGORY_LABEL[expenseDecision.row.category]}
+            />
+            <DetailRow label="Amount" value={formatInr(expenseDecision.row.amount)} />
+            <DetailRow
+              label="Distance"
+              value={expenseDecision.row.distanceKm ? `${expenseDecision.row.distanceKm} km` : null}
+            />
+            <DetailRow label="Description" value={expenseDecision.row.description} />
+          </dl>
+        ) : null}
+        <Textarea
+          label="Remark"
+          optional
+          value={expenseRemark}
+          onChange={(e) => setExpenseRemark(e.target.value)}
+          placeholder="Approved as per the TA policy slab."
+        />
+      </Modal>
 
       <Modal
         open={Boolean(flagTarget)}

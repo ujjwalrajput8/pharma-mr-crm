@@ -18,8 +18,10 @@ export interface Medicine {
   status: string;
   stock: {
     openingStock: number;
+    received?: number;
     issued: number;
     returned: number;
+    writeOff?: number;
     available: number;
     minimumStockAlert: number;
     isLow: boolean;
@@ -88,10 +90,65 @@ export interface MedicineDetails {
   }>;
 }
 
+export type ImportFieldValue = string | number | boolean | null;
+
+export interface MedicineImportRowResult {
+  rowNumber: number;
+  action: 'create' | 'update' | 'unchanged' | 'error';
+  medicineId: number | null;
+  medicineName: string | null;
+  matchedBy: 'sku' | 'code' | 'name' | null;
+  changes: Array<{ field: string; from: ImportFieldValue; to: ImportFieldValue }>;
+  stock: {
+    batchNo: string;
+    newBatch: boolean;
+    received: number;
+    out: number;
+    available: number;
+    incoming: number;
+    after: number;
+  } | null;
+  errors: string[];
+}
+
+export interface MedicineImportResult {
+  dryRun: boolean;
+  summary: {
+    total: number;
+    create: number;
+    update: number;
+    unchanged: number;
+    error: number;
+    unitsReceived: number;
+    /** GRN created for the received units — null on previews / catalog-only files. */
+    receiptId?: number | null;
+    receiptNo?: string | null;
+  };
+  rows: MedicineImportRowResult[];
+}
+
+export interface MedicineImportPayload {
+  dryRun: boolean;
+  /** Spreadsheet name, stamped on the GRN (stock receipt). */
+  fileName?: string;
+  source?: string;
+  invoiceNo?: string;
+  receiptDate?: string;
+  rows: Array<{ rowNumber: number; values: Record<string, string | number> }>;
+}
+
 export const medicinesApi = {
   async list(search?: string): Promise<Medicine[]> {
+    // Screens filter and page client-side, so fetch the whole catalog, not the API's first 20.
     const { data } = await api.get<ApiSuccess<Medicine[]>>('/medicines', {
-      params: search ? { search } : undefined,
+      params: { limit: 2000, ...(search ? { search } : {}) },
+    });
+    return data.data;
+  },
+  async importRows(payload: MedicineImportPayload): Promise<MedicineImportResult> {
+    const { data } = await api.post<ApiSuccess<MedicineImportResult>>('/medicines/import', payload, {
+      // A few thousand rows run in one transaction on the server.
+      timeout: 180_000,
     });
     return data.data;
   },

@@ -2,14 +2,25 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  BarChart3,
+  ArrowDownRight,
+  ArrowUpRight,
+  BookOpen,
+  CalendarCheck2,
   CalendarDays,
   ChevronRight,
   ClipboardList,
+  FlaskConical,
+  Inbox,
+  IndianRupee,
+  Map as MapIcon,
+  Minus,
   Package,
+  Pill,
   Stethoscope,
+  Sun,
   Trophy,
   Users,
+  Wallet,
 } from 'lucide-react';
 import { AppointmentDetailsDialog } from '@/components/appointments/AppointmentDetailsDialog';
 import { AppointmentFormDialog } from '@/components/appointments/AppointmentFormDialog';
@@ -24,10 +35,14 @@ import {
   type CalendarEventKind,
   type CalendarSelection,
 } from '@/components/dashboard/DashboardCalendar';
+import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
+import { GreetingHero } from '@/components/dashboard/GreetingHero';
+import { QuickAction } from '@/components/layout/QuickAction';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
-import { Card, PageHeader } from '@/components/ui/Page';
+import { Card } from '@/components/ui/Page';
 import { NeedsAttention } from '@/components/dashboard/NeedsAttention';
 import { StatCardSkeleton } from '@/components/ui/Skeleton';
+import { cn } from '@/utils/cn';
 import { useToast } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/api/client';
 import { useAuth } from '@/store/AuthContext';
@@ -80,6 +95,10 @@ export function DashboardPage() {
   const summaryQuery = useQuery({
     queryKey: ['dashboard', 'summary'],
     queryFn: () => dashboardApi.summary(),
+  });
+  const trendsQuery = useQuery({
+    queryKey: ['dashboard', 'trends', 30],
+    queryFn: () => dashboardApi.trends(30),
   });
   const appointmentsQuery = useQuery({
     queryKey: ['appointments', 'calendar'],
@@ -170,6 +189,20 @@ export function DashboardPage() {
   const cards = user?.role === 'ADMIN' || user?.role === 'MANAGER' ? adminCards : mrCards;
   const values = summaryQuery.data?.cards ?? {};
 
+  /** Today vs yesterday, straight from the trends series — only where honestly computable. */
+  const deltas = useMemo<Record<string, number>>(() => {
+    const none: Record<string, number> = {};
+    const series = trendsQuery.data?.visitsByDay;
+    if (!series || series.length < 2) return none;
+    const today = series[series.length - 1];
+    const yesterday = series[series.length - 2];
+    if (!today || !yesterday) return none;
+    return {
+      todaysVisits: today.visits - yesterday.visits,
+      todaysAppointments: today.appointments - yesterday.appointments,
+    };
+  }, [trendsQuery.data]);
+
   const appointmentMap = useMemo(() => {
     const map = new Map<number, Appointment>();
     appointmentsQuery.data?.forEach((item) => map.set(item.id, item));
@@ -192,65 +225,33 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Dashboard"
-        description={`Welcome back, ${user?.fullName}. ${
-          user?.role === 'ADMIN'
-            ? 'Organization'
-            : user?.role === 'MANAGER'
-              ? 'Team'
-              : 'Field'
-        } overview with schedule calendar.`}
-      />
+      <GreetingHero summary={summaryQuery.data} />
 
       <NeedsAttention />
 
-      {/* Quick shortcuts pill strip */}
-      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] shadow-xs">
-        <span className="text-[11px] font-bold text-[var(--color-muted)] uppercase tracking-wider px-3 hidden sm:inline">
-          Quick Actions
-        </span>
-        {can('myday:own') ? (
-          <Link
-            to="/my-day"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition-all hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] active:scale-95 shadow-2xs"
-          >
-            ☀️ My Day
-          </Link>
-        ) : null}
-        {can('approvals:team') ? (
-          <Link
-            to="/approvals"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition-all hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] active:scale-95 shadow-2xs"
-          >
-            ✓ Approvals
-          </Link>
-        ) : null}
-        {canAny(['tour-plan:own', 'tour-plan:manage']) ? (
-          <Link
-            to="/tour-plan"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition-all hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] active:scale-95 shadow-2xs"
-          >
-            🗺️ Tour Plan
-          </Link>
-        ) : null}
-        {can('mystock:own') ? (
-          <Link
-            to="/my-stock"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition-all hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] active:scale-95 shadow-2xs"
-          >
-            📦 My Stock
-          </Link>
-        ) : null}
-        {can('ledger:view') ? (
-          <Link
-            to="/ledger"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/60 px-3 py-1.5 text-xs font-semibold text-[var(--color-ink)] transition-all hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] hover:text-[var(--color-primary)] active:scale-95 shadow-2xs"
-          >
-            📒 Ledger
-          </Link>
-        ) : null}
-      </div>
+      {/* Quick actions — icon tiles, permission-gated */}
+      <section aria-label="Quick actions">
+        <p className="mb-2 px-0.5 text-[11px] font-bold tracking-wider text-[var(--color-muted)] uppercase">
+          Quick actions
+        </p>
+        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
+          {can('myday:own') ? <QuickAction to="/my-day" icon={Sun} label="My Day" /> : null}
+          {can('approvals:team') ? (
+            <QuickAction to="/approvals" icon={Inbox} label="Approvals" />
+          ) : null}
+          {canAny(['tour-plan:own', 'tour-plan:manage']) ? (
+            <QuickAction to="/tour-plan" icon={MapIcon} label="Tour Plan" />
+          ) : null}
+          {can('mystock:own') ? <QuickAction to="/my-stock" icon={Package} label="My Stock" /> : null}
+          {can('ledger:view') ? <QuickAction to="/ledger" icon={BookOpen} label="Ledger" /> : null}
+          {can('leaves:own') ? (
+            <QuickAction to="/leave" icon={CalendarCheck2} label="Apply Leave" />
+          ) : null}
+          {canAny(['expenses:own', 'expenses:manage']) ? (
+            <QuickAction to="/expenses" icon={Wallet} label="New Expense" />
+          ) : null}
+        </div>
+      </section>
 
       {/* Modern Metric Stat Cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -283,6 +284,28 @@ export function DashboardPage() {
                         </p>
                       );
                     })()}
+                    {(() => {
+                      const delta = deltas[item.key];
+                      if (typeof delta !== 'number') return null;
+                      const DeltaIcon = delta > 0 ? ArrowUpRight : delta < 0 ? ArrowDownRight : Minus;
+                      return (
+                        <p
+                          className={cn(
+                            'mt-1 flex items-center gap-1 text-[10px] font-semibold tabular-nums',
+                            delta > 0
+                              ? 'text-[var(--color-success)]'
+                              : delta < 0
+                                ? 'text-[var(--color-danger)]'
+                                : 'text-[var(--color-muted)]',
+                          )}
+                        >
+                          <DeltaIcon size={11} />
+                          {delta === 0
+                            ? 'No change vs yesterday'
+                            : `${delta > 0 ? '+' : ''}${delta.toLocaleString('en-IN')} vs yesterday`}
+                        </p>
+                      );
+                    })()}
                     <span className="mt-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold text-[var(--color-muted)]/70 transition-colors group-hover:text-[var(--color-primary)]">
                       Open
                       <ChevronRight size={10} />
@@ -292,6 +315,11 @@ export function DashboardPage() {
               );
             })}
       </div>
+
+      {/* Trend charts — one /dashboard/trends query feeds all four */}
+      <ErrorBoundary title="Charts failed to load">
+        <DashboardCharts trends={trendsQuery.data} isLoading={trendsQuery.isLoading} />
+      </ErrorBoundary>
 
       {summaryQuery.data?.insights ? (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -316,7 +344,8 @@ export function DashboardPage() {
           {summaryQuery.data.insights.topPrescribedMedicines?.length ? (
             <Card className="p-5">
               <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
-                💊 Top Prescribed / Sampled Medicines
+                <Pill size={13} className="mb-px inline text-[var(--color-primary)]" /> Top
+                Prescribed / Sampled Medicines
               </h3>
               <ul className="divide-y divide-[var(--color-border)] text-sm">
                 {summaryQuery.data.insights.topPrescribedMedicines.map((row) => (
@@ -333,7 +362,8 @@ export function DashboardPage() {
           {summaryQuery.data.insights.mrWiseSales?.length ? (
             <Card className="p-5">
               <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
-                💼 MR-wise Sales
+                <IndianRupee size={13} className="mb-px inline text-[var(--color-success)]" /> MR-wise
+                Sales
               </h3>
               <ul className="divide-y divide-[var(--color-border)] text-sm">
                 {summaryQuery.data.insights.mrWiseSales.map((row) => (
@@ -350,7 +380,8 @@ export function DashboardPage() {
           {summaryQuery.data.insights.medicineWiseSales?.length ? (
             <Card className="p-5">
               <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
-                🧪 Medicine-wise Sales
+                <FlaskConical size={13} className="mb-px inline text-[var(--color-primary)]" />{' '}
+                Medicine-wise Sales
               </h3>
               <ul className="divide-y divide-[var(--color-border)] text-sm">
                 {summaryQuery.data.insights.medicineWiseSales.map((row) => (
@@ -362,40 +393,6 @@ export function DashboardPage() {
                   </li>
                 ))}
               </ul>
-            </Card>
-          ) : null}
-          {summaryQuery.data.insights.performanceGraph?.length ? (
-            <Card className="p-5 lg:col-span-2">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--color-muted)]">
-                  <BarChart3 size={13} className="mb-px inline text-[var(--color-primary)]" />{' '}
-                  Monthly performance (visits / day)
-                </h3>
-                <span className="text-xs text-[var(--color-muted)] font-medium">Daily activity breakdown</span>
-              </div>
-              <div className="flex h-44 items-end gap-1.5 pt-4">
-                {summaryQuery.data.insights.performanceGraph.map((point) => {
-                  const max = Math.max(
-                    ...summaryQuery.data!.insights!.performanceGraph!.map((p) => p.visits),
-                    1,
-                  );
-                  const height = Math.max(10, Math.round((point.visits / max) * 100));
-                  return (
-                    <div key={point.date} className="group relative flex flex-1 flex-col items-center gap-1.5 h-full justify-end">
-                      <div className="absolute -top-7 hidden group-hover:block z-10 rounded-md bg-[var(--color-ink)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--color-surface)] shadow-sm whitespace-nowrap">
-                        {point.date}: {point.visits} visits
-                      </div>
-                      <div
-                        className="w-full rounded-t-md bg-gradient-to-t from-[var(--color-primary)] to-[var(--color-primary-hover)] transition-all duration-200 group-hover:brightness-110 group-hover:shadow-xs"
-                        style={{ height: `${height}%` }}
-                      />
-                      <span className="text-[10px] font-semibold text-[var(--color-muted)]">
-                        {point.date.slice(8)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
             </Card>
           ) : null}
         </div>

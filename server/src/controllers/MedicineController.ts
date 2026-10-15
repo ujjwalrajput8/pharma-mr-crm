@@ -1,8 +1,10 @@
 import type { Request, Response } from 'express';
 import { MedicineService } from '../services/MedicineService';
+import { MedicineImportService } from '../services/MedicineImportService';
 import { ApiResponse } from '../utils/ApiResponse';
 import type {
   CreateMedicineDto,
+  ImportMedicinesDto,
   ListMedicinesQueryDto,
   UpdateMedicineDto,
 } from '../dto/medicine.dto';
@@ -12,7 +14,10 @@ import { HttpStatus } from '../constants';
 export class MedicineController {
   private static instance: MedicineController | null = null;
 
-  private constructor(private readonly medicines = MedicineService.getInstance()) {}
+  private constructor(
+    private readonly medicines = MedicineService.getInstance(),
+    private readonly importer = MedicineImportService.getInstance(),
+  ) {}
 
   public static getInstance(): MedicineController {
     if (!MedicineController.instance) {
@@ -52,6 +57,12 @@ export class MedicineController {
       this.requireActor(req),
     );
     ApiResponse.success(res, medicine, 'Medicine updated');
+  };
+
+  public import = async (req: Request, res: Response): Promise<void> => {
+    const dto = req.body as ImportMedicinesDto;
+    const result = await this.importer.import(dto, this.requireActor(req));
+    ApiResponse.success(res, result, dto.dryRun ? 'Import preview ready' : 'Medicines imported');
   };
 
   public remove = async (req: Request, res: Response): Promise<void> => {

@@ -32,4 +32,10 @@ export class StockController {
     const stock = await this.stocks.adjust(req.body as AdjustStockDto, req.user.id);
     ApiResponse.success(res, stock, 'Stock adjusted');
   };
+
+  public my = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user?.id) throw new UnauthorizedError('Authentication required');
+    const result = await this.stocks.myStock(req.user);
+    ApiResponse.success(res, result, 'My stock retrieved');
+  };
 }

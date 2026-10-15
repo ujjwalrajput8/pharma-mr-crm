@@ -12,5 +12,8 @@ const controller = NotificationController.getInstance();
 router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR));
 
 router.get('/', asyncHandler(controller.list));
+// Only db-backed items (`db-<id>`) can be marked read; derived items stay live.
+router.patch('/:id/read', asyncHandler(controller.markRead));
+router.post('/read-all', asyncHandler(controller.markAllRead));
 
 export default router;

@@ -131,6 +131,11 @@ export function LoginPage() {
         >
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
+
+        {/* No SMTP here — an administrator hands out the reset link in person. */}
+        <p className="mt-4 text-center text-xs text-[#617276]">
+          Forgot password? Contact your administrator.
+        </p>
       </form>
     </div>
   );

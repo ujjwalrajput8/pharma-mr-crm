@@ -1,8 +1,13 @@
+import { randomBytes } from 'crypto';
 import type { AdjustStockDto, ListStockQueryDto } from '../dto/stock.dto';
 import { BadRequestError, NotFoundError } from '../errors/AppError';
+import { HolderTypes } from '../constants';
 import { StockRepository, type WarehouseStockRow } from '../repositories/StockRepository';
 import { StockTxnRepository } from '../repositories/StockTxnRepository';
 import { StockLedgerService } from './StockLedgerService';
+import { LedgerQueryService } from './LedgerQueryService';
+import { formatDateOnly, toLocalDateString, todayDateOnly } from '../utils/datetime';
+import type { AuthUser } from '../types/auth.types';
 
 /**
  * StockService — inventory listing and manual adjustments via stock ledger.
@@ -14,6 +19,7 @@ export class StockService {
     private readonly stocks = StockRepository.getInstance(),
     private readonly stockTxns = StockTxnRepository.getInstance(),
     private readonly ledger = StockLedgerService.getInstance(),
+    private readonly ledgerQuery = LedgerQueryService.getInstance(),
   ) {}
 
   public static getInstance(): StockService {
@@ -62,14 +68,38 @@ export class StockService {
         throw new Error(dto.quantityDelta < 0 ? 'INSUFFICIENT_STOCK' : 'STOCK_NOT_FOUND');
       }
 
-      await this.ledger.postAdjustment({
-        warehouseId,
-        medicineId: dto.medicineId,
-        batchId: batch.id,
-        quantityDelta: dto.quantityDelta,
-        txnDate: new Date(),
-        note: dto.remarks,
-        createdBy: actorId,
+      const prisma = this.stockTxns.getPrisma();
+      await prisma.$transaction(async (tx) => {
+        // Stock added by hand is still goods received — record a receipt so the
+        // ledger explorer can answer "kab aaya, kisne daala" for it too.
+        let ref: { refType: 'RECEIPT'; refId: number } | undefined;
+        if (dto.quantityDelta > 0) {
+          const receipt = await tx.stockReceipt.create({
+            data: {
+              receiptNo: this.generateReceiptNo(),
+              receiptDate: todayDateOnly(),
+              source: 'Manual adjustment',
+              note: dto.remarks ?? null,
+              totalUnits: dto.quantityDelta,
+              lineCount: 1,
+              createdBy: actorId,
+            },
+            select: { id: true },
+          });
+          ref = { refType: 'RECEIPT', refId: receipt.id };
+        }
+
+        await this.ledger.postAdjustment({
+          warehouseId,
+          medicineId: dto.medicineId,
+          batchId: batch.id,
+          quantityDelta: dto.quantityDelta,
+          txnDate: new Date(),
+          note: dto.remarks,
+          createdBy: actorId,
+          ...(ref ?? {}),
+          client: tx,
+        });
       });
 
       const stock = await this.stocks.findByMedicineId(dto.medicineId);
@@ -89,9 +119,65 @@ export class StockService {
     }
   }
 
+  /**
+   * The signed-in user's own bag: USER-holder balances (qty > 0) with
+   * medicine + batch + expiry, plus their last 30 ledger movements.
+   */
+  public async myStock(actor: AuthUser) {
+    const prisma = this.stockTxns.getPrisma();
+    const balances = await prisma.stockBalance.findMany({
+      where: {
+        holderType: HolderTypes.USER,
+        holderId: actor.id,
+        qty: { gt: 0 },
+        medicine: { deletedAt: null },
+      },
+      include: {
+        medicine: { select: { id: true, name: true, company: true, sku: true } },
+        batch: { select: { id: true, batchNo: true, expiryDate: true } },
+      },
+      orderBy: [{ medicine: { name: 'asc' } }, { batch: { batchNo: 'asc' } }],
+    });
+
+    const { items: recent } = await this.ledgerQuery.listTxns({
+      page: 1,
+      limit: 30,
+      holderType: HolderTypes.USER,
+      holderId: actor.id,
+    });
+
+    return {
+      holdings: balances.map((row) => ({
+        medicine: row.medicine,
+        batch: {
+          id: row.batch.id,
+          batchNo: row.batch.batchNo,
+          expiryDate: row.batch.expiryDate ? formatDateOnly(row.batch.expiryDate) : null,
+        },
+        qty: row.qty,
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+      recent,
+    };
+  }
+
+  /** `GRN-20261001-3F2A` — date is business-local, suffix is random. */
+  private generateReceiptNo(): string {
+    const stamp = toLocalDateString().replace(/-/g, '');
+    const suffix = randomBytes(2).toString('hex').toUpperCase();
+    return `GRN-${stamp}-${suffix}`;
+  }
+
   private toPublic(
     stock: WarehouseStockRow,
-    stats: { openingStock: number; issued: number; returned: number; available: number },
+    stats: {
+      openingStock: number;
+      received: number;
+      issued: number;
+      returned: number;
+      writeOff: number;
+      available: number;
+    },
   ) {
     const minimumStockAlert = 10;
     return {
@@ -101,8 +187,10 @@ export class StockService {
       company: stock.medicine.company,
       sku: stock.medicine.sku,
       openingStock: stats.openingStock,
+      received: stats.received,
       issued: stats.issued,
       returned: stats.returned,
+      writeOff: stats.writeOff,
       available: stats.available,
       minimumStockAlert,
       isLow: stats.available <= minimumStockAlert,

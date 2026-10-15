@@ -28,8 +28,9 @@ export function StockPage() {
       'medicineName',
       'company',
       'openingStock',
+      'received',
       'issued',
-      'returned',
+      'writeOff',
       'available',
       'minimumStockAlert',
     ],
@@ -68,7 +69,7 @@ export function StockPage() {
     <div className="space-y-5">
       <PageHeader
         title="Stock Management"
-        description="Opening, issued, returned, available stock with minimum alerts. Sample issues reduce available automatically on visit completion."
+        description="Opening + Received − Issued − Write-off = Available, straight from the append-only ledger, with minimum alerts."
         actions={
           <Button
             variant={lowOnly ? 'primary' : 'secondary'}
@@ -91,8 +92,9 @@ export function StockPage() {
           columns={[
             { key: 'medicineName', label: 'Medicine', sortable: true },
             { key: 'openingStock', label: 'Opening', sortable: true },
-            { key: 'issued', label: 'Issued', sortable: true },
-            { key: 'returned', label: 'Returned', sortable: true },
+            { key: 'received', label: 'Received', sortable: true },
+            { key: 'issued', label: 'Issued to MR', sortable: true },
+            { key: 'writeOff', label: 'Write-off', sortable: true },
             { key: 'available', label: 'Available', sortable: true },
             { key: 'minimumStockAlert', label: 'Min Alert', sortable: true },
             { key: 'actions', label: 'Actions' },
@@ -123,8 +125,9 @@ export function StockPage() {
                 ) : null}
               </Td>
               <Td>{row.openingStock}</Td>
+              <Td>{row.received}</Td>
               <Td>{row.issued}</Td>
-              <Td>{row.returned}</Td>
+              <Td>{row.writeOff}</Td>
               <Td>
                 <span
                   className={

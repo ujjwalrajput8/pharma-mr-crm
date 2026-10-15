@@ -1,8 +1,16 @@
+import crypto from 'crypto';
 import type { Request } from 'express';
 import { Config } from '../config';
 import { UserStatuses, type AppRole } from '../constants';
-import type { LoginDto } from '../dto/auth.dto';
-import { ForbiddenError, UnauthorizedError } from '../errors/AppError';
+import type { LoginDto, ResetPasswordDto, ResetRequestDto } from '../dto/auth.dto';
+import {
+  BadRequestError,
+  ForbiddenError,
+  NotFoundError,
+  TooManyRequestsError,
+  UnauthorizedError,
+} from '../errors/AppError';
+import { PrismaService } from '../prisma/PrismaService';
 import { RefreshTokenRepository } from '../repositories/RefreshTokenRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import type { AuthUser, LoginResult } from '../types/auth.types';
@@ -10,6 +18,10 @@ import { AuditService } from './AuditService';
 import { PasswordService } from './PasswordService';
 import { PermissionService } from './PermissionService';
 import { TokenService } from './TokenService';
+
+const MAX_FAILED_LOGINS = 5;
+const DEFAULT_LOCKOUT_MINUTES = 15;
+const RESET_TOKEN_TTL_MINUTES = 60;
 
 /**
  * AuthService
@@ -28,6 +40,7 @@ export class AuthService {
     private readonly audits = AuditService.getInstance(),
     private readonly permissions = PermissionService.getInstance(),
     private readonly config = Config.getInstance(),
+    private readonly prisma = PrismaService.getClient(),
   ) {}
 
   public static getInstance(): AuthService {
@@ -51,14 +64,31 @@ export class AuthService {
       throw new ForbiddenError('Account is inactive. Contact an administrator.');
     }
 
+    // Temporary lockout — checked BEFORE the password so the response never
+    // reveals whether the password would have been right.
+    if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+      const minutesLeft = Math.max(
+        1,
+        Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000),
+      );
+      throw new TooManyRequestsError(
+        `Account locked, try again in ${minutesLeft} min`,
+      );
+    }
+
     const valid = await this.passwords.compare(dto.password, user.passwordHash);
     if (!valid) {
+      await this.registerFailedLogin(user.id, user.failedLoginCount, meta);
       throw new UnauthorizedError('Invalid email or password');
     }
 
     const authUser = this.toAuthUser(user.id, user.email, user.role, user.fullName);
     const tokens = await this.issueSession(authUser, meta);
-    await this.users.update(user.id, { lastLoginAt: new Date() });
+    await this.users.update(user.id, {
+      lastLoginAt: new Date(),
+      failedLoginCount: 0,
+      lockedUntil: null,
+    });
     const permissions = await this.permissions.resolveForUser(user.id);
 
     try {
@@ -188,6 +218,125 @@ export class AuthService {
     const passwordHash = await this.passwords.hash(dto.newPassword);
     await this.users.update(userId, { passwordHash, updatedBy: userId });
     await this.refreshTokens.revokeAllForUser(userId);
+  }
+
+  /**
+   * Admin generates a single-use reset link to hand over to the employee
+   * (no SMTP in this deployment). Only the SHA-256 of the token is stored.
+   */
+  public async createResetRequest(
+    dto: ResetRequestDto,
+    actor: AuthUser,
+  ): Promise<{ resetUrl: string; expiresAt: string }> {
+    const user = await this.users.findById(dto.userId);
+    if (!user || user.deletedAt) throw new NotFoundError('User not found');
+    if (user.status !== UserStatuses.ACTIVE) {
+      throw new BadRequestError('Cannot reset the password of an inactive account');
+    }
+
+    const token = crypto.randomBytes(24).toString('hex'); // 48 hex chars
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60_000);
+
+    await this.prisma.passwordResetToken.create({
+      data: { userId: user.id, tokenHash, expiresAt, createdBy: actor.id },
+    });
+
+    try {
+      await this.audits.log({
+        userId: actor.id,
+        action: 'PASSWORD_RESET_REQUESTED',
+        entity: 'User',
+        entityId: String(user.id),
+        metadata: { email: user.email, expiresAt: expiresAt.toISOString() },
+      });
+    } catch {
+      // Audit must not block the reset.
+    }
+
+    const base =
+      this.config.getString('CLIENT_URL', '').trim().replace(/\/$/, '') ||
+      this.config.corsOrigins[0] ||
+      'http://localhost:5173';
+
+    return {
+      resetUrl: `${base}/reset-password?token=${token}`,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  /** Public: redeem a reset link. Every session of the user is revoked. */
+  public async resetPassword(dto: ResetPasswordDto): Promise<void> {
+    const tokenHash = crypto.createHash('sha256').update(dto.token).digest('hex');
+    const row = await this.prisma.passwordResetToken.findFirst({
+      where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
+    });
+    if (!row) {
+      throw new BadRequestError('This reset link is invalid or has expired');
+    }
+
+    const user = await this.users.findById(row.userId);
+    if (!user || user.status !== UserStatuses.ACTIVE) {
+      throw new BadRequestError('This reset link is invalid or has expired');
+    }
+
+    const passwordHash = await this.passwords.hash(dto.newPassword);
+    await this.users.update(user.id, {
+      passwordHash,
+      failedLoginCount: 0,
+      lockedUntil: null,
+    });
+    await this.prisma.passwordResetToken.update({
+      where: { id: row.id },
+      data: { usedAt: new Date() },
+    });
+    // A stolen refresh token must not outlive the reset.
+    await this.refreshTokens.revokeAllForUser(user.id);
+
+    try {
+      await this.audits.log({
+        userId: user.id,
+        action: 'PASSWORD_RESET',
+        entity: 'User',
+        entityId: String(user.id),
+      });
+    } catch {
+      // Audit must not block the reset.
+    }
+  }
+
+  /** Counts a wrong password; the 5th in a row locks the account for a while. */
+  private async registerFailedLogin(
+    userId: number,
+    currentCount: number,
+    meta: { userAgent?: string; ipAddress?: string },
+  ): Promise<void> {
+    const failedLoginCount = currentCount + 1;
+    if (failedLoginCount >= MAX_FAILED_LOGINS) {
+      const lockoutMinutes = this.config.getNumber(
+        'LOGIN_LOCKOUT_MINUTES',
+        DEFAULT_LOCKOUT_MINUTES,
+      );
+      await this.users.update(userId, {
+        failedLoginCount,
+        lockedUntil: new Date(Date.now() + lockoutMinutes * 60_000),
+      });
+      try {
+        await this.audits.log({
+          userId,
+          action: 'LOGIN_LOCKED',
+          entity: 'User',
+          entityId: String(userId),
+          ipAddress: meta.ipAddress,
+          userAgent: meta.userAgent,
+          metadata: { failedLoginCount, lockoutMinutes },
+        });
+      } catch {
+        // Audit must not block authentication.
+      }
+      return;
+    }
+    await this.users.update(userId, { failedLoginCount });
   }
 
   private toAuthUser(

@@ -76,7 +76,8 @@ export class Server {
         credentials: true,
       }),
     );
-    this.app.use(express.json({ limit: '10mb' }));
+    // Big enough for a 2000-row import payload; small enough not to invite abuse.
+    this.app.use(express.json({ limit: '2mb' }));
     this.app.use(express.urlencoded({ extended: true }));
     this.app.use(cookieParser());
     this.app.use(

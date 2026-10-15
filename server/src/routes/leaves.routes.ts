@@ -6,6 +6,7 @@ import {
   decideLeaveSchema,
   grantCompOffSchema,
   leaveBalanceQuerySchema,
+  leaveCalendarQuerySchema,
   listLeavesQuerySchema,
   setLeaveBalanceSchema,
   updateLeaveTypeSchema,
@@ -67,6 +68,14 @@ router.post(
 );
 
 router.get('/pending-count', requirePermission('leaves:manage'), asyncHandler(controller.pendingCount));
+
+/** Team calendar — before /:id so "calendar" is not read as an id. */
+router.get(
+  '/calendar',
+  canUseLeave,
+  validateRequest(leaveCalendarQuerySchema, 'query'),
+  asyncHandler(controller.calendar),
+);
 
 /** ── Requests ─────────────────────────────────────────────────────────────── */
 router.get(

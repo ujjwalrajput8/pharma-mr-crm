@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { MedicineController } from '../controllers/MedicineController';
 import {
   createMedicineSchema,
+  importMedicinesSchema,
   listMedicinesQuerySchema,
   updateMedicineSchema,
 } from '../dto/medicine.dto';
@@ -28,6 +29,12 @@ router.post(
   requirePermission('medicines:manage'),
   validateRequest(createMedicineSchema),
   asyncHandler(controller.create),
+);
+router.post(
+  '/import',
+  requirePermission('medicines:manage'),
+  validateRequest(importMedicinesSchema),
+  asyncHandler(controller.import),
 );
 router.patch(
   '/:id',
