@@ -26,6 +26,22 @@ export const changePasswordSchema = z
     path: ['newPassword'],
   });
 
+/** Admin generates a hand-over reset link for one user (no SMTP configured). */
+export const resetRequestSchema = z.object({
+  userId: z.coerce.number().int().positive(),
+});
+
+/** Public: redeem a reset link. */
+export const resetPasswordSchema = z.object({
+  token: z.string().regex(/^[0-9a-f]{48}$/i, 'Invalid reset token'),
+  newPassword: z
+    .string()
+    .min(8, 'New password must be at least 8 characters')
+    .max(128),
+});
+
+export type ResetRequestDto = z.infer<typeof resetRequestSchema>;
+export type ResetPasswordDto = z.infer<typeof resetPasswordSchema>;
 export type ChangePasswordDto = z.infer<typeof changePasswordSchema>;
 export type LoginDto = z.infer<typeof loginSchema>;
 export type RefreshTokenDto = z.infer<typeof refreshTokenSchema>;

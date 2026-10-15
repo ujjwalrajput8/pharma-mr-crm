@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  CalendarClock,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -12,6 +13,7 @@ import {
   Table2,
   Timer,
   UserCheck,
+  XCircle,
 } from 'lucide-react';
 import { getApiErrorMessage } from '@/api/client';
 import { Avatar } from '@/components/ui/Avatar';
@@ -21,6 +23,7 @@ import { DatePicker } from '@/components/ui/DatePicker';
 import { Select, Textarea } from '@/components/ui/Field';
 import { MonthCalendar, type MonthCalendarCell } from '@/components/ui/MonthCalendar';
 import { Modal } from '@/components/ui/Modal';
+import { TimePicker } from '@/components/ui/TimePicker';
 import {
   Alert,
   Badge,
@@ -36,18 +39,42 @@ import { useClientTable } from '@/hooks/useClientTable';
 import { useAuth } from '@/store/AuthContext';
 import {
   ATTENDANCE_STATUS_META,
+  REGULARIZATION_STATUS_TONE,
   WORK_TYPE_LABEL,
   attendanceApi,
   readGeolocation,
   type Attendance,
   type AttendanceCalendarDay,
   type AttendanceMarkStatus,
+  type Regularization,
   type WorkType,
 } from '@/services/attendance.service';
 import { formatDisplayDate, toIsoDate } from '@/utils/datetime';
 import { currentMonthKey, monthAnchorDate } from '@/utils/month';
 
-type TabValue = 'calendar' | 'register';
+type TabValue = 'calendar' | 'register' | 'regularizations';
+
+/** Local date + HH:mm → ISO instant (device timezone = business timezone). */
+function toIsoInstant(date: string, hhmm: string): string | undefined {
+  if (!hhmm) return undefined;
+  const value = new Date(`${date}T${hhmm}:00`);
+  return Number.isNaN(value.getTime()) ? undefined : value.toISOString();
+}
+
+function clockFromIso(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+/** A register row the owner may still fix: some punch missing, last 31 days. */
+function canRegularizeRow(row: Attendance, userId: number | undefined): boolean {
+  if (!userId || row.userId !== userId) return false;
+  if (row.status === 'LEAVE' || row.status === 'HOLIDAY') return false;
+  if (row.checkInAt && row.checkOutAt) return false;
+  const rowTime = new Date(`${row.attDate}T00:00:00`).getTime();
+  const now = Date.now();
+  return rowTime <= now && rowTime >= now - 31 * 86_400_000;
+}
 
 const MARK_OPTIONS: AttendanceMarkStatus[] = [
   'PRESENT',
@@ -99,6 +126,18 @@ export function AttendancePage() {
     workType: '' as WorkType | '',
     remarks: '',
   });
+  const [regOpen, setRegOpen] = useState(false);
+  const [regForm, setRegForm] = useState({
+    attDate: toIsoDate(new Date()),
+    inTime: '',
+    outTime: '',
+    reason: '',
+  });
+  const [regDecision, setRegDecision] = useState<{
+    row: Regularization;
+    status: 'APPROVED' | 'REJECTED';
+  } | null>(null);
+  const [regRemark, setRegRemark] = useState('');
 
   const todayQuery = useQuery({
     queryKey: ['attendance', 'today'],
@@ -120,9 +159,17 @@ export function AttendancePage() {
     queryKey: ['attendance', 'list', selectedUserId],
     queryFn: () => attendanceApi.list({ userId: selectedUserId }),
   });
+  // Scoped by the API: own rows for an MR, whole team for a manager.
+  const regularizationsQuery = useQuery({
+    queryKey: ['attendance', 'regularizations'],
+    queryFn: () => attendanceApi.listRegularizations(),
+    enabled: canSelfMark || canManage,
+  });
 
   const fieldUsers = fieldUsersQuery.data ?? [];
   const today = todayQuery.data;
+  const regularizations = regularizationsQuery.data ?? [];
+  const pendingRegs = regularizations.filter((row) => row.status === 'PENDING').length;
 
   /** Admin has no personal register, so they must pick somebody first. */
   const needsUserPick = isAdmin && !selectedUserId;
@@ -235,6 +282,54 @@ export function AttendancePage() {
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
+
+  const regCreateMutation = useMutation({
+    mutationFn: () =>
+      attendanceApi.createRegularization({
+        attDate: regForm.attDate,
+        requestedInAt: toIsoInstant(regForm.attDate, regForm.inTime),
+        requestedOutAt: toIsoInstant(regForm.attDate, regForm.outTime),
+        reason: regForm.reason.trim(),
+      }),
+    onSuccess: async () => {
+      setRegOpen(false);
+      setError(null);
+      toast.success('Regularization requested', 'Your manager will review it.');
+      await invalidate();
+    },
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  const regDecideMutation = useMutation({
+    mutationFn: (input: { id: number; status: 'APPROVED' | 'REJECTED'; remark?: string }) =>
+      attendanceApi.decideRegularization(input.id, {
+        status: input.status,
+        remark: input.remark,
+      }),
+    onSuccess: async (row) => {
+      setRegDecision(null);
+      setRegRemark('');
+      setError(null);
+      toast.success(
+        row.status === 'APPROVED'
+          ? 'Regularization approved — register updated'
+          : 'Regularization rejected',
+      );
+      await invalidate();
+    },
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  function openRegularizeFor(date?: string): void {
+    setRegForm({
+      attDate: date ?? toIsoDate(new Date()),
+      inTime: '',
+      outTime: '',
+      reason: '',
+    });
+    setError(null);
+    setRegOpen(true);
+  }
 
   function openManageFor(date?: string): void {
     setManageForm({
@@ -407,8 +502,18 @@ export function AttendancePage() {
             value={tab}
             onChange={setTab}
             items={[
-              { value: 'calendar', label: 'Register', icon: CalendarDays },
-              { value: 'register', label: 'All entries', icon: Table2 },
+              { value: 'calendar' as TabValue, label: 'Register', icon: CalendarDays },
+              { value: 'register' as TabValue, label: 'All entries', icon: Table2 },
+              ...(canSelfMark || canManage
+                ? [
+                    {
+                      value: 'regularizations' as TabValue,
+                      label: 'Regularizations',
+                      icon: CalendarClock,
+                      count: pendingRegs,
+                    },
+                  ]
+                : []),
             ]}
           />
           {canManage && fieldUsers.length > 0 ? (
@@ -432,7 +537,94 @@ export function AttendancePage() {
           ) : null}
         </div>
 
-        {tab === 'calendar' ? (
+        {tab === 'regularizations' ? (
+          <div>
+            {canSelfMark ? (
+              <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3">
+                <p className="text-xs text-[var(--color-muted)]">
+                  Missed a punch in the last 31 days? Raise a fix — your manager approves it and
+                  the register is corrected.
+                </p>
+                <Button size="sm" onClick={() => openRegularizeFor()}>
+                  <CalendarClock size={14} />
+                  Regularize a day
+                </Button>
+              </div>
+            ) : null}
+            {regularizationsQuery.isLoading ? (
+              <div className="px-4 py-10 text-center text-xs text-[var(--color-muted)]">
+                Loading requests…
+              </div>
+            ) : regularizations.length === 0 ? (
+              <EmptyState
+                title="No regularization requests"
+                description="Missed check-ins fixed through regularization show up here."
+              />
+            ) : (
+              <ul className="divide-y divide-[var(--color-border)]">
+                {regularizations.map((row) => {
+                  const isOwn = row.userId === user?.id;
+                  return (
+                    <li
+                      key={row.id}
+                      className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex min-w-0 items-start gap-3">
+                        <Avatar name={row.employee?.fullName ?? '?'} />
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-semibold">{row.employee?.fullName ?? '—'}</p>
+                            <Badge tone="neutral">{formatDisplayDate(row.attDate)}</Badge>
+                            <Badge tone={REGULARIZATION_STATUS_TONE[row.status]}>
+                              {row.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-0.5 font-mono text-[11px] text-[var(--color-muted)]">
+                            In {clockFromIso(row.requestedInAt)} · Out{' '}
+                            {clockFromIso(row.requestedOutAt)}
+                          </p>
+                          <p className="mt-1 line-clamp-2 text-xs text-[var(--color-muted)]">
+                            {row.reason}
+                          </p>
+                          {row.decisionRemark ? (
+                            <p className="mt-0.5 text-[11px] text-[var(--color-muted)]">
+                              Remark: {row.decisionRemark}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      {canManage && row.status === 'PENDING' && !isOwn ? (
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setRegDecision({ row, status: 'APPROVED' });
+                              setRegRemark('');
+                            }}
+                          >
+                            <CheckCircle2 size={14} />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => {
+                              setRegDecision({ row, status: 'REJECTED' });
+                              setRegRemark('');
+                            }}
+                          >
+                            <XCircle size={14} />
+                            Reject
+                          </Button>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        ) : tab === 'calendar' ? (
           <div className="p-4">
             {needsUserPick ? (
               <EmptyState
@@ -471,6 +663,7 @@ export function AttendancePage() {
                 { key: 'hours', label: 'Hours', sortable: true, className: 'text-right' },
                 { key: 'work', label: 'Work type' },
                 { key: 'status', label: 'Status', sortable: true },
+                ...(canSelfMark ? [{ key: 'actions', label: '' }] : []),
               ]}
               sortKey={table.sortKey}
               sortDir={table.sortDir}
@@ -517,6 +710,20 @@ export function AttendancePage() {
                         ) : null}
                       </div>
                     </Td>
+                    {canSelfMark ? (
+                      <Td className="text-right whitespace-nowrap">
+                        {canRegularizeRow(row, user?.id) ? (
+                          <Button
+                            size="sm"
+                            variant="soft"
+                            onClick={() => openRegularizeFor(row.attDate)}
+                          >
+                            <CalendarClock size={13} />
+                            Regularize
+                          </Button>
+                        ) : null}
+                      </Td>
+                    ) : null}
                   </tr>
                 );
               })}
@@ -677,6 +884,135 @@ export function AttendancePage() {
             placeholder="Phone died in the field — check-in confirmed on call."
           />
         </div>
+      </Modal>
+
+      {/* ── Regularize a day ─────────────────────────────────────────────── */}
+      <Modal
+        open={regOpen}
+        onClose={() => setRegOpen(false)}
+        title="Regularize attendance"
+        description="For a missed check-in or check-out in the last 31 days. Your manager approves it and the register is corrected."
+        icon={CalendarClock}
+        className="max-w-lg"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRegOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              loading={regCreateMutation.isPending}
+              disabled={
+                regForm.reason.trim().length < 3 || (!regForm.inTime && !regForm.outTime)
+              }
+              onClick={() => regCreateMutation.mutate()}
+            >
+              Submit request
+            </Button>
+          </>
+        }
+      >
+        {error ? <Alert message={error} /> : null}
+        <div className="space-y-3.5">
+          <DatePicker
+            label="Date"
+            required
+            value={regForm.attDate}
+            onChange={(value) => setRegForm((f) => ({ ...f, attDate: value }))}
+          />
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <TimePicker
+              label="Check-in time"
+              value={regForm.inTime}
+              onChange={(value) => setRegForm((f) => ({ ...f, inTime: value }))}
+            />
+            <TimePicker
+              label="Check-out time"
+              value={regForm.outTime}
+              onChange={(value) => setRegForm((f) => ({ ...f, outTime: value }))}
+            />
+          </div>
+          <p className="text-[11px] text-[var(--color-muted)]">
+            Fill only the missing punch — an existing punch is never overwritten.
+          </p>
+          <Textarea
+            label="Reason"
+            required
+            value={regForm.reason}
+            onChange={(e) => setRegForm((f) => ({ ...f, reason: e.target.value }))}
+            placeholder="Phone battery died during the Aligarh beat — worked till 6 pm."
+          />
+        </div>
+      </Modal>
+
+      {/* ── Decide regularization ────────────────────────────────────────── */}
+      <Modal
+        open={Boolean(regDecision)}
+        onClose={() => {
+          setRegDecision(null);
+          setRegRemark('');
+        }}
+        title={
+          regDecision?.status === 'APPROVED' ? 'Approve regularization' : 'Reject regularization'
+        }
+        description={
+          regDecision?.status === 'APPROVED'
+            ? 'The attendance register for that day is corrected with the requested times.'
+            : 'The register stays unchanged; the employee sees your remark.'
+        }
+        icon={regDecision?.status === 'APPROVED' ? CheckCircle2 : XCircle}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setRegDecision(null);
+                setRegRemark('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={regDecision?.status === 'APPROVED' ? 'primary' : 'destructive'}
+              loading={regDecideMutation.isPending}
+              onClick={() =>
+                regDecision &&
+                regDecideMutation.mutate({
+                  id: regDecision.row.id,
+                  status: regDecision.status,
+                  remark: regRemark.trim() || undefined,
+                })
+              }
+            >
+              {regDecision?.status === 'APPROVED' ? 'Approve' : 'Reject'}
+            </Button>
+          </>
+        }
+      >
+        {error ? <Alert message={error} /> : null}
+        {regDecision ? (
+          <dl className="mb-3">
+            <DetailRow label="Employee" value={regDecision.row.employee?.fullName} />
+            <DetailRow label="Date" value={formatDisplayDate(regDecision.row.attDate)} />
+            <DetailRow
+              label="Requested in"
+              value={clockFromIso(regDecision.row.requestedInAt)}
+              mono
+            />
+            <DetailRow
+              label="Requested out"
+              value={clockFromIso(regDecision.row.requestedOutAt)}
+              mono
+            />
+            <DetailRow label="Reason" value={regDecision.row.reason} />
+          </dl>
+        ) : null}
+        <Textarea
+          label="Remark"
+          optional
+          value={regRemark}
+          onChange={(e) => setRegRemark(e.target.value)}
+          placeholder="Confirmed with the stockist — he was there till evening."
+        />
       </Modal>
     </div>
   );

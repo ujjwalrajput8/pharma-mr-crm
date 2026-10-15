@@ -12,11 +12,18 @@ export const applyLeaveSchema = z
     fromDate: dateOnly,
     toDate: dateOnly,
     dayPart: z
-      .enum([LeaveDayParts.FULL, LeaveDayParts.FIRST_HALF, LeaveDayParts.SECOND_HALF])
+      .enum([LeaveDayParts.FULL, LeaveDayParts.FIRST_HALF, LeaveDayParts.SECOND_HALF, 'SHORT'])
       .default(LeaveDayParts.FULL),
+    /** Hours off for a SHORT leave (0.5–4); ignored for other day parts. */
+    hours: z.coerce.number().min(0.5).max(4).optional(),
     reason: z.string().min(3, 'Tell your manager why').max(1000),
     contactPhone: z.string().min(7).max(20).optional(),
     attachmentUrl: z.string().url().max(500).optional(),
+    /** Key returned by POST /files (purpose `leave-proof`); stored as `file:<key>`. */
+    attachmentFileKey: z
+      .string()
+      .regex(/^[0-9a-f]{32}(\.[a-z0-9]{1,10})?$/i, 'Invalid file key')
+      .optional(),
     /** Admin / Manager may file on behalf of a team member. */
     userId: idSchema.optional(),
   })
@@ -26,8 +33,17 @@ export const applyLeaveSchema = z
   })
   .refine(
     (value) => value.dayPart === LeaveDayParts.FULL || value.fromDate === value.toDate,
-    { message: 'Half-day applies to a single date only', path: ['dayPart'] },
-  );
+    { message: 'Half-day / short leave applies to a single date only', path: ['dayPart'] },
+  )
+  .refine((value) => value.dayPart !== 'SHORT' || value.hours !== undefined, {
+    message: 'Short leave needs the number of hours (0.5–4)',
+    path: ['hours'],
+  });
+
+/** Team leave calendar — one month at a time. */
+export const leaveCalendarQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/, 'Expected YYYY-MM'),
+});
 
 export const listLeavesQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -70,6 +86,10 @@ export const upsertLeaveTypeSchema = z.object({
   carryForward: z.coerce.boolean().default(false),
   maxCarryForward: z.coerce.number().min(0).max(365).default(0),
   allowHalfDay: z.coerce.boolean().default(true),
+  /** Allows a few-hours SHORT leave; consumed as `hours / 8` days. */
+  allowShortLeave: z.coerce.boolean().default(false),
+  /** Sandwich rule: Sundays / holidays inside the range are also consumed. */
+  sandwichRule: z.coerce.boolean().default(false),
   requiresProof: z.coerce.boolean().default(false),
   colorHex: z
     .string()
@@ -111,6 +131,7 @@ export const grantCompOffSchema = z.object({
 });
 
 export type GrantCompOffDto = z.infer<typeof grantCompOffSchema>;
+export type LeaveCalendarQueryDto = z.infer<typeof leaveCalendarQuerySchema>;
 export type ApplyLeaveDto = z.infer<typeof applyLeaveSchema>;
 export type ListLeavesQueryDto = z.infer<typeof listLeavesQuerySchema>;
 export type DecideLeaveDto = z.infer<typeof decideLeaveSchema>;

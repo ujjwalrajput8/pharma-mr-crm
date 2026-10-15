@@ -1,5 +1,8 @@
 import { AppRoles, AttendanceStatuses, HolderTypes, LeaveStatuses } from '../constants';
+import { NotFoundError } from '../errors/AppError';
 import { PrismaService } from '../prisma/PrismaService';
+import { NotificationRepository } from '../repositories/NotificationRepository';
+import { Logger } from '../utils/logger';
 import { TeamScopeService } from './TeamScopeService';
 import { addDays, formatDateOnly, todayDateOnly } from '../utils/datetime';
 import type { AuthUser } from '../types/auth.types';
@@ -12,7 +15,14 @@ export type NotificationKind =
   | 'APPOINTMENT_TODAY'
   | 'VISIT_FOLLOWUP'
   | 'STOCK_EXPIRY'
-  | 'DOCTOR_OCCASION';
+  | 'DOCTOR_OCCASION'
+  | 'REGULARIZATION_PENDING'
+  | 'REGULARIZATION_DECIDED'
+  | 'EXPENSE_PENDING'
+  | 'EXPENSE_DECIDED'
+  | 'EXPENSE_PAID';
+
+export type NotificationTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
 
 export interface AppNotification {
   id: string;
@@ -21,11 +31,22 @@ export interface AppNotification {
   message: string;
   /** Client-side route to open. */
   href: string;
-  tone: 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
+  tone: NotificationTone;
   /** ISO timestamp used for ordering; null sorts last. */
   at: string | null;
   /** Set when the row represents a group rather than one record. */
   count?: number;
+  /** Only db-backed rows carry read state; derived items are always null. */
+  readAt?: string | null;
+}
+
+export interface CreateStoredNotification {
+  userId: number;
+  kind: NotificationKind;
+  title: string;
+  message: string;
+  href?: string;
+  tone?: NotificationTone;
 }
 
 /**
@@ -41,6 +62,8 @@ export class NotificationService {
   private constructor(
     private readonly prisma = PrismaService.getClient(),
     private readonly scope = TeamScopeService.getInstance(),
+    private readonly stored = NotificationRepository.getInstance(),
+    private readonly logger = Logger.getInstance(),
   ) {}
 
   public static getInstance(): NotificationService {
@@ -48,6 +71,57 @@ export class NotificationService {
       NotificationService.instance = new NotificationService();
     }
     return NotificationService.instance;
+  }
+
+  /**
+   * Stores a persistent notification for one user. Best-effort by design:
+   * a bell row must never fail the business write that caused it.
+   */
+  public async create(input: CreateStoredNotification): Promise<void> {
+    try {
+      await this.stored.create({
+        userId: input.userId,
+        kind: input.kind,
+        title: input.title,
+        message: input.message,
+        href: input.href ?? null,
+        tone: input.tone ?? 'neutral',
+      });
+    } catch (error) {
+      this.logger.warn(`Notification write failed: ${(error as Error).message}`);
+    }
+  }
+
+  /** Marks one db-backed notification (id from `db-<id>`) as read. */
+  public async markRead(id: number, actor: AuthUser): Promise<{ id: string; readAt: string }> {
+    const row = await this.stored.findById(id);
+    if (!row || row.userId !== actor.id) throw new NotFoundError('Notification not found');
+    if (row.readAt) {
+      return { id: `db-${row.id}`, readAt: row.readAt.toISOString() };
+    }
+    const updated = await this.stored.markRead(id);
+    return { id: `db-${updated.id}`, readAt: updated.readAt!.toISOString() };
+  }
+
+  /** Marks every stored notification of the actor as read. */
+  public async markAllRead(actor: AuthUser): Promise<{ updated: number }> {
+    const result = await this.stored.markAllRead(actor.id);
+    return { updated: result.count };
+  }
+
+  /** Stored rows mapped to the bell shape, merged ahead of the derived items. */
+  private async listStored(actor: AuthUser): Promise<AppNotification[]> {
+    const rows = await this.stored.listForUser(actor.id, 20);
+    return rows.map((row) => ({
+      id: `db-${row.id}`,
+      kind: row.kind as NotificationKind,
+      title: row.title,
+      message: row.message,
+      href: row.href ?? '/dashboard',
+      tone: (row.tone as NotificationTone) ?? 'neutral',
+      at: row.createdAt.toISOString(),
+      readAt: row.readAt?.toISOString() ?? null,
+    }));
   }
 
   public async list(actor: AuthUser): Promise<{
@@ -59,6 +133,7 @@ export class NotificationService {
     const today = todayDateOnly();
 
     const groups = await Promise.all([
+      this.listStored(actor),
       can('leaves:manage') ? this.pendingLeave(actor) : [],
       can('attendance:manage') ? this.flaggedAttendance(actor) : [],
       can('attendance:manage') ? this.missingAttendance(actor, today) : [],
@@ -71,10 +146,15 @@ export class NotificationService {
       can('doctors:own') || can('doctors:manage') ? this.doctorOccasions(actor, today) : [],
     ]);
 
-    const items = groups
+    // Stored rows lead (they carry read state); derived items follow, newest first.
+    const [storedItems, ...derivedGroups] = groups as [AppNotification[], ...AppNotification[][]];
+    const derived = derivedGroups
       .flat()
-      .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''))
-      .slice(0, 25);
+      .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
+    const items = [
+      ...storedItems.sort((a, b) => (b.at ?? '').localeCompare(a.at ?? '')),
+      ...derived,
+    ].slice(0, 40);
 
     const counts: Record<string, number> = {};
     for (const item of items) {

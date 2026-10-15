@@ -269,9 +269,17 @@ export class StockTxnRepository {
   public async getWarehouseMedicineStats(warehouseId: number | null, medicineId: number) {
     // No default warehouse configured yet — report zeros rather than failing the screen.
     if (warehouseId === null) {
-      return { openingStock: 0, issued: 0, returned: 0, available: 0 };
+      return {
+        openingStock: 0,
+        received: 0,
+        issued: 0,
+        transferred: 0,
+        returned: 0,
+        writeOff: 0,
+        available: 0,
+      };
     }
-    const [opening, issued, returned, available] = await Promise.all([
+    const [opening, received, transferred, returned, writeOff, available] = await Promise.all([
       this.prisma.stockTxn.aggregate({
         where: {
           txnType: StockTxnTypes.OPENING,
@@ -281,12 +289,29 @@ export class StockTxnRepository {
         },
         _sum: { qty: true },
       }),
+      // Everything received on top of opening: receipts, MR returns, count-up adjustments.
       this.prisma.stockTxn.aggregate({
         where: {
-          txnType: StockTxnTypes.ISSUE,
+          txnType: {
+            in: [StockTxnTypes.RECEIPT, StockTxnTypes.RETURN, StockTxnTypes.ADJUSTMENT],
+          },
+          medicineId,
+          toHolderType: HolderTypes.WAREHOUSE,
+          toHolderId: warehouseId,
+        },
+        _sum: { qty: true },
+      }),
+      // Stock handed to the field: ISSUE out plus TRANSFER out to a user. The old
+      // `issued` only counted ISSUE, which made Opening+In−Out ≠ Available.
+      this.prisma.stockTxn.aggregate({
+        where: {
           medicineId,
           fromHolderType: HolderTypes.WAREHOUSE,
           fromHolderId: warehouseId,
+          OR: [
+            { txnType: StockTxnTypes.ISSUE },
+            { txnType: StockTxnTypes.TRANSFER, toHolderType: HolderTypes.USER },
+          ],
         },
         _sum: { qty: true },
       }),
@@ -296,6 +321,17 @@ export class StockTxnRepository {
           medicineId,
           toHolderType: HolderTypes.WAREHOUSE,
           toHolderId: warehouseId,
+        },
+        _sum: { qty: true },
+      }),
+      this.prisma.stockTxn.aggregate({
+        where: {
+          txnType: {
+            in: [StockTxnTypes.EXPIRY_WRITEOFF, StockTxnTypes.LOST, StockTxnTypes.ADJUSTMENT],
+          },
+          medicineId,
+          fromHolderType: HolderTypes.WAREHOUSE,
+          fromHolderId: warehouseId,
         },
         _sum: { qty: true },
       }),
@@ -309,12 +345,156 @@ export class StockTxnRepository {
       }),
     ]);
 
+    const transferredQty = transferred._sum.qty ?? 0;
     return {
       openingStock: opening._sum.qty ?? 0,
-      issued: issued._sum.qty ?? 0,
+      received: received._sum.qty ?? 0,
+      /** Kept for compatibility — now the full outflow to MRs (ISSUE + TRANSFER→USER). */
+      issued: transferredQty,
+      transferred: transferredQty,
       returned: returned._sum.qty ?? 0,
+      writeOff: writeOff._sum.qty ?? 0,
       available: available._sum.qty ?? 0,
     };
+  }
+
+  /**
+   * Same numbers as `getWarehouseMedicineStats`, for many medicines in four
+   * grouped queries instead of four per medicine — the catalog list calls this.
+   */
+  public async getWarehouseMedicineStatsBulk(warehouseId: number | null, medicineIds: number[]) {
+    const stats = new Map<
+      number,
+      {
+        openingStock: number;
+        received: number;
+        issued: number;
+        transferred: number;
+        returned: number;
+        writeOff: number;
+        available: number;
+      }
+    >();
+    for (const id of medicineIds) {
+      stats.set(id, {
+        openingStock: 0,
+        received: 0,
+        issued: 0,
+        transferred: 0,
+        returned: 0,
+        writeOff: 0,
+        available: 0,
+      });
+    }
+    if (warehouseId === null || medicineIds.length === 0) return stats;
+
+    const medicineId = { in: medicineIds };
+    const [opening, received, transferred, returned, writeOff, available] = await Promise.all([
+      this.prisma.stockTxn.groupBy({
+        by: ['medicineId'],
+        where: {
+          txnType: StockTxnTypes.OPENING,
+          medicineId,
+          toHolderType: HolderTypes.WAREHOUSE,
+          toHolderId: warehouseId,
+        },
+        _sum: { qty: true },
+      }),
+      this.prisma.stockTxn.groupBy({
+        by: ['medicineId'],
+        where: {
+          txnType: {
+            in: [StockTxnTypes.RECEIPT, StockTxnTypes.RETURN, StockTxnTypes.ADJUSTMENT],
+          },
+          medicineId,
+          toHolderType: HolderTypes.WAREHOUSE,
+          toHolderId: warehouseId,
+        },
+        _sum: { qty: true },
+      }),
+      // ISSUE out + TRANSFER out to a user — see getWarehouseMedicineStats.
+      this.prisma.stockTxn.groupBy({
+        by: ['medicineId'],
+        where: {
+          medicineId,
+          fromHolderType: HolderTypes.WAREHOUSE,
+          fromHolderId: warehouseId,
+          OR: [
+            { txnType: StockTxnTypes.ISSUE },
+            { txnType: StockTxnTypes.TRANSFER, toHolderType: HolderTypes.USER },
+          ],
+        },
+        _sum: { qty: true },
+      }),
+      this.prisma.stockTxn.groupBy({
+        by: ['medicineId'],
+        where: {
+          txnType: StockTxnTypes.RETURN,
+          medicineId,
+          toHolderType: HolderTypes.WAREHOUSE,
+          toHolderId: warehouseId,
+        },
+        _sum: { qty: true },
+      }),
+      this.prisma.stockTxn.groupBy({
+        by: ['medicineId'],
+        where: {
+          txnType: {
+            in: [StockTxnTypes.EXPIRY_WRITEOFF, StockTxnTypes.LOST, StockTxnTypes.ADJUSTMENT],
+          },
+          medicineId,
+          fromHolderType: HolderTypes.WAREHOUSE,
+          fromHolderId: warehouseId,
+        },
+        _sum: { qty: true },
+      }),
+      this.prisma.stockBalance.groupBy({
+        by: ['medicineId'],
+        where: { holderType: HolderTypes.WAREHOUSE, holderId: warehouseId, medicineId },
+        _sum: { qty: true },
+      }),
+    ]);
+
+    for (const row of opening) stats.get(row.medicineId)!.openingStock = row._sum.qty ?? 0;
+    for (const row of received) stats.get(row.medicineId)!.received = row._sum.qty ?? 0;
+    for (const row of transferred) {
+      const entry = stats.get(row.medicineId)!;
+      entry.transferred = row._sum.qty ?? 0;
+      entry.issued = entry.transferred;
+    }
+    for (const row of returned) stats.get(row.medicineId)!.returned = row._sum.qty ?? 0;
+    for (const row of writeOff) stats.get(row.medicineId)!.writeOff = row._sum.qty ?? 0;
+    for (const row of available) stats.get(row.medicineId)!.available = row._sum.qty ?? 0;
+    return stats;
+  }
+
+  /**
+   * Lifetime flow through one warehouse per medicine — everything that came in,
+   * everything that went out — for the import preview's "80 in, 50 out, 30 left".
+   */
+  public async getWarehouseFlowByMedicine(warehouseId: number, client: StockTxnClient = this.prisma) {
+    const [incoming, outgoing] = await Promise.all([
+      client.stockTxn.groupBy({
+        by: ['medicineId'],
+        where: { toHolderType: HolderTypes.WAREHOUSE, toHolderId: warehouseId },
+        _sum: { qty: true },
+      }),
+      client.stockTxn.groupBy({
+        by: ['medicineId'],
+        where: { fromHolderType: HolderTypes.WAREHOUSE, fromHolderId: warehouseId },
+        _sum: { qty: true },
+      }),
+    ]);
+    const flow = new Map<number, { received: number; out: number }>();
+    for (const row of incoming) {
+      flow.set(row.medicineId, { received: row._sum.qty ?? 0, out: 0 });
+    }
+    for (const row of outgoing) {
+      const entry = flow.get(row.medicineId) ?? { received: 0, out: 0 };
+      entry.out = row._sum.qty ?? 0;
+      flow.set(row.medicineId, entry);
+    }
+    return flow;
   }
 
   public async listUserHoldings(medicineId: number) {

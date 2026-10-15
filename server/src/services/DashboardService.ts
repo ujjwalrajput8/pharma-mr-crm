@@ -1,7 +1,15 @@
-import { AppRoles, AppointmentStatuses, HolderTypes, StockTxnTypes } from '../constants';
+import {
+  AppRoles,
+  AppointmentStatuses,
+  HolderTypes,
+  LeaveStatuses,
+  RecordStatuses,
+  StockTxnTypes,
+} from '../constants';
 import { PrismaService } from '../prisma/PrismaService';
 import { SettingRepository } from '../repositories/SettingRepository';
 import { UserRepository } from '../repositories/UserRepository';
+import { TeamScopeService } from './TeamScopeService';
 import type { AuthUser } from '../types/auth.types';
 
 const DEFAULT_WAREHOUSE_SETTING = 'stock.default_warehouse_id';
@@ -13,6 +21,7 @@ export class DashboardService {
     private readonly prisma = PrismaService.getClient(),
     private readonly settings = SettingRepository.getInstance(),
     private readonly users = UserRepository.getInstance(),
+    private readonly teamScope = TeamScopeService.getInstance(),
   ) {}
 
   public static getInstance(): DashboardService {
@@ -246,6 +255,172 @@ export class DashboardService {
         monthlySales,
       },
       insights,
+    };
+  }
+
+  /**
+   * Time-series + coverage data for the dashboard charts. One round of grouped
+   * queries, zero-filled per day, scoped exactly like the summary:
+   * MR → own records, Manager → self + reporting sub-tree, Admin → company-wide.
+   */
+  public async getTrends(actor: AuthUser, days: number) {
+    const rangeEnd = new Date();
+    rangeEnd.setUTCHours(23, 59, 59, 999);
+    const todayDate = new Date(`${rangeEnd.toISOString().slice(0, 10)}T00:00:00.000Z`);
+    const rangeStart = new Date(todayDate);
+    rangeStart.setUTCDate(rangeStart.getUTCDate() - (days - 1));
+
+    // undefined = company-wide (Admin); otherwise the visible user id list.
+    const userIds = await this.teamScope.visibleUserIds(actor);
+    const mrScope = userIds ? { mrId: { in: userIds } } : {};
+    const dateRange = { gte: rangeStart, lte: rangeEnd };
+    const sampleScope = userIds
+      ? { fromHolderType: HolderTypes.USER, fromHolderId: { in: userIds } }
+      : {};
+    const includeLeave = actor.role !== AppRoles.MR;
+
+    const [
+      visitGroups,
+      apptGroups,
+      saleGroups,
+      visitedDoctorGroups,
+      totalDoctorsInScope,
+      leaveGroups,
+      sampleGroups,
+    ] = await Promise.all([
+      this.prisma.visit.groupBy({
+        by: ['visitDate'],
+        where: { deletedAt: null, visitDate: dateRange, ...mrScope },
+        _count: { _all: true },
+      }),
+      this.prisma.appointment.groupBy({
+        by: ['date'],
+        where: { deletedAt: null, date: dateRange, ...mrScope },
+        _count: { _all: true },
+      }),
+      this.prisma.sale.groupBy({
+        by: ['invoiceDate'],
+        where: { deletedAt: null, invoiceDate: dateRange, ...mrScope },
+        _sum: { amount: true },
+      }),
+      // Distinct doctors actually visited within the range (scope applied).
+      this.prisma.visit.groupBy({
+        by: ['doctorId'],
+        where: { deletedAt: null, doctorId: { not: null }, visitDate: dateRange, ...mrScope },
+      }),
+      // Active doctors in scope: assignment-based for MR/Manager, all for Admin.
+      userIds
+        ? this.prisma.doctorAssignment
+            .groupBy({
+              by: ['doctorId'],
+              where: {
+                deletedAt: null,
+                isActive: true,
+                mrId: { in: userIds },
+                doctor: { deletedAt: null, status: RecordStatuses.ACTIVE },
+              },
+            })
+            .then((rows) => rows.length)
+        : this.prisma.doctor.count({
+            where: { deletedAt: null, status: RecordStatuses.ACTIVE },
+          }),
+      // Approved leaves touching the range, grouped by type (managers/admins only).
+      includeLeave
+        ? this.prisma.leaveRequest.groupBy({
+            by: ['leaveTypeId'],
+            where: {
+              deletedAt: null,
+              status: LeaveStatuses.APPROVED,
+              fromDate: { lte: rangeEnd },
+              toDate: { gte: rangeStart },
+              ...(userIds ? { userId: { in: userIds } } : {}),
+            },
+            _sum: { days: true },
+          })
+        : Promise.resolve([]),
+      this.prisma.stockTxn.groupBy({
+        by: ['medicineId'],
+        where: { txnType: StockTxnTypes.SAMPLE_GIVEN, txnDate: dateRange, ...sampleScope },
+        _sum: { qty: true },
+        orderBy: { _sum: { qty: 'desc' } },
+        take: 5,
+      }),
+    ]);
+
+    const leaveTypeIds = leaveGroups.map((row) => row.leaveTypeId);
+    const medicineIds = sampleGroups.map((row) => row.medicineId);
+    const [leaveTypes, medicines] = await Promise.all([
+      leaveTypeIds.length
+        ? this.prisma.leaveType.findMany({
+            where: { id: { in: leaveTypeIds } },
+            select: { id: true, code: true, name: true, colorHex: true },
+          })
+        : Promise.resolve([]),
+      medicineIds.length
+        ? this.prisma.medicine.findMany({
+            where: { id: { in: medicineIds } },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const leaveTypeMap = new Map(leaveTypes.map((t) => [t.id, t]));
+    const medicineMap = new Map(medicines.map((m) => [m.id, m.name]));
+
+    const visitMap = new Map(
+      visitGroups.map((row) => [row.visitDate.toISOString().slice(0, 10), row._count._all]),
+    );
+    const apptMap = new Map(
+      apptGroups.map((row) => [row.date.toISOString().slice(0, 10), row._count._all]),
+    );
+    const salesMap = new Map(
+      saleGroups.map((row) => [
+        row.invoiceDate.toISOString().slice(0, 10),
+        Number(row._sum.amount ?? 0),
+      ]),
+    );
+
+    const visitsByDay: Array<{ date: string; visits: number; appointments: number }> = [];
+    const salesByDay: Array<{ date: string; amount: number }> = [];
+    for (let i = 0; i < days; i += 1) {
+      const day = new Date(rangeStart);
+      day.setUTCDate(rangeStart.getUTCDate() + i);
+      const key = day.toISOString().slice(0, 10);
+      visitsByDay.push({
+        date: key,
+        visits: visitMap.get(key) ?? 0,
+        appointments: apptMap.get(key) ?? 0,
+      });
+      salesByDay.push({ date: key, amount: salesMap.get(key) ?? 0 });
+    }
+
+    const leaveDistribution = leaveGroups
+      .map((row) => {
+        const type = leaveTypeMap.get(row.leaveTypeId);
+        return {
+          code: type?.code ?? `#${row.leaveTypeId}`,
+          name: type?.name ?? 'Unknown',
+          colorHex: type?.colorHex ?? '#0f766e',
+          days: Number(row._sum.days ?? 0),
+        };
+      })
+      .sort((a, b) => b.days - a.days);
+
+    return {
+      from: rangeStart.toISOString().slice(0, 10),
+      to: todayDate.toISOString().slice(0, 10),
+      days,
+      visitsByDay,
+      salesByDay,
+      doctorCoverage: {
+        visited: visitedDoctorGroups.length,
+        total: totalDoctorsInScope,
+      },
+      leaveDistribution,
+      topMedicines: sampleGroups.map((row) => ({
+        medicineId: row.medicineId,
+        name: medicineMap.get(row.medicineId) ?? 'Unknown',
+        qty: row._sum.qty ?? 0,
+      })),
     };
   }
 

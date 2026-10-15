@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { EmployeeController } from '../controllers/EmployeeController';
 import {
+  createEmployeeDocumentSchema,
   employeeProfileQuerySchema,
   listEmployeesQuerySchema,
+  setAvatarSchema,
   updateEmployeeProfileSchema,
 } from '../dto/employee.dto';
 import { AppRoles } from '../constants';
@@ -41,6 +43,31 @@ router.patch(
   requirePermission('users:manage'),
   validateRequest(updateEmployeeProfileSchema),
   asyncHandler(controller.updateProfile),
+);
+
+/** ── Documents — reads allow self, writes are admin-only ──────────────────── */
+router.get(
+  '/:id/documents',
+  requirePermission('users:manage', 'employees:view', 'profile:own'),
+  asyncHandler(controller.listDocuments),
+);
+router.post(
+  '/:id/documents',
+  requirePermission('users:manage'),
+  validateRequest(createEmployeeDocumentSchema),
+  asyncHandler(controller.addDocument),
+);
+router.delete(
+  '/:id/documents/:docId',
+  requirePermission('users:manage'),
+  asyncHandler(controller.removeDocument),
+);
+
+/** Avatar — self or admin; the service enforces ownership. */
+router.patch(
+  '/:id/avatar',
+  validateRequest(setAvatarSchema),
+  asyncHandler(controller.setAvatar),
 );
 
 export default router;

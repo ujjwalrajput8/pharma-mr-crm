@@ -26,6 +26,8 @@ const emptyType = {
   carryForward: false,
   maxCarryForward: 0,
   allowHalfDay: true,
+  allowShortLeave: false,
+  sandwichRule: false,
   requiresProof: false,
   colorHex: '#0f766e',
   description: '',
@@ -158,6 +160,8 @@ export function LeavePolicyPage() {
       carryForward: type.carryForward,
       maxCarryForward: type.maxCarryForward,
       allowHalfDay: type.allowHalfDay,
+      allowShortLeave: type.allowShortLeave,
+      sandwichRule: type.sandwichRule,
       requiresProof: type.requiresProof,
       colorHex: type.colorHex,
       description: type.description ?? '',
@@ -316,6 +320,16 @@ export function LeavePolicyPage() {
                       {row.requiresProof ? (
                         <Badge tone="warning" dot={false}>
                           Doc
+                        </Badge>
+                      ) : null}
+                      {row.allowShortLeave ? (
+                        <Badge tone="primary" dot={false}>
+                          Short
+                        </Badge>
+                      ) : null}
+                      {row.sandwichRule ? (
+                        <Badge tone="warning" dot={false}>
+                          Sandwich
                         </Badge>
                       ) : null}
                     </div>
@@ -505,6 +519,16 @@ export function LeavePolicyPage() {
                   ['carryForward', 'Carry forward', 'Unused days roll into next year'],
                   ['allowHalfDay', 'Allow half day', 'Employee can take 0.5 day'],
                   ['requiresProof', 'Requires document', 'Medical certificate etc.'],
+                  [
+                    'allowShortLeave',
+                    'Allow short leave',
+                    'A few hours off (0.5–4 h) — consumes hours ÷ 8 days',
+                  ],
+                  [
+                    'sandwichRule',
+                    'Sandwich rule',
+                    'Sundays / holidays inside the range are also counted',
+                  ],
                 ] as const
               ).map(([key, label, hint]) => (
                 <label

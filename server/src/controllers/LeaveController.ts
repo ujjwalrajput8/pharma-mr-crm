@@ -5,6 +5,7 @@ import type {
   DecideLeaveDto,
   GrantCompOffDto,
   LeaveBalanceQueryDto,
+  LeaveCalendarQueryDto,
   ListLeavesQueryDto,
   SetLeaveBalanceDto,
   UpdateLeaveTypeDto,
@@ -60,6 +61,14 @@ export class LeaveController {
       req.user,
     );
     ApiResponse.success(res, row, 'Leave cancelled');
+  };
+
+  /** GET /leaves/calendar?month=YYYY-MM — team month view. */
+  public calendar = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const query = (req.validatedQuery ?? req.query) as LeaveCalendarQueryDto;
+    const result = await this.leaves.calendar(query, req.user);
+    ApiResponse.success(res, result, 'Leave calendar');
   };
 
   public pendingCount = async (req: Request, res: Response): Promise<void> => {

@@ -18,7 +18,7 @@ import {
 } from '@/services/notifications.service';
 import { cn } from '@/utils/cn';
 
-const ICON: Record<NotificationKind, typeof CalendarDays> = {
+const ICON: Partial<Record<NotificationKind, typeof CalendarDays>> = {
   LEAVE_PENDING: CalendarDays,
   LEAVE_DECIDED: CalendarCheck2,
   ATTENDANCE_FLAGGED: MapPinOff,

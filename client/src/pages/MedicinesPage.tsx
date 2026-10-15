@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { FileSpreadsheet, Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
@@ -12,6 +12,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
+import { MedicineImportDialog } from '@/components/medicines/MedicineImportDialog';
 import { medicinesApi, type CreateMedicinePayload } from '@/services/medicines.service';
 
 const emptyForm: CreateMedicinePayload = {
@@ -35,6 +36,7 @@ export function MedicinesPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [open, setOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateMedicinePayload>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
@@ -101,10 +103,16 @@ export function MedicinesPage() {
         title="Medicines"
         description="Medicine master: brand, generic, batch, expiry, stock and samples."
         actions={
-          <Button onClick={() => setOpen(true)}>
-            <Plus size={16} />
-            Add Medicine
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => setImportOpen(true)}>
+              <FileSpreadsheet size={16} />
+              Import Excel / CSV
+            </Button>
+            <Button onClick={() => setOpen(true)}>
+              <Plus size={16} />
+              Add Medicine
+            </Button>
+          </>
         }
       />
 
@@ -340,6 +348,8 @@ export function MedicinesPage() {
           </div>
         </form>
       </Modal>
+
+      <MedicineImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}

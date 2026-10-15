@@ -1,7 +1,12 @@
 import type { Request, Response } from 'express';
 import { AuthService } from '../services/AuthService';
 import { ApiResponse } from '../utils/ApiResponse';
-import type { ChangePasswordDto, LoginDto } from '../dto/auth.dto';
+import type {
+  ChangePasswordDto,
+  LoginDto,
+  ResetPasswordDto,
+  ResetRequestDto,
+} from '../dto/auth.dto';
 import { BadRequestError, UnauthorizedError } from '../errors/AppError';
 
 const REFRESH_COOKIE = 'refreshToken';
@@ -94,6 +99,22 @@ export class AuthController {
     // Every session was revoked, so the client must sign in again.
     res.clearCookie(REFRESH_COOKIE, this.refreshCookieOptions());
     ApiResponse.success(res, null, 'Password changed. Please sign in again.');
+  };
+
+  /** Admin-only: mint a hand-over reset link for one user. */
+  public createResetRequest = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const result = await this.authService.createResetRequest(
+      req.body as ResetRequestDto,
+      req.user,
+    );
+    ApiResponse.success(res, result, 'Reset link generated');
+  };
+
+  /** Public: redeem a reset link. */
+  public resetPassword = async (req: Request, res: Response): Promise<void> => {
+    await this.authService.resetPassword(req.body as ResetPasswordDto);
+    ApiResponse.success(res, null, 'Password reset. Please sign in.');
   };
 
   public me = async (req: Request, res: Response): Promise<void> => {

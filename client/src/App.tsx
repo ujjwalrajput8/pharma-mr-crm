@@ -4,6 +4,7 @@ import { AuthProvider } from '@/store/AuthContext';
 import { AppLayout } from '@/layouts/AppLayout';
 import { GuestRoute, ProtectedRoute, RequirePermission } from '@/routes/guards';
 import { LoginPage } from '@/pages/LoginPage';
+import { ResetPasswordPage } from '@/pages/ResetPasswordPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { UsersPage } from '@/pages/UsersPage';
@@ -32,6 +33,8 @@ import { LeavePage } from '@/pages/LeavePage';
 import { LeavePolicyPage } from '@/pages/LeavePolicyPage';
 import { HolidaysPage } from '@/pages/HolidaysPage';
 import { EmployeesPage } from '@/pages/EmployeesPage';
+import { TerritoriesPage } from '@/pages/TerritoriesPage';
+import { ExpensesPage } from '@/pages/ExpensesPage';
 import { EmployeeProfilePage } from '@/pages/EmployeeProfilePage';
 
 const queryClient = new QueryClient({
@@ -51,6 +54,7 @@ export default function App() {
           <Routes>
             <Route element={<GuestRoute />}>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
             </Route>
 
             <Route element={<ProtectedRoute />}>
@@ -89,6 +93,24 @@ export default function App() {
                   element={
                     <RequirePermission permissions={['tour-plan:manage', 'tour-plan:own']}>
                       <TourPlanPage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/expenses"
+                  element={
+                    <RequirePermission permissions={['expenses:own', 'expenses:manage']}>
+                      <ExpensesPage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/territories"
+                  element={
+                    <RequirePermission permissions={['territories:manage']}>
+                      <TerritoriesPage />
                     </RequirePermission>
                   }
                 />

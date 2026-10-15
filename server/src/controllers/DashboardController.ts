@@ -20,4 +20,11 @@ export class DashboardController {
     const data = await this.dashboard.getSummary(req.user);
     ApiResponse.success(res, data, 'Dashboard summary');
   };
+
+  public trends = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const query = (req.validatedQuery ?? req.query) as { days?: number };
+    const data = await this.dashboard.getTrends(req.user, query.days ?? 30);
+    ApiResponse.success(res, data, 'Dashboard trends');
+  };
 }

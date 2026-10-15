@@ -4,17 +4,31 @@ import type {
   AttendanceSummaryQueryDto,
   CheckInDto,
   CheckOutDto,
+  CreateRegularizationDto,
+  DecideRegularizationDto,
   ListAttendanceQueryDto,
+  ListRegularizationsQueryDto,
   ManageAttendanceDto,
   ReviewFlagDto,
 } from '../dto/attendance.dto';
-import { BadRequestError, ForbiddenError, NotFoundError } from '../errors/AppError';
-import { AttendanceRepository } from '../repositories/AttendanceRepository';
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from '../errors/AppError';
+import {
+  AttendanceRepository,
+  type RegularizationRow,
+} from '../repositories/AttendanceRepository';
 import { SettingRepository } from '../repositories/SettingRepository';
 import { UserRepository } from '../repositories/UserRepository';
+import { AuditService } from './AuditService';
 import { HolidayService } from './HolidayService';
+import { NotificationService } from './NotificationService';
 import { TeamScopeService } from './TeamScopeService';
 import {
+  addDays,
   eachDayInclusive,
   formatDateOnly,
   isSunday,
@@ -24,6 +38,7 @@ import {
   parseDateOnly,
   todayDateOnly,
 } from '../utils/datetime';
+import { haversineDistanceM } from '../utils/geo';
 import type { AuthUser } from '../types/auth.types';
 
 /** Settings keys this service reads (all optional, sensible fallbacks below). */
@@ -76,6 +91,8 @@ export class AttendanceService {
     private readonly settings = SettingRepository.getInstance(),
     private readonly holidays = HolidayService.getInstance(),
     private readonly scope = TeamScopeService.getInstance(),
+    private readonly audits = AuditService.getInstance(),
+    private readonly notifications = NotificationService.getInstance(),
   ) {}
 
   public static getInstance(): AttendanceService {
@@ -152,6 +169,28 @@ export class AttendanceService {
       flags.push('Device clock differs from server by more than 10 minutes');
     }
 
+    // Territory geo-fence: flag (never block) a check-in outside the HQ radius.
+    let geofenceDistanceM: number | null = null;
+    if (dto.latitude !== undefined && dto.longitude !== undefined) {
+      const fence = (await this.attendance.findUserTerritory(actor.id))?.territory;
+      if (
+        fence &&
+        fence.latitude !== null &&
+        fence.longitude !== null &&
+        fence.geofenceRadiusM !== null
+      ) {
+        geofenceDistanceM = haversineDistanceM(
+          fence.latitude,
+          fence.longitude,
+          dto.latitude,
+          dto.longitude,
+        );
+        if (geofenceDistanceM > fence.geofenceRadiusM) {
+          flags.push(`Outside territory geo-fence (${geofenceDistanceM}m away)`);
+        }
+      }
+    }
+
     const row = await this.attendance.upsertCheckIn({
       userId: actor.id,
       attDate,
@@ -164,6 +203,7 @@ export class AttendanceService {
       isMockLocation: dto.isMockLocation,
       deviceAt,
       flagReason: flags.length > 0 ? flags.join(' · ') : null,
+      geofenceDistanceM,
       locationNote: dto.locationNote,
       remarks: dto.remarks,
       actorId: actor.id,
@@ -271,6 +311,277 @@ export class AttendanceService {
     });
 
     return this.toPublic(updated);
+  }
+
+  // ── Regularization (missed check-in / check-out) ───────────────────────────
+
+  /** MR / Manager raises a fix for a day whose punches are missing. */
+  public async createRegularization(dto: CreateRegularizationDto, actor: AuthUser) {
+    if (!canSelfMark(actor.role)) {
+      throw new ForbiddenError('Administrators have no personal attendance to regularize');
+    }
+
+    const attDate = parseDateOnly(dto.attDate);
+    const today = todayDateOnly();
+    if (attDate.getTime() > today.getTime()) {
+      throw new BadRequestError('You cannot regularize a future date');
+    }
+    if (attDate.getTime() < addDays(today, -31).getTime()) {
+      throw new BadRequestError('Regularization is only allowed for the last 31 days');
+    }
+
+    const attendance = await this.attendance.findToday(actor.id, attDate);
+    if (attendance?.checkInAt && attendance.checkOutAt) {
+      throw new ConflictError('That day already has a complete check-in and check-out');
+    }
+    if (attendance?.status === AttendanceStatuses.LEAVE && attendance.leaveRequestId) {
+      throw new BadRequestError('That day is approved leave — cancel the leave instead');
+    }
+
+    const requestedInAt = dto.requestedInAt ? new Date(dto.requestedInAt) : null;
+    const requestedOutAt = dto.requestedOutAt ? new Date(dto.requestedOutAt) : null;
+
+    const existing = await this.attendance.findRegularizationByUserDate(actor.id, attDate);
+    if (
+      existing &&
+      !existing.deletedAt &&
+      (existing.status === 'PENDING' || existing.status === 'APPROVED')
+    ) {
+      throw new ConflictError(
+        `A ${existing.status.toLowerCase()} regularization already exists for that date`,
+      );
+    }
+
+    // The table is unique per user+date, so a rejected request is re-opened in place.
+    const row = existing
+      ? await this.attendance.updateRegularization(existing.id, {
+          requestedInAt,
+          requestedOutAt,
+          reason: dto.reason,
+          status: 'PENDING',
+          decidedBy: { disconnect: true },
+          actedAt: null,
+          decisionRemark: null,
+          deletedAt: null,
+        })
+      : await this.attendance.createRegularization({
+          userId: actor.id,
+          attDate,
+          requestedInAt,
+          requestedOutAt,
+          reason: dto.reason,
+        });
+
+    await this.audits.log({
+      userId: actor.id,
+      action: 'REGULARIZATION_REQUESTED',
+      entity: 'AttendanceRegularization',
+      entityId: String(row.id),
+      metadata: {
+        attDate: dto.attDate,
+        requestedInAt: dto.requestedInAt ?? null,
+        requestedOutAt: dto.requestedOutAt ?? null,
+        reason: dto.reason,
+      },
+    });
+
+    const managerId = (await this.attendance.findUserTerritory(actor.id))?.managerId;
+    if (managerId) {
+      await this.notifications.create({
+        userId: managerId,
+        kind: 'REGULARIZATION_PENDING',
+        title: `${actor.fullName} asked to regularize attendance`,
+        message: `${dto.attDate} · ${dto.reason}`.slice(0, 480),
+        href: '/approvals',
+        tone: 'warning',
+      });
+    }
+
+    return this.toPublicRegularization(row);
+  }
+
+  /** Own requests for an MR; team scope for `attendance:manage` holders. */
+  public async listRegularizations(query: ListRegularizationsQueryDto, actor: AuthUser) {
+    const canManageTeam =
+      canManage(actor.role) && (actor.permissions ?? []).includes('attendance:manage');
+
+    let userId: number | undefined;
+    let userIds: number[] | undefined;
+    if (!canManageTeam) {
+      userId = actor.id;
+      if (query.userId && query.userId !== actor.id) {
+        throw new ForbiddenError('You can only view your own regularizations');
+      }
+    } else if (actor.role === AppRoles.ADMIN) {
+      userId = query.userId;
+    } else {
+      const teamIds = (await this.scope.visibleUserIds(actor)) ?? [];
+      if (query.userId) {
+        if (!teamIds.includes(query.userId)) {
+          throw new ForbiddenError('That employee is outside your team scope');
+        }
+        userId = query.userId;
+      } else {
+        userIds = teamIds;
+      }
+    }
+
+    let from: Date | undefined;
+    let to: Date | undefined;
+    if (query.month) {
+      const anchor = parseDateOnly(
+        query.month.length === 7 ? `${query.month}-01` : query.month,
+      );
+      const range = monthRange(anchor);
+      from = range.start;
+      to = range.end;
+    }
+
+    const rows = await this.attendance.listRegularizations({
+      userId,
+      userIds,
+      status: query.status,
+      from,
+      to,
+    });
+    return rows.map((row) => this.toPublicRegularization(row));
+  }
+
+  /**
+   * Manager decision. Approval upserts the attendance row: real punches win over
+   * requested ones, working minutes are recomputed and the late rule re-applied.
+   */
+  public async decideRegularization(
+    id: number,
+    dto: DecideRegularizationDto,
+    actor: AuthUser,
+  ) {
+    if (!canManage(actor.role)) {
+      throw new ForbiddenError('Only Admin or Manager can decide regularizations');
+    }
+
+    const row = await this.attendance.findRegularizationById(id);
+    if (!row) throw new NotFoundError('Regularization request not found');
+    if (row.status !== 'PENDING') {
+      throw new BadRequestError(`This request is already ${row.status.toLowerCase()}`);
+    }
+    if (row.userId === actor.id) {
+      throw new ForbiddenError('You cannot decide your own regularization');
+    }
+    await this.scope.assertCanSee(actor, row.userId);
+
+    const updated = await this.attendance.updateRegularization(id, {
+      status: dto.status,
+      decidedBy: { connect: { id: actor.id } },
+      actedAt: new Date(),
+      decisionRemark: dto.remark,
+    });
+
+    if (dto.status === 'APPROVED') {
+      const attendance = await this.attendance.findToday(row.userId, row.attDate);
+      // Keep any punch that really happened; fill only the missing side.
+      const checkInAt = attendance?.checkInAt ?? row.requestedInAt ?? null;
+      const checkOutAt = attendance?.checkOutAt ?? row.requestedOutAt ?? null;
+      const workingMins =
+        checkInAt && checkOutAt
+          ? Math.max(1, Math.round((checkOutAt.getTime() - checkInAt.getTime()) / 60000))
+          : (attendance?.workingMins ?? null);
+
+      const status = checkInAt && (await this.isLateAt(checkInAt))
+        ? AttendanceStatuses.LATE
+        : AttendanceStatuses.PRESENT;
+
+      const remarks = [attendance?.remarks, `Regularized — ${row.reason}`, dto.remark]
+        .filter(Boolean)
+        .join(' · ')
+        .slice(0, 480);
+
+      await this.attendance.upsertRegularized({
+        userId: row.userId,
+        attDate: row.attDate,
+        checkInAt,
+        checkOutAt,
+        workingMins,
+        status,
+        workType: attendance?.workType ?? WorkTypes.FIELD,
+        remarks,
+        actorId: actor.id,
+      });
+    }
+
+    await this.audits.log({
+      userId: actor.id,
+      action: 'REGULARIZATION_DECIDED',
+      entity: 'AttendanceRegularization',
+      entityId: String(id),
+      metadata: {
+        employeeId: row.userId,
+        attDate: formatDateOnly(row.attDate),
+        status: dto.status,
+        remark: dto.remark ?? null,
+      },
+    });
+
+    await this.notifications.create({
+      userId: row.userId,
+      kind: 'REGULARIZATION_DECIDED',
+      title: `Regularization for ${formatDateOnly(row.attDate)} ${dto.status.toLowerCase()}`,
+      message: [dto.status === 'APPROVED' ? 'Your attendance was updated' : null, dto.remark]
+        .filter(Boolean)
+        .join(' · ') || `Decided by ${actor.fullName}`,
+      href: '/attendance',
+      tone: dto.status === 'APPROVED' ? 'success' : 'danger',
+    });
+
+    return this.toPublicRegularization(updated);
+  }
+
+  /** Pending count for the approvals inbox. */
+  public async pendingRegularizationCount(actor: AuthUser): Promise<number> {
+    if (!canManage(actor.role)) return 0;
+    const userIds = await this.scope.visibleUserIds(actor);
+    const rows = await this.attendance.listRegularizations({
+      userIds,
+      status: 'PENDING',
+      limit: 500,
+    });
+    return rows.filter((row) => row.userId !== actor.id).length;
+  }
+
+  private async isLateAt(checkInAt: Date): Promise<boolean> {
+    const [shiftStart, graceMinutes] = await Promise.all([
+      this.readSetting(SETTING_SHIFT_START, DEFAULT_SHIFT_START),
+      this.readNumberSetting(SETTING_LATE_GRACE, DEFAULT_LATE_GRACE_MIN),
+    ]);
+    const shiftStartMinutes = parseClockToMinutes(shiftStart) ?? 570;
+    return localMinutesOfDay(checkInAt) > shiftStartMinutes + graceMinutes;
+  }
+
+  private toPublicRegularization(row: RegularizationRow) {
+    return {
+      id: row.id,
+      userId: row.userId,
+      employee: row.user
+        ? {
+            id: row.user.id,
+            fullName: row.user.fullName,
+            email: row.user.email,
+            role: row.user.role,
+            employeeCode: row.user.mrProfile?.employeeCode ?? null,
+          }
+        : null,
+      attDate: formatDateOnly(row.attDate),
+      requestedInAt: row.requestedInAt?.toISOString() ?? null,
+      requestedOutAt: row.requestedOutAt?.toISOString() ?? null,
+      reason: row.reason,
+      status: row.status,
+      decisionRemark: row.decisionRemark,
+      actedAt: row.actedAt?.toISOString() ?? null,
+      decidedBy: row.decidedBy
+        ? { id: row.decidedBy.id, fullName: row.decidedBy.fullName }
+        : null,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 
   public async fieldUsers(actor: AuthUser) {
@@ -453,6 +764,7 @@ export class AttendanceService {
     inLat?: number | null;
     inLng?: number | null;
     accuracyM?: number | null;
+    geofenceDistanceM?: number | null;
     isMockLocation?: boolean;
     locationNote?: string | null;
     remarks?: string | null;
@@ -477,6 +789,7 @@ export class AttendanceService {
       inLat: item.inLat ?? null,
       inLng: item.inLng ?? null,
       accuracyM: item.accuracyM ?? null,
+      geofenceDistanceM: item.geofenceDistanceM ?? null,
       isMockLocation: item.isMockLocation ?? false,
       locationNote: item.locationNote ?? null,
       remarks: item.remarks ?? null,

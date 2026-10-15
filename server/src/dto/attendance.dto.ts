@@ -91,6 +91,47 @@ export const reviewFlagSchema = z.object({
   remarks: z.string().max(500).optional(),
 });
 
+/** ── Regularization (missed check-in / check-out) ─────────────────────────── */
+
+export const createRegularizationSchema = z
+  .object({
+    attDate: dateOnly,
+    /** ISO timestamps for the missing punches. At least one is required. */
+    requestedInAt: z.string().datetime().optional(),
+    requestedOutAt: z.string().datetime().optional(),
+    reason: z.string().min(3, 'Say what went wrong that day').max(500),
+  })
+  .refine((value) => value.requestedInAt !== undefined || value.requestedOutAt !== undefined, {
+    message: 'Provide the missing check-in and/or check-out time',
+    path: ['requestedInAt'],
+  })
+  .refine(
+    (value) =>
+      !value.requestedInAt ||
+      !value.requestedOutAt ||
+      new Date(value.requestedInAt).getTime() < new Date(value.requestedOutAt).getTime(),
+    { message: 'Check-out must be after check-in', path: ['requestedOutAt'] },
+  );
+
+export const listRegularizationsQuerySchema = z.object({
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED']).optional(),
+  /** Any date inside the wanted month (YYYY-MM-DD) or a YYYY-MM key. */
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}(-\d{2})?$/, 'Expected YYYY-MM or YYYY-MM-DD')
+    .optional(),
+  userId: idSchema.optional(),
+});
+
+export const decideRegularizationSchema = z.object({
+  status: z.enum(['APPROVED', 'REJECTED']),
+  remark: z.string().max(500).optional(),
+});
+
+export type CreateRegularizationDto = z.infer<typeof createRegularizationSchema>;
+export type ListRegularizationsQueryDto = z.infer<typeof listRegularizationsQuerySchema>;
+export type DecideRegularizationDto = z.infer<typeof decideRegularizationSchema>;
+
 export type ReviewFlagDto = z.infer<typeof reviewFlagSchema>;
 export type CheckInDto = z.infer<typeof checkInSchema>;
 export type CheckOutDto = z.infer<typeof checkOutSchema>;

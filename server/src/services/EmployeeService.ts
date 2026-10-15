@@ -1,15 +1,19 @@
 import { AppRoles } from '../constants';
 import type {
+  CreateEmployeeDocumentDto,
   EmployeeProfileQueryDto,
   ListEmployeesQueryDto,
   UpdateEmployeeProfileDto,
 } from '../dto/employee.dto';
 import { ForbiddenError, NotFoundError } from '../errors/AppError';
+import { PrismaService } from '../prisma/PrismaService';
 import { AttendanceRepository } from '../repositories/AttendanceRepository';
 import { EmployeeRepository } from '../repositories/EmployeeRepository';
 import { LeaveRepository } from '../repositories/LeaveRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import { AttendanceService } from './AttendanceService';
+import { AuditService } from './AuditService';
+import { FileStorageService } from './FileStorageService';
 import { LeaveService } from './LeaveService';
 import { TeamScopeService } from './TeamScopeService';
 import {
@@ -36,6 +40,9 @@ export class EmployeeService {
     private readonly leaveService = LeaveService.getInstance(),
     private readonly attendanceService = AttendanceService.getInstance(),
     private readonly scope = TeamScopeService.getInstance(),
+    private readonly prisma = PrismaService.getClient(),
+    private readonly audits = AuditService.getInstance(),
+    private readonly files = FileStorageService.getInstance(),
   ) {}
 
   public static getInstance(): EmployeeService {
@@ -276,6 +283,120 @@ export class EmployeeService {
 
     await this.employees.updateProfile(user.mrProfile.id, data);
     return this.profile(userId, {}, actor);
+  }
+
+  // ── Documents ──────────────────────────────────────────────────────────────
+
+  /** Self always; otherwise `users:manage` or `employees:view` within team scope. */
+  public async listDocuments(userId: number, actor: AuthUser) {
+    if (userId !== actor.id) {
+      const canView =
+        (actor.permissions ?? []).includes('users:manage') ||
+        (actor.permissions ?? []).includes('employees:view');
+      if (!canView) throw new ForbiddenError('You can only view your own documents');
+      await this.scope.assertCanSee(actor, userId);
+    }
+
+    const rows = await this.prisma.employeeDocument.findMany({
+      where: { userId, deletedAt: null },
+      orderBy: [{ docType: 'asc' }, { createdAt: 'desc' }],
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      userId: row.userId,
+      docType: row.docType,
+      title: row.title,
+      fileKey: row.fileKey,
+      note: row.note,
+      createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
+  /** Admin-only write — route enforces `users:manage`. */
+  public async addDocument(userId: number, dto: CreateEmployeeDocumentDto, actor: AuthUser) {
+    const user = await this.users.findById(userId);
+    if (!user || user.deletedAt) throw new NotFoundError('Employee not found');
+    await this.files.assertExists(dto.fileKey);
+
+    const row = await this.prisma.employeeDocument.create({
+      data: {
+        userId,
+        docType: dto.docType,
+        title: dto.title,
+        fileKey: dto.fileKey,
+        note: dto.note,
+        createdBy: actor.id,
+      },
+    });
+
+    await this.audits.log({
+      userId: actor.id,
+      action: 'EMPLOYEE_DOC_ADDED',
+      entity: 'EmployeeDocument',
+      entityId: String(row.id),
+      metadata: { employeeId: userId, docType: dto.docType, title: dto.title },
+    });
+
+    return {
+      id: row.id,
+      userId: row.userId,
+      docType: row.docType,
+      title: row.title,
+      fileKey: row.fileKey,
+      note: row.note,
+      createdAt: row.createdAt.toISOString(),
+    };
+  }
+
+  public async removeDocument(userId: number, docId: number, actor: AuthUser): Promise<void> {
+    const row = await this.prisma.employeeDocument.findFirst({
+      where: { id: docId, userId, deletedAt: null },
+    });
+    if (!row) throw new NotFoundError('Document not found');
+
+    await this.prisma.employeeDocument.update({
+      where: { id: docId },
+      data: { deletedAt: new Date() },
+    });
+
+    await this.audits.log({
+      userId: actor.id,
+      action: 'EMPLOYEE_DOC_REMOVED',
+      entity: 'EmployeeDocument',
+      entityId: String(docId),
+      metadata: { employeeId: userId, docType: row.docType, title: row.title },
+    });
+  }
+
+  // ── Avatar ─────────────────────────────────────────────────────────────────
+
+  /** Self or admin sets the profile photo from an uploaded file key. */
+  public async setAvatar(userId: number, fileKey: string, actor: AuthUser) {
+    if (userId !== actor.id && actor.role !== AppRoles.ADMIN) {
+      throw new ForbiddenError('You can only change your own photo');
+    }
+    const user = await this.employees.findFullById(userId);
+    if (!user || user.deletedAt) throw new NotFoundError('Employee not found');
+    if (!user.mrProfile) {
+      throw new NotFoundError('This account has no employee profile for a photo');
+    }
+    await this.files.assertExists(fileKey);
+
+    const photoUrl = `file:${fileKey}`;
+    await this.employees.updateProfile(user.mrProfile.id, {
+      photoUrl,
+      updatedBy: actor.id,
+    });
+
+    await this.audits.log({
+      userId: actor.id,
+      action: 'EMPLOYEE_AVATAR_SET',
+      entity: 'MrProfile',
+      entityId: String(user.mrProfile.id),
+      metadata: { employeeId: userId, fileKey },
+    });
+
+    return { userId, photoUrl };
   }
 
   private monthsSince(date: Date): number {

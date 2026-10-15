@@ -5,7 +5,10 @@ import {
   attendanceSummaryQuerySchema,
   checkInSchema,
   checkOutSchema,
+  createRegularizationSchema,
+  decideRegularizationSchema,
   listAttendanceQuerySchema,
+  listRegularizationsQuerySchema,
   manageAttendanceSchema,
   reviewFlagSchema,
 } from '../dto/attendance.dto';
@@ -65,6 +68,26 @@ router.post(
   validateRequest(manageAttendanceSchema),
   asyncHandler(controller.manage),
 );
+/** ── Regularization (missed check-in / check-out) ─────────────────────────── */
+router.get(
+  '/regularizations',
+  canUseAttendance,
+  validateRequest(listRegularizationsQuerySchema, 'query'),
+  asyncHandler(controller.listRegularizations),
+);
+router.post(
+  '/regularizations',
+  requirePermission('attendance:own'),
+  validateRequest(createRegularizationSchema),
+  asyncHandler(controller.createRegularization),
+);
+router.post(
+  '/regularizations/:id/decide',
+  requirePermission('attendance:manage'),
+  validateRequest(decideRegularizationSchema),
+  asyncHandler(controller.decideRegularization),
+);
+
 router.post(
   '/:id/review-flag',
   requirePermission('attendance:manage'),

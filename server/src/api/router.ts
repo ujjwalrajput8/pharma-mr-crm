@@ -11,10 +11,15 @@ import dashboardRoutes from '../routes/dashboard.routes';
 import distributionsRoutes from '../routes/distributions.routes';
 import doctorsRoutes from '../routes/doctors.routes';
 import employeesRoutes from '../routes/employees.routes';
+import expensesRoutes from '../routes/expenses.routes';
+import filesRoutes from '../routes/files.routes';
 import holidaysRoutes from '../routes/holidays.routes';
+import invoicesRoutes from '../routes/invoices.routes';
 import leavesRoutes from '../routes/leaves.routes';
+import ledgerRoutes from '../routes/ledger.routes';
 import medicineIssuesRoutes from '../routes/medicine-issues.routes';
 import medicinesRoutes from '../routes/medicines.routes';
+import myDayRoutes from '../routes/my-day.routes';
 import notificationsRoutes from '../routes/notifications.routes';
 import permissionsRoutes from '../routes/permissions.routes';
 import reportsRoutes from '../routes/reports.routes';
@@ -22,6 +27,9 @@ import salesRoutes from '../routes/sales.routes';
 import settingsRoutes from '../routes/settings.routes';
 import stockRoutes from '../routes/stock.routes';
 import storesRoutes from '../routes/stores.routes';
+import targetsRoutes from '../routes/targets.routes';
+import territoriesRoutes from '../routes/territories.routes';
+import tourPlansRoutes from '../routes/tour-plans.routes';
 import usersRoutes from '../routes/users.routes';
 import visitsRoutes from '../routes/visits.routes';
 
@@ -52,15 +60,23 @@ export function createApiRouter(): Router {
     ['employees', employeesRoutes],
     ['permissions', permissionsRoutes],
     ['doctors', doctorsRoutes],
+    ['territories', territoriesRoutes],
+    ['tour-plans', tourPlansRoutes],
+    ['my-day', myDayRoutes],
     ['stores', storesRoutes],
     ['medicines', medicinesRoutes],
     ['appointments', appointmentsRoutes],
     ['visits', visitsRoutes],
     ['stock', stockRoutes],
+    ['ledger', ledgerRoutes],
     ['distributions', distributionsRoutes],
     ['medicine-issues', medicineIssuesRoutes],
     ['sales', salesRoutes],
+    ['invoices', invoicesRoutes],
+    ['targets', targetsRoutes],
     ['attendance', attendanceRoutes],
+    ['expenses', expensesRoutes],
+    ['files', filesRoutes],
     ['notifications', notificationsRoutes],
     ['leaves', leavesRoutes],
     ['holidays', holidaysRoutes],

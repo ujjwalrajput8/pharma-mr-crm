@@ -139,6 +139,33 @@ export interface EmployeeProfilePayload {
   exitReason?: string | null;
 }
 
+export type EmployeeDocType =
+  | 'AADHAAR'
+  | 'PAN'
+  | 'OFFER_LETTER'
+  | 'DEGREE'
+  | 'CERTIFICATE'
+  | 'OTHER';
+
+export interface EmployeeDocument {
+  id: number;
+  userId: number;
+  docType: EmployeeDocType;
+  title: string;
+  fileKey: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export const EMPLOYEE_DOC_TYPE_LABEL: Record<EmployeeDocType, string> = {
+  AADHAAR: 'Aadhaar',
+  PAN: 'PAN',
+  OFFER_LETTER: 'Offer letter',
+  DEGREE: 'Degree',
+  CERTIFICATE: 'Certificate',
+  OTHER: 'Other',
+};
+
 export const employeesApi = {
   async list(
     params: { search?: string; role?: 'MANAGER' | 'MR'; status?: string; limit?: number } = {},
@@ -161,6 +188,35 @@ export const employeesApi = {
   },
   async update(id: number, payload: EmployeeProfilePayload): Promise<EmployeeProfile> {
     const { data } = await api.patch<ApiSuccess<EmployeeProfile>>(`/employees/${id}`, payload);
+    return data.data;
+  },
+
+  // ── Documents & avatar ─────────────────────────────────────────────────────
+  async listDocuments(id: number): Promise<EmployeeDocument[]> {
+    const { data } = await api.get<ApiSuccess<EmployeeDocument[]>>(
+      `/employees/${id}/documents`,
+    );
+    return data.data;
+  },
+  async addDocument(
+    id: number,
+    payload: { docType: EmployeeDocType; title: string; fileKey: string; note?: string },
+  ): Promise<EmployeeDocument> {
+    const { data } = await api.post<ApiSuccess<EmployeeDocument>>(
+      `/employees/${id}/documents`,
+      payload,
+    );
+    return data.data;
+  },
+  async removeDocument(id: number, docId: number): Promise<void> {
+    await api.delete(`/employees/${id}/documents/${docId}`);
+  },
+  /** Sets the profile photo from a `filesApi.upload(file, 'avatar')` key. */
+  async setAvatar(id: number, fileKey: string): Promise<{ userId: number; photoUrl: string }> {
+    const { data } = await api.patch<ApiSuccess<{ userId: number; photoUrl: string }>>(
+      `/employees/${id}/avatar`,
+      { fileKey },
+    );
     return data.data;
   },
 };

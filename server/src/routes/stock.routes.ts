@@ -11,6 +11,16 @@ import { asyncHandler } from '../utils/asyncHandler';
 const router = Router();
 const controller = StockController.getInstance();
 
+// The signed-in user's own bag — MRs included, so it sits above the
+// ADMIN/MANAGER gate that covers the warehouse routes below.
+router.get(
+  '/my',
+  authenticate,
+  authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR),
+  requirePermission('mystock:own'),
+  asyncHandler(controller.my),
+);
+
 router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MANAGER));
 
 router.get(

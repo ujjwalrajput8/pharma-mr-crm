@@ -1,13 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { DataTable, Td } from '@/components/ui/DataTable';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { InvoiceStatusBadge } from '@/components/sales/InvoiceStatusBadge';
 import { doctorsApi } from '@/services/doctors.service';
+import { invoicesApi } from '@/services/invoices.service';
+import { formatINR } from '@/utils/currency';
 
-type TabKey = 'overview' | 'appointments' | 'visits' | 'medicines' | 'samples' | 'reports';
+type TabKey =
+  | 'overview'
+  | 'appointments'
+  | 'visits'
+  | 'medicines'
+  | 'samples'
+  | 'billing'
+  | 'reports';
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'overview', label: 'Overview' },
@@ -15,6 +25,7 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'visits', label: 'Visits' },
   { key: 'medicines', label: 'Medicines' },
   { key: 'samples', label: 'Sample History' },
+  { key: 'billing', label: 'Billing' },
   { key: 'reports', label: 'Reports' },
 ];
 
@@ -26,6 +37,12 @@ export function DoctorDetailPage() {
     queryKey: ['doctors', id, 'details'],
     queryFn: () => doctorsApi.getDetails(Number(id)),
     enabled: Boolean(id),
+  });
+
+  const invoicesQuery = useQuery({
+    queryKey: ['invoices', { doctorId: id }],
+    queryFn: () => invoicesApi.list({ doctorId: Number(id) }),
+    enabled: Boolean(id) && tab === 'billing',
   });
 
   const data = detailsQuery.data;
@@ -262,6 +279,13 @@ export function DoctorDetailPage() {
         </Card>
       ) : null}
 
+      {tab === 'billing' ? (
+        <BillingSection
+          loading={invoicesQuery.isLoading}
+          invoices={invoicesQuery.data ?? []}
+        />
+      ) : null}
+
       {tab === 'reports' ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <Card className="p-5">
@@ -291,6 +315,95 @@ export function DoctorDetailPage() {
           </Card>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function BillingSection({
+  loading,
+  invoices,
+}: {
+  loading: boolean;
+  invoices: Awaited<ReturnType<typeof invoicesApi.list>>;
+}) {
+  const live = invoices.filter((invoice) => invoice.status !== 'CANCELLED');
+  const billed = live.reduce((sum, invoice) => sum + invoice.totalAmount, 0);
+  const paid = live.reduce((sum, invoice) => sum + invoice.paidAmount, 0);
+  const outstanding = live.reduce((sum, invoice) => sum + invoice.outstanding, 0);
+  const recent = [...invoices]
+    .sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate) || b.id - a.id)
+    .slice(0, 5);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs uppercase tracking-wide text-[var(--color-muted)]">Billed</p>
+          <p className="mt-1 text-xl font-semibold text-[var(--color-ink)] tabular-nums">
+            {formatINR(billed)}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs uppercase tracking-wide text-[var(--color-muted)]">Paid</p>
+          <p className="mt-1 text-xl font-semibold text-[var(--color-success)] tabular-nums">
+            {formatINR(paid)}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs uppercase tracking-wide text-[var(--color-muted)]">Outstanding</p>
+          <p
+            className={`mt-1 text-xl font-bold tabular-nums ${
+              outstanding > 0 ? 'text-[var(--color-danger)]' : 'text-[var(--color-ink)]'
+            }`}
+          >
+            {formatINR(outstanding)}
+          </p>
+        </Card>
+      </div>
+
+      <Card>
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-5 py-3.5">
+          <h3 className="text-sm font-bold text-[var(--color-ink)]">Recent invoices</h3>
+          <Link to="/sales">
+            <Button variant="ghost" size="sm">
+              View all in Sales <ArrowRight size={14} />
+            </Button>
+          </Link>
+        </div>
+        <DataTable
+          columns={['Invoice No', 'Date', 'Total', 'Paid', 'Outstanding', 'Status']}
+          loading={loading}
+          empty={
+            !loading && recent.length === 0 ? (
+              <EmptyState
+                title="No invoices"
+                description="Bills raised against this doctor will appear here."
+              />
+            ) : null
+          }
+        >
+          {recent.map((invoice) => (
+            <tr key={invoice.id} className="border-b border-[var(--color-border)] last:border-0">
+              <Td className="font-mono text-xs font-semibold">{invoice.invoiceNo}</Td>
+              <Td>{invoice.invoiceDate}</Td>
+              <Td>{formatINR(invoice.totalAmount)}</Td>
+              <Td>{formatINR(invoice.paidAmount)}</Td>
+              <Td
+                className={
+                  invoice.outstanding > 0 && invoice.status !== 'CANCELLED'
+                    ? 'font-bold text-[var(--color-danger)]'
+                    : undefined
+                }
+              >
+                {formatINR(invoice.outstanding)}
+              </Td>
+              <Td>
+                <InvoiceStatusBadge status={invoice.status} />
+              </Td>
+            </tr>
+          ))}
+        </DataTable>
+      </Card>
     </div>
   );
 }

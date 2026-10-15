@@ -1,160 +1,177 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { IndianRupee, Plus, Receipt, Target, Zap } from 'lucide-react';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
-import { useClientTable } from '@/hooks/useClientTable';
-import { Input, Select } from '@/components/ui/Field';
 import { DatePicker } from '@/components/ui/DatePicker';
-import { Modal } from '@/components/ui/Modal';
+import { Select } from '@/components/ui/Field';
 import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
-import { useAuth } from '@/store/AuthContext';
-import { doctorsApi } from '@/services/doctors.service';
-import { medicinesApi } from '@/services/medicines.service';
-import { storesApi } from '@/services/stores.service';
-import { salesApi, type CreateSalePayload } from '@/services/sales.service';
-import { usersApi } from '@/services/users.service';
-import { toIsoDate } from '@/utils/datetime';
+import { Tabs } from '@/components/ui/Tabs';
+import { useClientTable } from '@/hooks/useClientTable';
+import { InvoiceCreateModal } from '@/components/sales/InvoiceCreateModal';
+import { InvoiceDetailModal } from '@/components/sales/InvoiceDetailModal';
+import { InvoiceStatusBadge, PartyLabel } from '@/components/sales/InvoiceStatusBadge';
+import { OutstandingTab } from '@/components/sales/OutstandingTab';
+import { QuickPobTab } from '@/components/sales/QuickPobTab';
+import { TargetsTab } from '@/components/sales/TargetsTab';
+import { invoicesApi, type InvoiceStatus } from '@/services/invoices.service';
+import { formatINR } from '@/utils/currency';
+
+type TabKey = 'invoices' | 'pob' | 'outstanding' | 'targets';
 
 export function SalesPage() {
-  const { can, user } = useAuth();
-  const isAdmin = can('users:manage');
-  const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<CreateSalePayload>({
-    medicineId: 0,
-    quantity: 1,
-    amount: 0,
-    invoiceDate: toIsoDate(new Date()),
-    doctorId: undefined,
-    medicalStoreId: undefined,
-    mrId: undefined,
+  const [tab, setTab] = useState<TabKey>('invoices');
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Sales & Billing"
+        description="Doctor/chemist-wise invoices, collections, quick POB entries and monthly targets."
+      />
+      <Tabs<TabKey>
+        items={[
+          { value: 'invoices', label: 'Invoices', icon: Receipt },
+          { value: 'pob', label: 'Quick POB', icon: Zap },
+          { value: 'outstanding', label: 'Party outstanding', icon: IndianRupee },
+          { value: 'targets', label: 'Targets', icon: Target },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+
+      {tab === 'invoices' ? <InvoicesTab /> : null}
+      {tab === 'pob' ? <QuickPobTab /> : null}
+      {tab === 'outstanding' ? <OutstandingTab /> : null}
+      {tab === 'targets' ? <TargetsTab /> : null}
+    </div>
+  );
+}
+
+function InvoicesTab() {
+  const [status, setStatus] = useState<'' | InvoiceStatus>('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [detailId, setDetailId] = useState<number | null>(null);
+
+  const invoicesQuery = useQuery({
+    queryKey: ['invoices', { status, from, to }],
+    queryFn: () =>
+      invoicesApi.list({
+        ...(status ? { status } : {}),
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+      }),
   });
 
-  const salesQuery = useQuery({ queryKey: ['sales'], queryFn: () => salesApi.list() });
-
   const table = useClientTable({
-    data: salesQuery.data ?? [],
-    getSearchText: (sale) =>
-      [
-        sale.invoiceDate,
-        sale.medicine.name,
-        sale.quantity,
-        sale.amount,
-        sale.doctor?.fullName,
-        sale.medicalStore?.name,
-        sale.mr.fullName,
-      ]
+    data: invoicesQuery.data ?? [],
+    getSearchText: (row) =>
+      [row.invoiceNo, row.party?.name, row.mr.fullName, row.status, row.invoiceDate]
         .filter(Boolean)
         .join(' '),
     getSortValue: (row, key) => {
+      if (key === 'invoiceNo') return row.invoiceNo;
       if (key === 'date') return row.invoiceDate;
-      if (key === 'medicine') return row.medicine.name;
-      if (key === 'quantity') return row.quantity;
-      if (key === 'amount') return row.amount;
-      if (key === 'doctorStore') return row.doctor?.fullName ?? row.medicalStore?.name;
+      if (key === 'party') return row.party?.name;
       if (key === 'mr') return row.mr.fullName;
+      if (key === 'total') return row.totalAmount;
+      if (key === 'paid') return row.paidAmount;
+      if (key === 'outstanding') return row.outstanding;
+      if (key === 'status') return row.status;
       return undefined;
     },
     initialSortKey: 'date',
     initialSortDir: 'desc',
   });
-  const medicinesQuery = useQuery({
-    queryKey: ['medicines'],
-    queryFn: () => medicinesApi.list(),
-    enabled: open,
-  });
-  const doctorsQuery = useQuery({
-    queryKey: ['doctors'],
-    queryFn: () => doctorsApi.list(),
-    enabled: open,
-  });
-  const storesQuery = useQuery({
-    queryKey: ['stores'],
-    queryFn: () => storesApi.list(),
-    enabled: open,
-  });
-  const mrsQuery = useQuery({
-    queryKey: ['users'],
-    queryFn: () => usersApi.list(),
-    enabled: open && isAdmin,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: salesApi.create,
-    onSuccess: async () => {
-      setOpen(false);
-      setError(null);
-      await queryClient.invalidateQueries({ queryKey: ['sales'] });
-      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    },
-    onError: (err) => setError(getApiErrorMessage(err)),
-  });
-
-  function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    createMutation.mutate({
-      ...form,
-      doctorId: form.doctorId || undefined,
-      medicalStoreId: form.medicalStoreId || undefined,
-      mrId: isAdmin ? form.mrId || undefined : user?.id,
-    });
-  }
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title="Sales"
-        description="Record doctor/store medicine sales with amount and invoice date."
-        actions={
-          <Button onClick={() => setOpen(true)}>
-            <Plus size={16} /> Add Sale
-          </Button>
-        }
-      />
-      {error ? <Alert message={error} /> : null}
+    <div className="space-y-4">
+      {invoicesQuery.isError ? <Alert message={getApiErrorMessage(invoicesQuery.error)} /> : null}
+
+      <div className="flex flex-wrap items-end gap-2">
+        <Select
+          label="Status"
+          value={status}
+          onChange={(e) => setStatus(e.target.value as '' | InvoiceStatus)}
+          className="w-40"
+        >
+          <option value="">All statuses</option>
+          <option value="UNPAID">Unpaid</option>
+          <option value="PARTIAL">Partially paid</option>
+          <option value="PAID">Paid</option>
+          <option value="CANCELLED">Cancelled</option>
+        </Select>
+        <DatePicker label="From" value={from} onChange={setFrom} className="w-36" />
+        <DatePicker label="To" value={to} onChange={setTo} className="w-36" />
+      </div>
+
       <Card>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}
-          placeholder="Search sales…"
+          placeholder="Search invoice no, doctor, chemist, MR…"
+          actions={
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus size={16} /> New Invoice
+            </Button>
+          }
         />
         <DataTable
           columns={[
+            { key: 'invoiceNo', label: 'Invoice No', sortable: true },
             { key: 'date', label: 'Date', sortable: true },
-            { key: 'medicine', label: 'Medicine', sortable: true },
-            { key: 'quantity', label: 'Qty', sortable: true },
-            { key: 'amount', label: 'Amount', sortable: true },
-            { key: 'doctorStore', label: 'Doctor/Store', sortable: true },
+            { key: 'party', label: 'Party', sortable: true },
             { key: 'mr', label: 'MR', sortable: true },
+            { key: 'total', label: 'Total', sortable: true },
+            { key: 'paid', label: 'Paid', sortable: true },
+            { key: 'outstanding', label: 'Outstanding', sortable: true },
+            { key: 'status', label: 'Status', sortable: true },
           ]}
           sortKey={table.sortKey}
           sortDir={table.sortDir}
           onSort={table.toggleSort}
-          loading={salesQuery.isLoading}
+          loading={invoicesQuery.isLoading}
           empty={
-            !salesQuery.isLoading && table.filteredTotal === 0 ? (
+            !invoicesQuery.isLoading && table.filteredTotal === 0 ? (
               <EmptyState
-                title={table.totalAll === 0 ? 'No sales yet' : 'No matching sales'}
+                title={table.totalAll === 0 ? 'No invoices yet' : 'No matching invoices'}
                 description={
                   table.totalAll === 0
-                    ? 'Create the first sale entry.'
-                    : 'Try a different search term.'
+                    ? 'Raise the first doctor or chemist invoice.'
+                    : 'Try different filters or another search term.'
                 }
               />
             ) : null
           }
         >
-          {table.rows.map((sale) => (
-            <tr key={sale.id} className="border-b border-[var(--color-border)] last:border-0">
-              <Td>{sale.invoiceDate}</Td>
-              <Td>{sale.medicine.name}</Td>
-              <Td>{sale.quantity}</Td>
-              <Td>₹{sale.amount.toFixed(2)}</Td>
-              <Td>{sale.doctor?.fullName ?? sale.medicalStore?.name ?? '—'}</Td>
-              <Td>{sale.mr.fullName}</Td>
+          {table.rows.map((row) => (
+            <tr
+              key={row.id}
+              onClick={() => setDetailId(row.id)}
+              className="cursor-pointer border-b border-[var(--color-border)] transition-colors last:border-0 hover:bg-[var(--color-bg)]/60"
+            >
+              <Td className="font-mono text-xs font-semibold">{row.invoiceNo}</Td>
+              <Td>{row.invoiceDate}</Td>
+              <Td>
+                <PartyLabel party={row.party} />
+              </Td>
+              <Td>{row.mr.fullName}</Td>
+              <Td className="font-semibold">{formatINR(row.totalAmount)}</Td>
+              <Td>{formatINR(row.paidAmount)}</Td>
+              <Td
+                className={
+                  row.outstanding > 0 && row.status !== 'CANCELLED'
+                    ? 'font-bold text-[var(--color-danger)]'
+                    : undefined
+                }
+              >
+                {formatINR(row.outstanding)}
+              </Td>
+              <Td>
+                <InvoiceStatusBadge status={row.status} />
+              </Td>
             </tr>
           ))}
         </DataTable>
@@ -171,122 +188,12 @@ export function SalesPage() {
         />
       </Card>
 
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title="Sales Entry"
-        className="max-w-2xl"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" form="sale-form" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Saving…' : 'Save Sale'}
-            </Button>
-          </>
-        }
-      >
-        <form id="sale-form" className="grid gap-3 sm:grid-cols-2" onSubmit={onSubmit}>
-          <Select
-            label="Medicine"
-            required
-            className="sm:col-span-2"
-            value={form.medicineId}
-            onChange={(e) => setForm((p) => ({ ...p, medicineId: Number(e.target.value) }))}
-          >
-            <option value="">Select medicine</option>
-            {medicinesQuery.data?.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Doctor"
-            value={form.doctorId ?? ''}
-            onChange={(e) =>
-              setForm((p) => ({
-                ...p,
-                doctorId: e.target.value ? Number(e.target.value) : undefined,
-              }))
-            }
-          >
-            <option value="">None</option>
-            {doctorsQuery.data?.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.fullName}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label="Medical Store"
-            value={form.medicalStoreId ?? ''}
-            onChange={(e) =>
-              setForm((p) => ({
-                ...p,
-                medicalStoreId: e.target.value ? Number(e.target.value) : undefined,
-              }))
-            }
-          >
-            <option value="">None</option>
-            {storesQuery.data?.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </Select>
-          {isAdmin ? (
-            <Select
-              label="MR"
-              required
-              className="sm:col-span-2"
-              value={form.mrId ?? ''}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  mrId: e.target.value ? Number(e.target.value) : undefined,
-                }))
-              }
-            >
-              <option value="">Select MR</option>
-              {mrsQuery.data?.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.fullName}
-                </option>
-              ))}
-            </Select>
-          ) : null}
-          <Input
-            label="Quantity"
-            type="number"
-            min={1}
-            required
-            value={form.quantity}
-            onChange={(e) => setForm((p) => ({ ...p, quantity: Number(e.target.value) }))}
-          />
-          <Input
-            label="Amount"
-            type="number"
-            min={0}
-            step="0.01"
-            required
-            value={form.amount}
-            onChange={(e) => setForm((p) => ({ ...p, amount: Number(e.target.value) }))}
-          />
-          <DatePicker
-            label="Invoice Date"
-            required
-            value={form.invoiceDate}
-            onChange={(invoiceDate) => setForm((p) => ({ ...p, invoiceDate }))}
-          />
-          <Input
-            label="Invoice No."
-            value={form.invoiceNumber ?? ''}
-            onChange={(e) => setForm((p) => ({ ...p, invoiceNumber: e.target.value }))}
-          />
-        </form>
-      </Modal>
+      <InvoiceCreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(invoiceId) => setDetailId(invoiceId)}
+      />
+      <InvoiceDetailModal invoiceId={detailId} onClose={() => setDetailId(null)} />
     </div>
   );
 }

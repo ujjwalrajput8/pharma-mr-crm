@@ -28,12 +28,11 @@ export class MedicineService {
   public async list(query: ListMedicinesQueryDto) {
     const { items, total } = await this.medicines.list(query);
     const warehouseId = await this.ledger.findDefaultWarehouseId();
-    const enriched = await Promise.all(
-      items.map(async (item) => {
-        const stats = await this.stockTxns.getWarehouseMedicineStats(warehouseId, item.id);
-        return this.toPublic(item, stats);
-      }),
+    const stats = await this.stockTxns.getWarehouseMedicineStatsBulk(
+      warehouseId,
+      items.map((item) => item.id),
     );
+    const enriched = items.map((item) => this.toPublic(item, stats.get(item.id)));
     return {
       items: enriched,
       meta: {
@@ -139,10 +138,24 @@ export class MedicineService {
 
   private toPublic(
     medicine: NonNullable<Awaited<ReturnType<MedicineRepository['findById']>>>,
-    stats?: { openingStock: number; issued: number; returned: number; available: number },
+    stats?: {
+      openingStock: number;
+      received: number;
+      issued: number;
+      returned: number;
+      writeOff: number;
+      available: number;
+    },
   ) {
     const primaryBatch = medicine.batches[0] ?? null;
-    const stockStats = stats ?? { openingStock: 0, issued: 0, returned: 0, available: 0 };
+    const stockStats = stats ?? {
+      openingStock: 0,
+      received: 0,
+      issued: 0,
+      returned: 0,
+      writeOff: 0,
+      available: 0,
+    };
     const minimumStockAlert = 10;
 
     return {
@@ -171,8 +184,10 @@ export class MedicineService {
       status: medicine.status,
       stock: {
         openingStock: stockStats.openingStock,
+        received: stockStats.received,
         issued: stockStats.issued,
         returned: stockStats.returned,
+        writeOff: stockStats.writeOff,
         available: stockStats.available,
         minimumStockAlert,
         isLow: stockStats.available <= minimumStockAlert,

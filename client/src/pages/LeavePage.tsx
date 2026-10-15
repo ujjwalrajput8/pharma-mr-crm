@@ -1,17 +1,22 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
+  CalendarDays,
   CalendarPlus,
   CalendarRange,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Inbox,
   Paperclip,
   Ban,
   Gift,
   ScrollText,
+  Upload,
   User,
+  Users,
   XCircle,
 } from 'lucide-react';
 import { getApiErrorMessage } from '@/api/client';
@@ -39,26 +44,40 @@ import {
   DAY_PART_LABEL,
   LEAVE_STATUS_TONE,
   leavesApi,
+  type LeaveCalendarEntry,
   type LeaveDayPart,
   type LeaveRequest,
   type LeaveStatus,
 } from '@/services/leaves.service';
 import { employeesApi } from '@/services/employees.service';
+import { filesApi, fileKeyFromValue, openStoredFile } from '@/services/files.service';
 import { GrantCompOffDialog } from '@/components/leave/GrantCompOffDialog';
 import { formatDisplayDate, toIsoDate } from '@/utils/datetime';
+import { currentMonthKey, monthLabel, shiftMonth } from '@/utils/month';
 
-type TabValue = 'mine' | 'team';
+type TabValue = 'mine' | 'team' | 'calendar';
 
 const emptyForm = {
   leaveTypeId: '',
   fromDate: toIsoDate(new Date()),
   toDate: toIsoDate(new Date()),
   dayPart: 'FULL' as LeaveDayPart,
+  hours: '2',
   reason: '',
   contactPhone: '',
   attachmentUrl: '',
   userId: '',
 };
+
+/** Opens a `file:<key>` attachment as an authed blob, or a plain URL directly. */
+function openAttachment(value: string): void {
+  const key = fileKeyFromValue(value);
+  if (key) {
+    void openStoredFile(key);
+  } else {
+    window.open(value, '_blank', 'noopener');
+  }
+}
 
 function statusIcon(status: LeaveStatus) {
   if (status === 'APPROVED') return CheckCircle2;
@@ -78,6 +97,10 @@ export function LeavePage() {
   const [applyOpen, setApplyOpen] = useState(false);
   const [compOffOpen, setCompOffOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [attachment, setAttachment] = useState<{ key: string; fileName: string } | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(currentMonthKey());
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<LeaveRequest | null>(null);
   const [decision, setDecision] = useState<{
@@ -107,6 +130,11 @@ export function LeavePage() {
     queryKey: ['employees', 'roster'],
     queryFn: () => employeesApi.list(),
     enabled: canManage && applyOpen,
+  });
+  const calendarQuery = useQuery({
+    queryKey: ['leaves', 'calendar', calendarMonth],
+    queryFn: () => leavesApi.calendar(calendarMonth),
+    enabled: canManage && tab === 'calendar',
   });
 
   const teamRequests = useMemo(() => teamLeavesQuery.data ?? [], [teamLeavesQuery.data]);
@@ -170,12 +198,29 @@ export function LeavePage() {
     onSuccess: async () => {
       setApplyOpen(false);
       setForm(emptyForm);
+      setAttachment(null);
       setError(null);
       toast.success('Leave request submitted');
       await invalidate();
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
+
+  async function onPickProof(files: FileList | null): Promise<void> {
+    const file = files?.[0];
+    if (!file) return;
+    setUploadingProof(true);
+    try {
+      const info = await filesApi.upload(file, 'leave-proof');
+      setAttachment({ key: info.key, fileName: info.fileName });
+      setError(null);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Upload failed'));
+    } finally {
+      setUploadingProof(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
 
   const decideMutation = useMutation({
     mutationFn: (input: { id: number; status: 'APPROVED' | 'REJECTED'; remark?: string }) =>
@@ -216,9 +261,11 @@ export function LeavePage() {
       fromDate: form.fromDate,
       toDate: form.dayPart === 'FULL' ? form.toDate : form.fromDate,
       dayPart: form.dayPart,
+      hours: form.dayPart === 'SHORT' ? Number(form.hours) : undefined,
       reason: form.reason.trim(),
       contactPhone: form.contactPhone.trim() || undefined,
       attachmentUrl: form.attachmentUrl.trim() || undefined,
+      attachmentFileKey: attachment?.key,
       userId: form.userId ? Number(form.userId) : undefined,
     });
   }
@@ -383,12 +430,44 @@ export function LeavePage() {
                       icon: Inbox,
                       count: pendingTeam.length,
                     },
+                    { value: 'calendar' as TabValue, label: 'Team calendar', icon: Users },
                   ]
                 : []),
             ]}
           />
+          {tab === 'calendar' ? (
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="icon-sm"
+                variant="secondary"
+                aria-label="Previous month"
+                onClick={() => setCalendarMonth((m) => shiftMonth(m, -1))}
+              >
+                <ChevronLeft size={14} />
+              </Button>
+              <span className="min-w-[9rem] text-center text-xs font-bold text-[var(--color-ink)]">
+                {monthLabel(calendarMonth)}
+              </span>
+              <Button
+                size="icon-sm"
+                variant="secondary"
+                aria-label="Next month"
+                onClick={() => setCalendarMonth((m) => shiftMonth(m, 1))}
+              >
+                <ChevronRight size={14} />
+              </Button>
+            </div>
+          ) : null}
         </div>
 
+        {tab === 'calendar' ? (
+          <TeamLeaveCalendar
+            month={calendarMonth}
+            loading={calendarQuery.isLoading}
+            entries={calendarQuery.data?.items ?? []}
+          />
+        ) : (
+          <>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}
@@ -475,6 +554,16 @@ export function LeavePage() {
                   <span className="line-clamp-2 text-xs text-[var(--color-muted)]">
                     {row.reason}
                   </span>
+                  {row.attachmentUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => openAttachment(row.attachmentUrl!)}
+                      className="mt-1 inline-flex cursor-pointer items-center gap-1 rounded-full bg-[var(--color-primary-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-primary)] hover:opacity-80"
+                    >
+                      <Paperclip size={10} />
+                      Attachment
+                    </button>
+                  ) : null}
                 </Td>
                 <Td>
                   <Badge tone={LEAVE_STATUS_TONE[row.status]}>
@@ -513,6 +602,8 @@ export function LeavePage() {
             );
           })}
         </DataTable>
+          </>
+        )}
       </Card>
 
       {/* ── Apply modal ──────────────────────────────────────────────────── */}
@@ -520,6 +611,7 @@ export function LeavePage() {
         open={applyOpen}
         onClose={() => {
           setApplyOpen(false);
+          setAttachment(null);
           setError(null);
         }}
         title="Apply for leave"
@@ -572,9 +664,11 @@ export function LeavePage() {
                   setForm((f) => ({ ...f, dayPart: e.target.value as LeaveDayPart }))
                 }
                 hint={
-                  selectedType && !selectedType.allowHalfDay
-                    ? `${selectedType.code} must be taken as full days`
-                    : undefined
+                  form.dayPart === 'SHORT'
+                    ? 'Counts as hours ÷ 8 of a day'
+                    : selectedType && !selectedType.allowHalfDay
+                      ? `${selectedType.code} must be taken as full days`
+                      : undefined
                 }
               >
                 <option value="FULL">Full day(s)</option>
@@ -584,7 +678,24 @@ export function LeavePage() {
                 <option value="SECOND_HALF" disabled={selectedType?.allowHalfDay === false}>
                   Second half
                 </option>
+                <option value="SHORT" disabled={selectedType?.allowShortLeave !== true}>
+                  Short leave (hours)
+                </option>
               </Select>
+
+              {form.dayPart === 'SHORT' ? (
+                <Input
+                  label="Hours off"
+                  type="number"
+                  required
+                  min={0.5}
+                  max={4}
+                  step="0.5"
+                  value={form.hours}
+                  onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))}
+                  hint="Between 0.5 and 4 hours"
+                />
+              ) : null}
 
               <DatePicker
                 label="From"
@@ -647,17 +758,55 @@ export function LeavePage() {
                 />
                 <Input
                   label="Document link"
-                  optional={!selectedType?.requiresProof}
-                  required={selectedType?.requiresProof}
+                  optional
                   value={form.attachmentUrl}
                   onChange={(e) => setForm((f) => ({ ...f, attachmentUrl: e.target.value }))}
                   placeholder="https://…"
-                  hint={
-                    selectedType?.requiresProof
-                      ? `${selectedType.code} needs a supporting document`
-                      : 'Medical certificate etc.'
-                  }
+                  hint="Or upload a file below"
                 />
+              </div>
+
+              {/* Uploaded proof (image / PDF, ≤5 MB) — stored on the server. */}
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  className="hidden"
+                  onChange={(e) => void onPickProof(e.target.files)}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    loading={uploadingProof}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload size={13} />
+                    {attachment ? 'Replace document' : 'Upload document'}
+                  </Button>
+                  {attachment ? (
+                    <span className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-primary)]">
+                      <Paperclip size={11} />
+                      <span className="truncate">{attachment.fileName}</span>
+                      <button
+                        type="button"
+                        aria-label="Remove attachment"
+                        className="cursor-pointer font-bold hover:opacity-70"
+                        onClick={() => setAttachment(null)}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-[var(--color-muted)]">
+                      {selectedType?.requiresProof
+                        ? `${selectedType.code} needs a supporting document (link or file)`
+                        : 'JPEG / PNG / WebP / PDF, up to 5 MB'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </FormSection>
@@ -789,6 +938,9 @@ export function LeavePage() {
             <DetailRow label="From" value={formatDisplayDate(detail.fromDate)} />
             <DetailRow label="To" value={formatDisplayDate(detail.toDate)} />
             <DetailRow label="Duration" value={DAY_PART_LABEL[detail.dayPart]} />
+            {detail.dayPart === 'SHORT' ? (
+              <DetailRow label="Hours" value={detail.hours ? `${detail.hours} h` : null} />
+            ) : null}
             <DetailRow label="Working days" value={detail.days} />
             <DetailRow label="Reason" value={detail.reason} />
             <DetailRow label="Contact" value={detail.contactPhone} mono />
@@ -796,14 +948,13 @@ export function LeavePage() {
               label="Document"
               value={
                 detail.attachmentUrl ? (
-                  <a
-                    href={detail.attachmentUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[var(--color-primary)] underline"
+                  <button
+                    type="button"
+                    onClick={() => openAttachment(detail.attachmentUrl!)}
+                    className="cursor-pointer text-[var(--color-primary)] underline"
                   >
                     Open
-                  </a>
+                  </button>
                 ) : null
               }
             />
@@ -814,5 +965,116 @@ export function LeavePage() {
         ) : null}
       </Modal>
     </div>
+  );
+}
+
+/**
+ * Month grid of who is off when — grouped by date, one row per day that has
+ * anybody on leave. Days where more than one person is out are highlighted,
+ * because that is the day the territory goes uncovered.
+ */
+function TeamLeaveCalendar({
+  month,
+  entries,
+  loading,
+}: {
+  month: string;
+  entries: LeaveCalendarEntry[];
+  loading: boolean;
+}) {
+  const days = useMemo(() => {
+    const [yearRaw, monRaw] = month.split('-').map(Number);
+    const year = yearRaw ?? new Date().getFullYear();
+    const mon = monRaw ?? 1;
+    const daysInMonth = new Date(year, mon, 0).getDate();
+
+    const byDate = new Map<string, LeaveCalendarEntry[]>();
+    for (let dayNo = 1; dayNo <= daysInMonth; dayNo += 1) {
+      const iso = `${month}-${String(dayNo).padStart(2, '0')}`;
+      const onLeave = entries.filter((row) => row.fromDate <= iso && iso <= row.toDate);
+      if (onLeave.length > 0) byDate.set(iso, onLeave);
+    }
+    return [...byDate.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [month, entries]);
+
+  if (loading) {
+    return (
+      <div className="px-4 py-10 text-center text-xs text-[var(--color-muted)]">
+        Loading team calendar…
+      </div>
+    );
+  }
+
+  if (days.length === 0) {
+    return (
+      <EmptyState
+        title="Nobody on leave"
+        description={`No approved or pending leave touches ${monthLabel(month)}.`}
+      />
+    );
+  }
+
+  return (
+    <ul className="divide-y divide-[var(--color-border)]">
+      {days.map(([date, dayEntries]) => {
+        const distinctPeople = new Set(dayEntries.map((row) => row.userId)).size;
+        const crowded = distinctPeople > 1;
+        return (
+          <li
+            key={date}
+            className={
+              crowded
+                ? 'relative bg-[var(--color-warning-soft)]/40 px-4 py-3'
+                : 'relative px-4 py-3'
+            }
+          >
+            {crowded ? (
+              <span
+                aria-hidden
+                className="absolute inset-y-0 left-0 w-[3px] bg-[var(--color-warning)]"
+              />
+            ) : null}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex w-40 shrink-0 items-center gap-2">
+                <CalendarDays size={14} className="text-[var(--color-muted)]" />
+                <span className="text-xs font-bold text-[var(--color-ink)]">
+                  {formatDisplayDate(date)}
+                </span>
+              </div>
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                {dayEntries.map((row, index) => (
+                  <span
+                    key={`${row.userId}-${index}`}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] py-0.5 pr-2.5 pl-0.5"
+                    title={`${row.fullName} · ${row.leaveType.code} · ${row.status}`}
+                  >
+                    <Avatar name={row.fullName} size="sm" />
+                    <span className="max-w-[9rem] truncate text-[11px] font-semibold text-[var(--color-ink)]">
+                      {row.fullName}
+                    </span>
+                    <span
+                      className="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+                      style={{
+                        background: `color-mix(in srgb, ${row.leaveType.color} 14%, transparent)`,
+                        color: row.leaveType.color,
+                      }}
+                    >
+                      {row.leaveType.code}
+                      {row.dayPart !== 'FULL' ? ' ·½' : ''}
+                    </span>
+                    {row.status === 'PENDING' ? <Badge tone="warning">Pending</Badge> : null}
+                  </span>
+                ))}
+              </div>
+              {crowded ? (
+                <span className="shrink-0 rounded-full bg-[var(--color-warning-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--color-warning)]">
+                  {distinctPeople} people off
+                </span>
+              ) : null}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

@@ -1,5 +1,23 @@
-import type { AttendanceStatus, Prisma, WorkType } from '@prisma/client';
+import type { ApprovalStatus, AttendanceStatus, Prisma, WorkType } from '@prisma/client';
 import { PrismaService } from '../prisma/PrismaService';
+
+const regularizationInclude = {
+  user: {
+    select: {
+      id: true,
+      fullName: true,
+      email: true,
+      role: true,
+      managerId: true,
+      mrProfile: { select: { employeeCode: true } },
+    },
+  },
+  decidedBy: { select: { id: true, fullName: true, role: true } },
+} satisfies Prisma.AttendanceRegularizationInclude;
+
+export type RegularizationRow = Prisma.AttendanceRegularizationGetPayload<{
+  include: typeof regularizationInclude;
+}>;
 
 export class AttendanceRepository {
   private static instance: AttendanceRepository | null = null;
@@ -35,6 +53,7 @@ export class AttendanceRepository {
     isMockLocation?: boolean;
     deviceAt?: Date;
     flagReason?: string | null;
+    geofenceDistanceM?: number | null;
     locationNote?: string;
     remarks?: string;
     actorId: number;
@@ -51,6 +70,7 @@ export class AttendanceRepository {
         isMockLocation: params.isMockLocation ?? false,
         deviceAt: params.deviceAt,
         flagReason: params.flagReason ?? null,
+        geofenceDistanceM: params.geofenceDistanceM ?? null,
         locationNote: params.locationNote,
         remarks: params.remarks,
         status: params.status,
@@ -69,6 +89,7 @@ export class AttendanceRepository {
         isMockLocation: params.isMockLocation ?? false,
         deviceAt: params.deviceAt,
         flagReason: params.flagReason ?? null,
+        geofenceDistanceM: params.geofenceDistanceM ?? null,
         locationNote: params.locationNote,
         remarks: params.remarks,
         status: params.status,
@@ -245,6 +266,138 @@ export class AttendanceRepository {
         select: { id: true },
       })
       .then((rows) => rows.map((r) => r.id));
+  }
+
+  /** Territory geo-fence centre for the check-in distance test. */
+  public findUserTerritory(userId: number) {
+    return this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: {
+        managerId: true,
+        territory: {
+          select: { latitude: true, longitude: true, geofenceRadiusM: true, name: true },
+        },
+      },
+    });
+  }
+
+  // ── Regularizations ────────────────────────────────────────────────────────
+
+  public findRegularizationByUserDate(userId: number, attDate: Date) {
+    return this.prisma.attendanceRegularization.findFirst({
+      where: { userId, attDate },
+      include: regularizationInclude,
+    });
+  }
+
+  public findRegularizationById(id: number) {
+    return this.prisma.attendanceRegularization.findFirst({
+      where: { id, deletedAt: null },
+      include: regularizationInclude,
+    });
+  }
+
+  public createRegularization(data: {
+    userId: number;
+    attDate: Date;
+    requestedInAt?: Date | null;
+    requestedOutAt?: Date | null;
+    reason: string;
+  }) {
+    return this.prisma.attendanceRegularization.create({
+      data: {
+        userId: data.userId,
+        attDate: data.attDate,
+        requestedInAt: data.requestedInAt ?? null,
+        requestedOutAt: data.requestedOutAt ?? null,
+        reason: data.reason,
+        status: 'PENDING',
+      },
+      include: regularizationInclude,
+    });
+  }
+
+  public updateRegularization(id: number, data: Prisma.AttendanceRegularizationUpdateInput) {
+    return this.prisma.attendanceRegularization.update({
+      where: { id },
+      data,
+      include: regularizationInclude,
+    });
+  }
+
+  public listRegularizations(params: {
+    userId?: number;
+    userIds?: number[];
+    status?: ApprovalStatus;
+    from?: Date;
+    to?: Date;
+    limit?: number;
+  }) {
+    return this.prisma.attendanceRegularization.findMany({
+      where: {
+        deletedAt: null,
+        ...(params.userId
+          ? { userId: params.userId }
+          : params.userIds
+            ? { userId: { in: params.userIds } }
+            : {}),
+        ...(params.status ? { status: params.status } : {}),
+        ...(params.from || params.to
+          ? {
+              attDate: {
+                ...(params.from ? { gte: params.from } : {}),
+                ...(params.to ? { lte: params.to } : {}),
+              },
+            }
+          : {}),
+      },
+      orderBy: [{ status: 'asc' }, { attDate: 'desc' }, { id: 'desc' }],
+      take: params.limit ?? 200,
+      include: regularizationInclude,
+    });
+  }
+
+  /** Approval writes / fixes the attendance row while keeping any real punches. */
+  public upsertRegularized(params: {
+    userId: number;
+    attDate: Date;
+    checkInAt: Date | null;
+    checkOutAt: Date | null;
+    workingMins: number | null;
+    status: AttendanceStatus;
+    workType?: WorkType | null;
+    remarks?: string;
+    actorId: number;
+  }) {
+    return this.prisma.attendance.upsert({
+      where: { userId_attDate: { userId: params.userId, attDate: params.attDate } },
+      create: {
+        userId: params.userId,
+        attDate: params.attDate,
+        checkInAt: params.checkInAt,
+        checkOutAt: params.checkOutAt,
+        workingMins: params.workingMins,
+        status: params.status,
+        workType: params.workType ?? 'FIELD',
+        remarks: params.remarks,
+        approvedById: params.actorId,
+        serverAt: new Date(),
+        createdBy: params.actorId,
+        updatedBy: params.actorId,
+      },
+      update: {
+        checkInAt: params.checkInAt,
+        checkOutAt: params.checkOutAt,
+        workingMins: params.workingMins,
+        status: params.status,
+        ...(params.workType !== undefined ? { workType: params.workType } : {}),
+        remarks: params.remarks,
+        approvedById: params.actorId,
+        deletedAt: null,
+        updatedBy: params.actorId,
+      },
+      include: { user: { select: { id: true, fullName: true, email: true, role: true } } },
+    });
   }
 
   public listFieldUsers(params: { roles: Array<'MR' | 'MANAGER'>; managerId?: number }) {

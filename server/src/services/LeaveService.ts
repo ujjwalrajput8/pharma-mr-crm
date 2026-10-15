@@ -5,6 +5,7 @@ import type {
   DecideLeaveDto,
   GrantCompOffDto,
   LeaveBalanceQueryDto,
+  LeaveCalendarQueryDto,
   ListLeavesQueryDto,
   SetLeaveBalanceDto,
   UpdateLeaveTypeDto,
@@ -20,17 +21,27 @@ import { LeaveRepository, type LeaveRequestRow } from '../repositories/LeaveRepo
 import { UserRepository } from '../repositories/UserRepository';
 import { AttendanceRepository } from '../repositories/AttendanceRepository';
 import { AuditService } from './AuditService';
+import { FileStorageService } from './FileStorageService';
 import { HolidayService } from './HolidayService';
+import { NotificationService } from './NotificationService';
 import { TeamScopeService } from './TeamScopeService';
 import {
   currentYear,
   eachDayInclusive,
   formatDateOnly,
   isSunday,
+  monthRange,
   parseDateOnly,
   todayDateOnly,
 } from '../utils/datetime';
 import type { AuthUser } from '../types/auth.types';
+
+/** Few-hour leave; not part of the LeaveDayParts constant set (schema-only enum value). */
+const SHORT_DAY_PART = 'SHORT';
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 export interface PublicLeaveRequest {
   id: number;
@@ -47,6 +58,8 @@ export interface PublicLeaveRequest {
   fromDate: string;
   toDate: string;
   dayPart: string;
+  /** Hours off when dayPart is SHORT. */
+  hours: number | null;
   days: number;
   reason: string;
   contactPhone: string | null;
@@ -97,6 +110,8 @@ export class LeaveService {
     private readonly holidays = HolidayService.getInstance(),
     private readonly scope = TeamScopeService.getInstance(),
     private readonly audits = AuditService.getInstance(),
+    private readonly notifications = NotificationService.getInstance(),
+    private readonly files = FileStorageService.getInstance(),
   ) {}
 
   public static getInstance(): LeaveService {
@@ -117,6 +132,8 @@ export class LeaveService {
       carryForward: row.carryForward,
       maxCarryForward: Number(row.maxCarryForward),
       allowHalfDay: row.allowHalfDay,
+      allowShortLeave: row.allowShortLeave,
+      sandwichRule: row.sandwichRule,
       requiresProof: row.requiresProof,
       colorHex: row.colorHex,
       description: row.description,
@@ -135,6 +152,8 @@ export class LeaveService {
       carryForward: dto.carryForward,
       maxCarryForward: dto.maxCarryForward,
       allowHalfDay: dto.allowHalfDay,
+      allowShortLeave: dto.allowShortLeave,
+      sandwichRule: dto.sandwichRule,
       requiresProof: dto.requiresProof,
       colorHex: dto.colorHex,
       description: dto.description,
@@ -162,6 +181,8 @@ export class LeaveService {
       ...(dto.carryForward !== undefined ? { carryForward: dto.carryForward } : {}),
       ...(dto.maxCarryForward !== undefined ? { maxCarryForward: dto.maxCarryForward } : {}),
       ...(dto.allowHalfDay !== undefined ? { allowHalfDay: dto.allowHalfDay } : {}),
+      ...(dto.allowShortLeave !== undefined ? { allowShortLeave: dto.allowShortLeave } : {}),
+      ...(dto.sandwichRule !== undefined ? { sandwichRule: dto.sandwichRule } : {}),
       ...(dto.requiresProof !== undefined ? { requiresProof: dto.requiresProof } : {}),
       ...(dto.colorHex !== undefined ? { colorHex: dto.colorHex } : {}),
       ...(dto.description !== undefined ? { description: dto.description } : {}),
@@ -239,11 +260,22 @@ export class LeaveService {
     if (!leaveType || leaveType.status !== 'ACTIVE') {
       throw new BadRequestError('Select an active leave type');
     }
-    if (dto.dayPart !== LeaveDayParts.FULL && !leaveType.allowHalfDay) {
+    if (dto.dayPart === SHORT_DAY_PART) {
+      if (!leaveType.allowShortLeave) {
+        throw new BadRequestError(`${leaveType.name} cannot be taken as a short leave`);
+      }
+      if (!dto.hours) {
+        throw new BadRequestError('Short leave needs the number of hours (0.5–4)');
+      }
+    } else if (dto.dayPart !== LeaveDayParts.FULL && !leaveType.allowHalfDay) {
       throw new BadRequestError(`${leaveType.name} cannot be taken as a half day`);
     }
-    if (leaveType.requiresProof && !dto.attachmentUrl) {
+    // Proof can be either a link or an uploaded file key.
+    if (leaveType.requiresProof && !dto.attachmentUrl && !dto.attachmentFileKey) {
       throw new BadRequestError(`${leaveType.name} needs a supporting document`);
+    }
+    if (dto.attachmentFileKey) {
+      await this.files.assertExists(dto.attachmentFileKey);
     }
 
     const fromDate = parseDateOnly(dto.fromDate);
@@ -257,7 +289,14 @@ export class LeaveService {
       );
     }
 
-    const days = await this.countWorkingDays(fromDate, toDate, dto.dayPart, target.territoryId);
+    const days = await this.countLeaveDays({
+      fromDate,
+      toDate,
+      dayPart: dto.dayPart,
+      hours: dto.hours,
+      sandwichRule: leaveType.sandwichRule,
+      territoryId: target.territoryId,
+    });
     if (days <= 0) {
       throw new BadRequestError(
         'That range has no working days — it is all weekly offs or holidays.',
@@ -281,14 +320,27 @@ export class LeaveService {
       fromDate,
       toDate,
       dayPart: dto.dayPart,
+      hours: dto.dayPart === SHORT_DAY_PART ? dto.hours : null,
       days,
       reason: dto.reason,
       contactPhone: dto.contactPhone,
-      attachmentUrl: dto.attachmentUrl,
+      attachmentUrl: dto.attachmentFileKey ? `file:${dto.attachmentFileKey}` : dto.attachmentUrl,
       status: LeaveStatuses.PENDING,
       createdBy: actor.id,
       updatedBy: actor.id,
     });
+
+    // Nudge the reporting manager's bell so the request does not sit unnoticed.
+    if (target.managerId && target.managerId !== targetUserId) {
+      await this.notifications.create({
+        userId: target.managerId,
+        kind: 'LEAVE_PENDING',
+        title: `${target.fullName} applied for leave`,
+        message: `${leaveType.code} · ${days} day(s) · ${dto.fromDate} → ${dto.toDate} — needs your approval`,
+        href: '/approvals',
+        tone: 'warning',
+      });
+    }
 
     return this.toPublic(row);
   }
@@ -330,7 +382,61 @@ export class LeaveService {
       actor.id,
     );
 
+    // Tell the requester what happened — stored so read/unread survives.
+    await this.notifications.create({
+      userId: request.userId,
+      kind: 'LEAVE_DECIDED',
+      title: `Your ${request.leaveType.code} leave was ${dto.status.toLowerCase()}`,
+      message: [
+        `${formatDateOnly(request.fromDate)} → ${formatDateOnly(request.toDate)}`,
+        `${Number(request.days)} day(s)`,
+        dto.decisionRemark,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      href: '/leave',
+      tone: dto.status === LeaveStatuses.APPROVED ? 'success' : 'danger',
+    });
+
     return this.toPublic(updated);
+  }
+
+  /**
+   * Team leave calendar for one month — APPROVED + PENDING requests overlapping it,
+   * scoped exactly like the list (own / team / all).
+   */
+  public async calendar(query: LeaveCalendarQueryDto, actor: AuthUser) {
+    const { start, end } = monthRange(parseDateOnly(`${query.month}-01`));
+    const userFilter = await this.resolveUserFilter(actor);
+
+    const { items } = await this.leaves.listRequests({
+      page: 1,
+      limit: 500,
+      ...userFilter,
+      from: start,
+      to: end,
+    });
+
+    return {
+      month: query.month,
+      items: items
+        .filter(
+          (row) =>
+            row.status === LeaveStatuses.APPROVED || row.status === LeaveStatuses.PENDING,
+        )
+        .map((row) => ({
+          userId: row.userId,
+          fullName: row.user?.fullName ?? '—',
+          leaveType: {
+            code: row.leaveType.code,
+            color: row.leaveType.colorHex,
+          },
+          fromDate: formatDateOnly(row.fromDate),
+          toDate: formatDateOnly(row.toDate),
+          dayPart: row.dayPart,
+          status: row.status,
+        })),
+    };
   }
 
   public async cancel(
@@ -567,17 +673,40 @@ export class LeaveService {
 
   // ── Internals ──────────────────────────────────────────────────────────────
 
-  /** Sundays and non-optional holidays never consume leave. */
-  private async countWorkingDays(
-    fromDate: Date,
-    toDate: Date,
-    dayPart: string,
-    territoryId?: number | null,
-  ): Promise<number> {
+  /**
+   * Days a request consumes.
+   *  - Normal types: Sundays and non-optional holidays never consume leave.
+   *  - Sandwich types: every calendar day in the range counts (offs included).
+   *  - SHORT: `hours / 8` of a single working day, rounded to 2 decimals.
+   */
+  private async countLeaveDays(params: {
+    fromDate: Date;
+    toDate: Date;
+    dayPart: string;
+    hours?: number;
+    sandwichRule: boolean;
+    territoryId?: number | null;
+  }): Promise<number> {
+    const { fromDate, toDate, dayPart, hours, sandwichRule, territoryId } = params;
     const blocked = await this.holidays.blockingDatesInRange(fromDate, toDate, territoryId);
     const working = eachDayInclusive(fromDate, toDate).filter(
       (day) => !isSunday(day) && !blocked.has(formatDateOnly(day)),
     );
+
+    if (dayPart === SHORT_DAY_PART) {
+      // A short leave only makes sense on a working day.
+      if (working.length === 0) return 0;
+      return round2((hours ?? 0) / 8);
+    }
+
+    if (sandwichRule) {
+      // Offs inside the range are swallowed too — but a range that is ALL offs
+      // is still not a leave request.
+      if (working.length === 0) return 0;
+      if (dayPart !== LeaveDayParts.FULL) return 0.5;
+      return eachDayInclusive(fromDate, toDate).length;
+    }
+
     if (working.length === 0) return 0;
     if (dayPart !== LeaveDayParts.FULL) return 0.5;
     return working.length;
@@ -585,6 +714,8 @@ export class LeaveService {
 
   /** Approved leave writes the attendance register for every working day it covers. */
   private async markAttendanceForLeave(request: LeaveRequestRow): Promise<void> {
+    // A few-hours leave keeps the day workable — never overwrite the register.
+    if (request.dayPart === SHORT_DAY_PART) return;
     const user = await this.users.findById(request.userId);
     const blocked = await this.holidays.blockingDatesInRange(
       request.fromDate,
@@ -676,6 +807,7 @@ export class LeaveService {
       fromDate: formatDateOnly(row.fromDate),
       toDate: formatDateOnly(row.toDate),
       dayPart: row.dayPart,
+      hours: row.hours !== null && row.hours !== undefined ? Number(row.hours) : null,
       days: Number(row.days),
       reason: row.reason,
       contactPhone: row.contactPhone,

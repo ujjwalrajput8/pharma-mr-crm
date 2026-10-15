@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BriefcaseBusiness,
   CalendarDays,
+  Camera,
   Check,
   ChevronRight,
   Clock3,
@@ -36,6 +37,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
 import { authApi } from '@/services/auth.service';
 import { employeesApi } from '@/services/employees.service';
+import { filesApi, useStoredFileUrl } from '@/services/files.service';
 import { formatDisplayDate } from '@/utils/datetime';
 
 /** Live rules mirrored from the server DTO so feedback is instant. */
@@ -68,6 +70,7 @@ export function ProfilePage() {
     }
   }
 
+  const queryClient = useQueryClient();
   const profileQuery = useQuery({
     queryKey: ['employee', 'me'],
     queryFn: () => employeesApi.me(),
@@ -75,6 +78,26 @@ export function ProfilePage() {
     retry: false,
   });
   const profile = profileQuery.data;
+  const photoUrl = useStoredFileUrl(profile?.personal.photoUrl);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  async function onPickAvatar(files: FileList | null): Promise<void> {
+    const file = files?.[0];
+    if (!file || !profile) return;
+    setAvatarUploading(true);
+    try {
+      const info = await filesApi.upload(file, 'avatar');
+      await employeesApi.setAvatar(profile.id, info.key);
+      toast.success('Photo updated');
+      await queryClient.invalidateQueries({ queryKey: ['employee'] });
+    } catch (err) {
+      toast.error('Photo upload failed', getApiErrorMessage(err));
+    } finally {
+      setAvatarUploading(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
+  }
 
   const changeMutation = useMutation({
     mutationFn: () =>
@@ -140,11 +163,30 @@ export function ProfilePage() {
       <Card className="p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <Avatar
-              name={user?.fullName ?? '?'}
-              photoUrl={profile?.personal.photoUrl}
-              size="xl"
-            />
+            <div className="relative shrink-0">
+              <Avatar name={user?.fullName ?? '?'} photoUrl={photoUrl} size="xl" />
+              {profile ? (
+                <>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={(e) => void onPickAvatar(e.target.files)}
+                  />
+                  <button
+                    type="button"
+                    aria-label="Change photo"
+                    title="Change photo"
+                    disabled={avatarUploading}
+                    onClick={() => avatarInputRef.current?.click()}
+                    className="absolute -right-1 -bottom-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-muted)] shadow-xs transition hover:text-[var(--color-primary)] disabled:opacity-60"
+                  >
+                    <Camera size={12} />
+                  </button>
+                </>
+              ) : null}
+            </div>
             <div className="min-w-0">
               <h2 className="text-xl font-bold tracking-tight text-[var(--color-ink)]">
                 {user?.fullName}

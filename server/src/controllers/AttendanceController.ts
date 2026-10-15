@@ -4,7 +4,10 @@ import type {
   AttendanceSummaryQueryDto,
   CheckInDto,
   CheckOutDto,
+  CreateRegularizationDto,
+  DecideRegularizationDto,
   ListAttendanceQueryDto,
+  ListRegularizationsQueryDto,
   ManageAttendanceDto,
   ReviewFlagDto,
 } from '../dto/attendance.dto';
@@ -66,6 +69,32 @@ export class AttendanceController {
       req.user,
     );
     ApiResponse.success(res, row, 'Flag cleared');
+  };
+
+  public createRegularization = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const row = await this.attendance.createRegularization(
+      req.body as CreateRegularizationDto,
+      req.user,
+    );
+    ApiResponse.success(res, row, 'Regularization requested', HttpStatus.CREATED);
+  };
+
+  public listRegularizations = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const query = (req.validatedQuery ?? req.query) as ListRegularizationsQueryDto;
+    const rows = await this.attendance.listRegularizations(query, req.user);
+    ApiResponse.success(res, rows, 'Regularizations');
+  };
+
+  public decideRegularization = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const row = await this.attendance.decideRegularization(
+      Number(req.params.id),
+      req.body as DecideRegularizationDto,
+      req.user,
+    );
+    ApiResponse.success(res, row, `Regularization ${row.status.toLowerCase()}`);
   };
 
   public calendar = async (req: Request, res: Response): Promise<void> => {
