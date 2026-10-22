@@ -10,6 +10,7 @@ import { ForbiddenError, NotFoundError } from '../errors/AppError';
 import { DoctorRepository } from '../repositories/DoctorRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import type { AuthUser } from '../types/auth.types';
+import { formatDateOnly, parseDateOnly } from '../utils/datetime';
 
 type DoctorWithAssignments = Doctor & {
   assignments?: Array<{
@@ -219,9 +220,10 @@ export class DoctorService {
   public async create(dto: CreateDoctorDto, actor: AuthUser) {
     this.assertAdmin(actor);
 
-    const { mrId, ...rest } = dto;
+    const { mrId, birthday, anniversary, ...rest } = dto;
     const doctor = await this.doctors.create({
       ...rest,
+      ...this.toDateColumns({ birthday, anniversary }),
       createdBy: actor.id,
       updatedBy: actor.id,
     });
@@ -237,9 +239,10 @@ export class DoctorService {
     this.assertAdmin(actor);
     await this.requireAccessible(id, actor);
 
-    const { mrId, ...rest } = dto;
+    const { mrId, birthday, anniversary, ...rest } = dto;
     await this.doctors.update(id, {
       ...rest,
+      ...this.toDateColumns({ birthday, anniversary }),
       updatedBy: actor.id,
     });
 
@@ -298,6 +301,20 @@ export class DoctorService {
     }
   }
 
+  /** `YYYY-MM-DD` → storage form; null clears, undefined is left out. */
+  private toDateColumns(
+    dates: Record<'birthday' | 'anniversary', string | null | undefined>,
+  ): Partial<Record<'birthday' | 'anniversary', Date | null>> {
+    const columns: Partial<Record<'birthday' | 'anniversary', Date | null>> = {};
+    for (const [key, value] of Object.entries(dates) as Array<
+      ['birthday' | 'anniversary', string | null | undefined]
+    >) {
+      if (value === undefined) continue;
+      columns[key] = value === null ? null : parseDateOnly(value);
+    }
+    return columns;
+  }
+
   private toPublic(doctor: DoctorWithAssignments) {
     return {
       id: doctor.id,
@@ -314,6 +331,8 @@ export class DoctorService {
       pincode: doctor.pincode,
       visitingDays: doctor.visitingDays,
       preferredTime: doctor.preferredTime,
+      birthday: doctor.birthday ? formatDateOnly(doctor.birthday) : null,
+      anniversary: doctor.anniversary ? formatDateOnly(doctor.anniversary) : null,
       notes: doctor.notes,
       status: doctor.status,
       assignedMrs:

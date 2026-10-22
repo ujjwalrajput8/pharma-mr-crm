@@ -282,6 +282,8 @@ model MrProfile {
   // ── HR / personal ──
   designation    String?
   dob            DateTime? @db.Date
+  /// Wedding anniversary — surfaced with birthdays on the dashboard.
+  anniversary    DateTime? @db.Date
   gender         Gender?
   bloodGroup     String?
   maritalStatus  String?

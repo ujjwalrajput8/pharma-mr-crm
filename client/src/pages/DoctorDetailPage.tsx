@@ -9,6 +9,7 @@ import { InvoiceStatusBadge } from '@/components/sales/InvoiceStatusBadge';
 import { doctorsApi } from '@/services/doctors.service';
 import { invoicesApi } from '@/services/invoices.service';
 import { formatINR } from '@/utils/currency';
+import { formatDisplayDate } from '@/utils/datetime';
 
 type TabKey =
   | 'overview'
@@ -131,6 +132,14 @@ export function DoctorDetailPage() {
               <Row label="City" value={profile.city} />
               <Row label="Visiting days" value={profile.visitingDays} />
               <Row label="Preferred time" value={profile.preferredTime} />
+              <Row
+                label="Birthday"
+                value={profile.birthday ? formatDisplayDate(profile.birthday) : null}
+              />
+              <Row
+                label="Anniversary"
+                value={profile.anniversary ? formatDisplayDate(profile.anniversary) : null}
+              />
               <Row
                 label="Assigned MR"
                 value={profile.assignedMrs.map((m) => `${m.fullName} (${m.email})`).join(', ')}

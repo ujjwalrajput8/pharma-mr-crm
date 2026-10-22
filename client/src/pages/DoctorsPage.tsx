@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
+import { DatePicker } from '@/components/ui/DatePicker';
 import { Input, Select } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
@@ -12,10 +13,24 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { useClientTable } from '@/hooks/useClientTable';
 import { useAuth } from '@/store/AuthContext';
-import { doctorsApi, type CreateDoctorPayload } from '@/services/doctors.service';
+import { doctorsApi, type CreateDoctorPayload, type Doctor } from '@/services/doctors.service';
 import { usersApi } from '@/services/users.service';
 
-const emptyForm: CreateDoctorPayload = {
+interface DoctorForm {
+  fullName: string;
+  specialization: string;
+  hospital: string;
+  clinic: string;
+  phone: string;
+  city: string;
+  visitingDays: string;
+  preferredTime: string;
+  birthday: string;
+  anniversary: string;
+  mrId?: number;
+}
+
+const emptyForm: DoctorForm = {
   fullName: '',
   specialization: '',
   hospital: '',
@@ -24,7 +39,41 @@ const emptyForm: CreateDoctorPayload = {
   city: '',
   visitingDays: '',
   preferredTime: '',
+  birthday: '',
+  anniversary: '',
 };
+
+function toForm(doctor: Doctor): DoctorForm {
+  return {
+    fullName: doctor.fullName,
+    specialization: doctor.specialization ?? '',
+    hospital: doctor.hospital ?? '',
+    clinic: doctor.clinic ?? '',
+    phone: doctor.phone ?? '',
+    city: doctor.city ?? '',
+    visitingDays: doctor.visitingDays ?? '',
+    preferredTime: doctor.preferredTime ?? '',
+    birthday: doctor.birthday ?? '',
+    anniversary: doctor.anniversary ?? '',
+  };
+}
+
+/** Blank inputs become null so clearing a field on edit actually clears it. */
+function toPayload(form: DoctorForm): CreateDoctorPayload {
+  const orNull = (value: string): string | null => value.trim() || null;
+  return {
+    fullName: form.fullName.trim(),
+    specialization: orNull(form.specialization),
+    hospital: orNull(form.hospital),
+    clinic: orNull(form.clinic),
+    phone: orNull(form.phone),
+    city: orNull(form.city),
+    visitingDays: orNull(form.visitingDays),
+    preferredTime: orNull(form.preferredTime),
+    birthday: form.birthday || null,
+    anniversary: form.anniversary || null,
+  };
+}
 
 export function DoctorsPage() {
   const { can } = useAuth();
@@ -33,7 +82,9 @@ export function DoctorsPage() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<CreateDoctorPayload>(emptyForm);
+  const [form, setForm] = useState<DoctorForm>(emptyForm);
+  /** Set while the modal edits an existing doctor; null while adding. */
+  const [editing, setEditing] = useState<Doctor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
 
   const doctorsQuery = useQuery({
@@ -52,7 +103,7 @@ export function DoctorsPage() {
   const mrsQuery = useQuery({
     queryKey: ['users', 'for-assign'],
     queryFn: () => usersApi.list(),
-    enabled: isAdmin && open,
+    enabled: isAdmin && open && !editing,
   });
 
   const createMutation = useMutation({
@@ -62,6 +113,21 @@ export function DoctorsPage() {
       setOpen(false);
       setError(null);
       await queryClient.invalidateQueries({ queryKey: ['doctors'] });
+      await queryClient.invalidateQueries({ queryKey: ['occasions'] });
+    },
+    onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: CreateDoctorPayload }) =>
+      doctorsApi.update(id, payload),
+    onSuccess: async () => {
+      setOpen(false);
+      setEditing(null);
+      setError(null);
+      toast.success('Doctor updated');
+      await queryClient.invalidateQueries({ queryKey: ['doctors'] });
+      await queryClient.invalidateQueries({ queryKey: ['occasions'] });
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
@@ -79,20 +145,33 @@ export function DoctorsPage() {
     },
   });
 
-  function onCreate(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    createMutation.mutate({
-      fullName: form.fullName,
-      specialization: form.specialization || undefined,
-      hospital: form.hospital || undefined,
-      clinic: form.clinic || undefined,
-      phone: form.phone || undefined,
-      city: form.city || undefined,
-      visitingDays: form.visitingDays || undefined,
-      preferredTime: form.preferredTime || undefined,
-      mrId: form.mrId || undefined,
-    });
+  function openCreate(): void {
+    setEditing(null);
+    setForm(emptyForm);
+    setOpen(true);
   }
+
+  function openEdit(doctor: Doctor): void {
+    setEditing(doctor);
+    setForm(toForm(doctor));
+    setOpen(true);
+  }
+
+  function closeModal(): void {
+    setOpen(false);
+    setEditing(null);
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    if (editing) {
+      updateMutation.mutate({ id: editing.id, payload: toPayload(form) });
+      return;
+    }
+    createMutation.mutate({ ...toPayload(form), mrId: form.mrId || undefined });
+  }
+
+  const saving = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="space-y-5">
@@ -105,7 +184,7 @@ export function DoctorsPage() {
         }
         actions={
           isAdmin ? (
-            <Button onClick={() => setOpen(true)}>
+            <Button onClick={openCreate}>
               <Plus size={16} />
               Add Doctor
             </Button>
@@ -173,6 +252,12 @@ export function DoctorsPage() {
                     </Button>
                   </Link>
                   {isAdmin ? (
+                    <Button variant="secondary" size="sm" onClick={() => openEdit(doctor)}>
+                      <Pencil size={13} />
+                      Edit
+                    </Button>
+                  ) : null}
+                  {isAdmin ? (
                     <Button
                       variant="danger"
                       size="sm"
@@ -201,22 +286,26 @@ export function DoctorsPage() {
 
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
-        title="Add Doctor"
-        description="Register a healthcare professional in the doctor master directory and assign a field representative."
+        onClose={closeModal}
+        title={editing ? 'Edit Doctor' : 'Add Doctor'}
+        description={
+          editing
+            ? 'Update the doctor profile, practice details and personal occasions.'
+            : 'Register a healthcare professional in the doctor master directory and assign a field representative.'
+        }
         className="max-w-2xl"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
+            <Button variant="secondary" onClick={closeModal}>
               Cancel
             </Button>
-            <Button type="submit" form="create-doctor-form" loading={createMutation.isPending}>
-              {createMutation.isPending ? 'Saving…' : 'Register Doctor'}
+            <Button type="submit" form="create-doctor-form" loading={saving}>
+              {saving ? 'Saving…' : editing ? 'Save Changes' : 'Register Doctor'}
             </Button>
           </>
         }
       >
-        <form id="create-doctor-form" className="space-y-4" onSubmit={onCreate}>
+        <form id="create-doctor-form" className="space-y-4" onSubmit={onSubmit}>
           <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
@@ -274,8 +363,31 @@ export function DoctorsPage() {
 
           <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-pink-500" />
+              Birthday & Anniversary
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <DatePicker
+                label="Birthday"
+                pastDates
+                placeholder="YYYY-MM-DD"
+                value={form.birthday}
+                onChange={(value) => setForm((prev) => ({ ...prev, birthday: value }))}
+              />
+              <DatePicker
+                label="Wedding Anniversary"
+                pastDates
+                placeholder="YYYY-MM-DD"
+                value={form.anniversary}
+                onChange={(value) => setForm((prev) => ({ ...prev, anniversary: value }))}
+              />
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              Visiting Schedule & MR Assignment
+              {editing ? 'Visiting Schedule' : 'Visiting Schedule & MR Assignment'}
             </h4>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
@@ -290,24 +402,26 @@ export function DoctorsPage() {
                 value={form.preferredTime}
                 onChange={(e) => setForm((prev) => ({ ...prev, preferredTime: e.target.value }))}
               />
-              <Select
-                label="Assign Field Representative (MR)"
-                className="sm:col-span-2"
-                value={form.mrId ?? ''}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    mrId: e.target.value ? Number(e.target.value) : undefined,
-                  }))
-                }
-              >
-                <option value="">Unassigned (Open Pool)</option>
-                {mrsQuery.data?.map((mr) => (
-                  <option key={mr.id} value={mr.id}>
-                    {mr.fullName} ({mr.email})
-                  </option>
-                ))}
-              </Select>
+              {editing ? null : (
+                <Select
+                  label="Assign Field Representative (MR)"
+                  className="sm:col-span-2"
+                  value={form.mrId ?? ''}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      mrId: e.target.value ? Number(e.target.value) : undefined,
+                    }))
+                  }
+                >
+                  <option value="">Unassigned (Open Pool)</option>
+                  {mrsQuery.data?.map((mr) => (
+                    <option key={mr.id} value={mr.id}>
+                      {mr.fullName} ({mr.email})
+                    </option>
+                  ))}
+                </Select>
+              )}
             </div>
           </div>
         </form>

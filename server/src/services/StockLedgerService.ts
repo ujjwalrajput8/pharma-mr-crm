@@ -50,6 +50,37 @@ export class StockLedgerService {
     return Number.isInteger(warehouseId) && warehouseId > 0 ? warehouseId : null;
   }
 
+  /**
+   * Stock writes need a default warehouse, and a fresh install has none. Called
+   * on server boot: adopts the first live warehouse (or creates `MAIN`) and points
+   * the setting at it. A setting that already names a live warehouse is left alone.
+   */
+  public async ensureDefaultWarehouse(): Promise<void> {
+    const prisma = this.stockTxns.getPrisma();
+
+    const currentId = await this.findDefaultWarehouseId();
+    if (currentId !== null) {
+      const current = await prisma.warehouse.findFirst({
+        where: { id: currentId, deletedAt: null },
+      });
+      if (current) return;
+    }
+
+    const warehouse =
+      (await prisma.warehouse.findFirst({ where: { deletedAt: null }, orderBy: { id: 'asc' } })) ??
+      (await prisma.warehouse.upsert({
+        where: { code: 'MAIN' },
+        create: { name: 'Main Warehouse', code: 'MAIN', status: 'ACTIVE' },
+        update: { status: 'ACTIVE', deletedAt: null },
+      }));
+
+    await prisma.setting.upsert({
+      where: { key: DEFAULT_WAREHOUSE_SETTING },
+      create: { key: DEFAULT_WAREHOUSE_SETTING, value: String(warehouse.id), group: 'stock' },
+      update: { value: String(warehouse.id), group: 'stock', deletedAt: null },
+    });
+  }
+
   public async postTxn(
     input: PostTxnInput,
     client?: StockTxnClient,

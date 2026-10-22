@@ -49,6 +49,7 @@ export interface EmployeeProfile {
   };
   personal: {
     dob: string | null;
+    anniversary: string | null;
     gender: string | null;
     bloodGroup: string | null;
     maritalStatus: string | null;
@@ -120,6 +121,7 @@ export interface EmployeeProfile {
 export interface EmployeeProfilePayload {
   designation?: string | null;
   dob?: string | null;
+  anniversary?: string | null;
   gender?: string | null;
   bloodGroup?: string | null;
   maritalStatus?: string | null;

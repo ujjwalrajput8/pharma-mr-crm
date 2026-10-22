@@ -1,6 +1,7 @@
 import type { Permission } from '@/types';
 import {
   LayoutDashboard,
+  Cake,
   Users,
   Stethoscope,
   Store,
@@ -44,6 +45,13 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Dashboard',
     path: '/dashboard',
     icon: LayoutDashboard,
+    permissions: ['dashboard:view'],
+    section: 'Overview',
+  },
+  {
+    label: 'Birthdays & Anniversaries',
+    path: '/occasions',
+    icon: Cake,
     permissions: ['dashboard:view'],
     section: 'Overview',
   },

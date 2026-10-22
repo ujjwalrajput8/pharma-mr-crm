@@ -3,6 +3,7 @@ import { NotFoundError } from '../errors/AppError';
 import { PrismaService } from '../prisma/PrismaService';
 import { NotificationRepository } from '../repositories/NotificationRepository';
 import { Logger } from '../utils/logger';
+import { OccasionService, type OccasionKind } from './OccasionService';
 import { TeamScopeService } from './TeamScopeService';
 import { addDays, formatDateOnly, todayDateOnly } from '../utils/datetime';
 import type { AuthUser } from '../types/auth.types';
@@ -16,6 +17,7 @@ export type NotificationKind =
   | 'VISIT_FOLLOWUP'
   | 'STOCK_EXPIRY'
   | 'DOCTOR_OCCASION'
+  | 'EMPLOYEE_OCCASION'
   | 'REGULARIZATION_PENDING'
   | 'REGULARIZATION_DECIDED'
   | 'EXPENSE_PENDING'
@@ -64,6 +66,7 @@ export class NotificationService {
     private readonly scope = TeamScopeService.getInstance(),
     private readonly stored = NotificationRepository.getInstance(),
     private readonly logger = Logger.getInstance(),
+    private readonly occasionService = OccasionService.getInstance(),
   ) {}
 
   public static getInstance(): NotificationService {
@@ -143,7 +146,7 @@ export class NotificationService {
         : [],
       can('visits:own') || can('visits:manage') ? this.followUpsDue(actor, today) : [],
       can('mystock:own') || can('stock:manage') ? this.expiringStock(actor, today) : [],
-      can('doctors:own') || can('doctors:manage') ? this.doctorOccasions(actor, today) : [],
+      this.occasions(actor),
     ]);
 
     // Stored rows lead (they carry read state); derived items follow, newest first.
@@ -443,56 +446,30 @@ export class NotificationService {
     return items;
   }
 
-  /**
-   * Doctor birthdays and anniversaries in the next 7 days.
-   * The columns already existed but nothing surfaced them — this is the cheapest
-   * relationship win an MR gets from the CRM.
-   */
-  private async doctorOccasions(actor: AuthUser, today: Date): Promise<AppNotification[]> {
-    const assignedOnly = actor.role === AppRoles.MR;
-    const doctors = await this.prisma.doctor.findMany({
-      where: {
-        deletedAt: null,
-        status: 'ACTIVE',
-        OR: [{ birthday: { not: null } }, { anniversary: { not: null } }],
-        ...(assignedOnly
-          ? { assignments: { some: { mrId: actor.id, isActive: true, deletedAt: null } } }
-          : {}),
-      },
-      select: { id: true, fullName: true, birthday: true, anniversary: true },
-      take: 500,
-    });
-
-    /** Days until the next occurrence of a month/day, ignoring the stored year. */
-    const daysAway = (date: Date): number => {
-      const target = new Date(
-        Date.UTC(today.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-      );
-      const diff = Math.round((target.getTime() - today.getTime()) / 86_400_000);
-      return diff < 0 ? diff + 365 : diff;
+  /** Doctor and colleague birthdays / anniversaries in the next 7 days. */
+  private async occasions(actor: AuthUser): Promise<AppNotification[]> {
+    const label: Record<OccasionKind, string> = {
+      BIRTHDAY: 'birthday',
+      ANNIVERSARY: 'anniversary',
+      WORK_ANNIVERSARY: 'work anniversary',
     };
+    const { items } = await this.occasionService.upcoming(actor, { days: 7 });
 
-    const items: AppNotification[] = [];
-    for (const doctor of doctors) {
-      for (const [label, value] of [
-        ['Birthday', doctor.birthday],
-        ['Anniversary', doctor.anniversary],
-      ] as const) {
-        if (!value) continue;
-        const away = daysAway(value);
-        if (away > 7) continue;
-        items.push({
-          id: `doctor-${label.toLowerCase()}-${doctor.id}`,
-          kind: 'DOCTOR_OCCASION',
-          title: `${doctor.fullName} — ${label.toLowerCase()} ${away === 0 ? 'today' : `in ${away} day(s)`}`,
-          message: 'A greeting call or card goes a long way. Open the doctor profile.',
-          href: `/doctors/${doctor.id}`,
-          tone: away === 0 ? 'success' : 'neutral',
-          at: new Date(today.getTime() + away * 86_400_000).toISOString(),
-        });
-      }
-    }
-
-    return items.sort((a, b) => (a.at ?? '').localeCompare(b.at ?? '')).slice(0, 6);
+    return items.slice(0, 6).map((item) => {
+      const when =
+        item.daysAway === 0 ? 'today' : item.daysAway === 1 ? 'tomorrow' : `in ${item.daysAway} days`;
+      const isDoctor = item.personType === 'DOCTOR';
+      return {
+        id: `occasion-${item.id}`,
+        kind: isDoctor ? 'DOCTOR_OCCASION' : 'EMPLOYEE_OCCASION',
+        title: `${item.name} — ${label[item.kind]} ${when}`,
+        message: isDoctor
+          ? 'A greeting call or card goes a long way. Open the doctor profile.'
+          : 'Wish them on the day.',
+        href: item.href,
+        tone: item.daysAway === 0 ? 'success' : 'neutral',
+        at: `${item.nextDate}T00:00:00.000Z`,
+      };
+    });
   }
 }

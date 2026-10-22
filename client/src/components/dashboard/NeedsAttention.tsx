@@ -25,6 +25,7 @@ const ICON: Partial<Record<NotificationKind, typeof CalendarDays>> = {
   ATTENDANCE_MISSING: UserX,
   APPOINTMENT_TODAY: CalendarCheck2,
   DOCTOR_OCCASION: Gift,
+  EMPLOYEE_OCCASION: Gift,
 };
 
 const TONE: Record<string, { chip: string; bar: string }> = {
@@ -48,7 +49,10 @@ export function NeedsAttention() {
     refetchInterval: 60_000,
   });
 
-  const items = query.data?.items ?? [];
+  // Birthdays / anniversaries have their own dashboard card (UpcomingOccasions).
+  const items = (query.data?.items ?? []).filter(
+    (item) => item.kind !== 'DOCTOR_OCCASION' && item.kind !== 'EMPLOYEE_OCCASION',
+  );
   if (items.length === 0) return null;
 
   const actionable = items.filter((item) => ACTIONABLE_KINDS.includes(item.kind));

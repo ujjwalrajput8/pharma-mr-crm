@@ -41,6 +41,7 @@ import { QuickAction } from '@/components/layout/QuickAction';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { Card } from '@/components/ui/Page';
 import { NeedsAttention } from '@/components/dashboard/NeedsAttention';
+import { UpcomingOccasions } from '@/components/dashboard/UpcomingOccasions';
 import { StatCardSkeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/utils/cn';
 import { useToast } from '@/components/ui/Toast';
@@ -228,6 +229,8 @@ export function DashboardPage() {
       <GreetingHero summary={summaryQuery.data} />
 
       <NeedsAttention />
+
+      <UpcomingOccasions />
 
       {/* Quick actions — icon tiles, permission-gated */}
       <section aria-label="Quick actions">

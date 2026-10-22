@@ -46,6 +46,7 @@ const NOTIFICATION_ICON: Partial<Record<NotificationKind, typeof CalendarDays>> 
   ATTENDANCE_MISSING: UserX,
   APPOINTMENT_TODAY: CalendarCheck2,
   DOCTOR_OCCASION: Gift,
+  EMPLOYEE_OCCASION: Gift,
   REGULARIZATION_PENDING: CalendarClock,
   REGULARIZATION_DECIDED: CalendarCheck2,
   EXPENSE_PENDING: Wallet,

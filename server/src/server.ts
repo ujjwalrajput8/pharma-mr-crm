@@ -13,6 +13,7 @@ import { Config } from './config';
 import { Logger } from './utils/logger';
 import { createApiRouter } from './api/router';
 import { PrismaService } from './prisma/PrismaService';
+import { StockLedgerService } from './services/StockLedgerService';
 import { errorMiddleware } from './middlewares/error.middleware';
 import { notFoundMiddleware } from './middlewares/notFound.middleware';
 import { ApiResponse } from './utils/ApiResponse';
@@ -107,6 +108,15 @@ export class Server {
 
   public async start(): Promise<void> {
     await this.prisma.connect();
+
+    try {
+      await StockLedgerService.getInstance().ensureDefaultWarehouse();
+    } catch (err) {
+      // Stock writes will report the missing warehouse; the rest of the app still works.
+      this.logger.warn('Could not ensure the default warehouse', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     return new Promise((resolve, reject) => {
       try {

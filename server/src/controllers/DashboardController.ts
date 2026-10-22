@@ -1,12 +1,16 @@
 import type { Request, Response } from 'express';
 import { DashboardService } from '../services/DashboardService';
+import { OccasionService, type OccasionPersonType } from '../services/OccasionService';
 import { ApiResponse } from '../utils/ApiResponse';
 import { UnauthorizedError } from '../errors/AppError';
 
 export class DashboardController {
   private static instance: DashboardController | null = null;
 
-  private constructor(private readonly dashboard = DashboardService.getInstance()) {}
+  private constructor(
+    private readonly dashboard = DashboardService.getInstance(),
+    private readonly occasionService = OccasionService.getInstance(),
+  ) {}
 
   public static getInstance(): DashboardController {
     if (!DashboardController.instance) {
@@ -26,5 +30,18 @@ export class DashboardController {
     const query = (req.validatedQuery ?? req.query) as { days?: number };
     const data = await this.dashboard.getTrends(req.user, query.days ?? 30);
     ApiResponse.success(res, data, 'Dashboard trends');
+  };
+
+  public occasions = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const query = (req.validatedQuery ?? req.query) as {
+      days?: number;
+      type?: OccasionPersonType;
+    };
+    const data = await this.occasionService.upcoming(req.user, {
+      days: query.days ?? 7,
+      type: query.type,
+    });
+    ApiResponse.success(res, data, 'Upcoming occasions');
   };
 }
