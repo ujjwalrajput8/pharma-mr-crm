@@ -14,21 +14,28 @@ export interface Doctor {
   addressLine1?: string | null;
   visitingDays: string | null;
   preferredTime: string | null;
+  /** `YYYY-MM-DD` */
+  birthday: string | null;
+  /** `YYYY-MM-DD` */
+  anniversary: string | null;
   notes?: string | null;
   status: string;
   assignedMrs: Array<{ id: number; fullName: string; email: string }>;
 }
 
+/** Optional fields: `null` clears on update, omitted leaves them unchanged. */
 export interface CreateDoctorPayload {
   fullName: string;
-  specialization?: string;
-  hospital?: string;
-  clinic?: string;
-  email?: string;
-  phone?: string;
-  city?: string;
-  visitingDays?: string;
-  preferredTime?: string;
+  specialization?: string | null;
+  hospital?: string | null;
+  clinic?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  city?: string | null;
+  visitingDays?: string | null;
+  preferredTime?: string | null;
+  birthday?: string | null;
+  anniversary?: string | null;
   mrId?: number;
 }
 
@@ -130,6 +137,11 @@ export const doctorsApi = {
 
   async create(payload: CreateDoctorPayload): Promise<Doctor> {
     const { data } = await api.post<ApiSuccess<Doctor>>('/doctors', payload);
+    return data.data;
+  },
+
+  async update(id: number, payload: Partial<CreateDoctorPayload>): Promise<Doctor> {
+    const { data } = await api.patch<ApiSuccess<Doctor>>(`/doctors/${id}`, payload);
     return data.data;
   },
 

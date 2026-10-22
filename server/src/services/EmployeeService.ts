@@ -197,6 +197,7 @@ export class EmployeeService {
       },
       personal: {
         dob: profile?.dob ? formatDateOnly(profile.dob) : null,
+        anniversary: profile?.anniversary ? formatDateOnly(profile.anniversary) : null,
         gender: profile?.gender ?? null,
         bloodGroup: profile?.bloodGroup ?? null,
         maritalStatus: profile?.maritalStatus ?? null,
@@ -269,7 +270,7 @@ export class EmployeeService {
       throw new NotFoundError('This account has no employee profile to edit');
     }
 
-    const dateFields = ['dob', 'joiningDate', 'exitDate'] as const;
+    const dateFields = ['dob', 'anniversary', 'joiningDate', 'exitDate'] as const;
     const data: Record<string, unknown> = { updatedBy: actor.id };
 
     for (const [key, value] of Object.entries(dto)) {

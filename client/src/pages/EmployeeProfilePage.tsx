@@ -85,6 +85,7 @@ function toEditForm(profile: EmployeeProfile): EmployeeProfilePayload {
     exitDate: profile.employment.exitDate,
     exitReason: profile.employment.exitReason,
     dob: profile.personal.dob,
+    anniversary: profile.personal.anniversary,
     gender: profile.personal.gender,
     bloodGroup: profile.personal.bloodGroup,
     maritalStatus: profile.personal.maritalStatus,
@@ -179,6 +180,7 @@ export function EmployeeProfilePage() {
       toast.success('Employee record updated');
       await queryClient.invalidateQueries({ queryKey: ['employee', employeeId] });
       await queryClient.invalidateQueries({ queryKey: ['employees'] });
+      await queryClient.invalidateQueries({ queryKey: ['occasions'] });
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
@@ -543,6 +545,14 @@ export function EmployeeProfilePage() {
                 <DetailRow
                   label="Date of birth"
                   value={profile.personal.dob ? formatDisplayDate(profile.personal.dob) : null}
+                />
+                <DetailRow
+                  label="Wedding anniversary"
+                  value={
+                    profile.personal.anniversary
+                      ? formatDisplayDate(profile.personal.anniversary)
+                      : null
+                  }
                 />
                 <DetailRow label="Gender" value={profile.personal.gender} />
                 <DetailRow label="Blood group" value={profile.personal.bloodGroup} />
@@ -1091,8 +1101,15 @@ export function EmployeeProfilePage() {
           <div className="grid gap-3.5 sm:grid-cols-2">
             <DatePicker
               label="Date of birth"
+              pastDates
               value={edit.dob ?? ''}
               onChange={(value) => setEdit((f) => ({ ...f, dob: value || null }))}
+            />
+            <DatePicker
+              label="Wedding anniversary"
+              pastDates
+              value={edit.anniversary ?? ''}
+              onChange={(value) => setEdit((f) => ({ ...f, anniversary: value || null }))}
             />
             <Select
               label="Gender"

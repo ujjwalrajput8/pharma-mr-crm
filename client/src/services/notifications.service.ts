@@ -10,6 +10,7 @@ export type NotificationKind =
   | 'VISIT_FOLLOWUP'
   | 'STOCK_EXPIRY'
   | 'DOCTOR_OCCASION'
+  | 'EMPLOYEE_OCCASION'
   | 'REGULARIZATION_PENDING'
   | 'REGULARIZATION_DECIDED'
   | 'EXPENSE_PENDING'
@@ -84,6 +85,7 @@ export const NOTIFICATION_LABEL: Partial<Record<NotificationKind, string>> = {
   ATTENDANCE_MISSING: 'Not checked in',
   APPOINTMENT_TODAY: 'Appointments',
   DOCTOR_OCCASION: 'Doctor occasion',
+  EMPLOYEE_OCCASION: 'Team occasion',
   REGULARIZATION_PENDING: 'Regularization',
   REGULARIZATION_DECIDED: 'Your regularization',
   EXPENSE_PENDING: 'Expense claim',

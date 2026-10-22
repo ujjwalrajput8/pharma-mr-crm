@@ -15,7 +15,11 @@ interface DatePickerProps {
   disabled?: boolean;
   className?: string;
   placeholder?: string;
+  /** Birthdays / anniversaries: month + year dropdowns over past years, no Today/Tomorrow presets. */
+  pastDates?: boolean;
 }
+
+const PAST_START_MONTH = new Date(1940, 0, 1);
 
 export function DatePicker({
   label,
@@ -25,6 +29,7 @@ export function DatePicker({
   disabled,
   className,
   placeholder = 'Select date',
+  pastDates = false,
 }: DatePickerProps) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -121,7 +126,12 @@ export function DatePicker({
       {open ? (
         <div className="absolute left-0 sm:left-auto right-0 z-50 mt-1.5 w-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-lg)] animate-scale-in">
           {/* Quick preset chips */}
-          <div className="mb-2 flex items-center gap-1.5 border-b border-[var(--color-border)] pb-2.5">
+          <div
+            className={cn(
+              'mb-2 flex items-center gap-1.5 border-b border-[var(--color-border)] pb-2.5',
+              pastDates && 'hidden',
+            )}
+          >
             <button
               type="button"
               className="rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-primary)] transition hover:bg-[var(--color-primary)] hover:text-white"
@@ -148,6 +158,14 @@ export function DatePicker({
           <DayPicker
             mode="single"
             selected={selected}
+            {...(pastDates
+              ? {
+                  captionLayout: 'dropdown' as const,
+                  startMonth: PAST_START_MONTH,
+                  endMonth: new Date(),
+                  defaultMonth: selected,
+                }
+              : {})}
             onSelect={(date) => {
               if (!date) return;
               const iso = toIsoDate(date);

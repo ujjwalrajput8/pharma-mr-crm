@@ -2,21 +2,31 @@ import { z } from 'zod';
 import { idSchema } from './common.dto';
 import { RecordStatuses } from '../constants';
 
+/** `null` clears the column on update; `undefined` leaves it alone. */
+const optionalText = (max: number) => z.string().max(max).nullable().optional();
+const optionalDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
+  .nullable()
+  .optional();
+
 export const createDoctorSchema = z.object({
   fullName: z.string().min(2).max(150),
-  specialization: z.string().max(120).optional(),
-  hospital: z.string().max(150).optional(),
-  clinic: z.string().max(150).optional(),
-  email: z.string().email().optional(),
-  phone: z.string().min(7).max(20).optional(),
-  addressLine1: z.string().max(200).optional(),
-  addressLine2: z.string().max(200).optional(),
-  city: z.string().max(100).optional(),
-  state: z.string().max(100).optional(),
-  pincode: z.string().max(20).optional(),
-  visitingDays: z.string().max(120).optional(),
-  preferredTime: z.string().max(80).optional(),
-  notes: z.string().max(2000).optional(),
+  specialization: optionalText(120),
+  hospital: optionalText(150),
+  clinic: optionalText(150),
+  email: z.string().email().nullable().optional(),
+  phone: z.string().min(7).max(20).nullable().optional(),
+  addressLine1: optionalText(200),
+  addressLine2: optionalText(200),
+  city: optionalText(100),
+  state: optionalText(100),
+  pincode: optionalText(20),
+  visitingDays: optionalText(120),
+  preferredTime: optionalText(80),
+  birthday: optionalDate,
+  anniversary: optionalDate,
+  notes: optionalText(2000),
   status: z.enum([RecordStatuses.ACTIVE, RecordStatuses.INACTIVE]).optional(),
   mrId: idSchema.optional(),
 });

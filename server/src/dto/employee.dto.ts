@@ -24,6 +24,7 @@ export const employeeProfileQuerySchema = z.object({
 export const updateEmployeeProfileSchema = z.object({
   designation: nullableText(80),
   dob: nullableDate,
+  anniversary: nullableDate,
   gender: z.enum([Genders.MALE, Genders.FEMALE, Genders.OTHER]).nullable().optional(),
   bloodGroup: nullableText(10),
   maritalStatus: nullableText(20),

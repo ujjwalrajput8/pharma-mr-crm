@@ -36,6 +36,7 @@ import { EmployeesPage } from '@/pages/EmployeesPage';
 import { TerritoriesPage } from '@/pages/TerritoriesPage';
 import { ExpensesPage } from '@/pages/ExpensesPage';
 import { EmployeeProfilePage } from '@/pages/EmployeeProfilePage';
+import { OccasionsPage } from '@/pages/OccasionsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -66,6 +67,15 @@ export default function App() {
                   element={
                     <RequirePermission permissions={['dashboard:view']}>
                       <DashboardPage />
+                    </RequirePermission>
+                  }
+                />
+
+                <Route
+                  path="/occasions"
+                  element={
+                    <RequirePermission permissions={['dashboard:view']}>
+                      <OccasionsPage />
                     </RequirePermission>
                   }
                 />

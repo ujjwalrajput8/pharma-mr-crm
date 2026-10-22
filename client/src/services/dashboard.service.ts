@@ -31,7 +31,39 @@ export interface DashboardTrends {
   topMedicines: Array<{ medicineId: number; name: string; qty: number }>;
 }
 
+export type OccasionKind = 'BIRTHDAY' | 'ANNIVERSARY' | 'WORK_ANNIVERSARY';
+export type OccasionPersonType = 'DOCTOR' | 'EMPLOYEE';
+
+export interface Occasion {
+  id: string;
+  personType: OccasionPersonType;
+  personId: number;
+  name: string;
+  subtitle: string | null;
+  phone: string | null;
+  kind: OccasionKind;
+  /** Stored date, `YYYY-MM-DD`. */
+  date: string;
+  /** Next occurrence on or after today, `YYYY-MM-DD`. */
+  nextDate: string;
+  daysAway: number;
+  /** Years completed on `nextDate` (age / anniversary count); null when unknown. */
+  years: number | null;
+  href: string;
+}
+
+export interface OccasionFeed {
+  from: string;
+  to: string;
+  items: Occasion[];
+}
+
 export const dashboardApi = {
+  /** Birthdays and anniversaries in the next `days` days, soonest first. */
+  async occasions(params: { days?: number; type?: OccasionPersonType } = {}): Promise<OccasionFeed> {
+    const { data } = await api.get<ApiSuccess<OccasionFeed>>('/dashboard/occasions', { params });
+    return data.data;
+  },
   async summary(): Promise<DashboardSummary> {
     const { data } = await api.get<ApiSuccess<DashboardSummary>>('/dashboard/summary');
     return data.data;
