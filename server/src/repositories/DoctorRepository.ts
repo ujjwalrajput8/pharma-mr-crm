@@ -3,18 +3,9 @@ import { PrismaService } from '../prisma/PrismaService';
 import { StockTxnRepository } from './StockTxnRepository';
 import { doctorDuplicateKey } from '../utils/doctorDuplicate';
 
-/** Doctors without an MSL No go last; same MSL No falls back to the name. */
-function compareByMslNo(
-  a: { mslNo: string | null; fullName: string },
-  b: { mslNo: string | null; fullName: string },
-): number {
-  if (a.mslNo !== b.mslNo) {
-    if (a.mslNo === null) return 1;
-    if (b.mslNo === null) return -1;
-    const order = a.mslNo.localeCompare(b.mslNo, 'en', { numeric: true, sensitivity: 'base' });
-    if (order !== 0) return order;
-  }
-  return a.fullName.localeCompare(b.fullName, 'en', { sensitivity: 'base' });
+/** JL-2 before JL-10 (numeric-aware); MSL Nos are unique, so that settles it. */
+function compareByMslNo(a: { mslNo: string }, b: { mslNo: string }): number {
+  return a.mslNo.localeCompare(b.mslNo, 'en', { numeric: true, sensitivity: 'base' });
 }
 
 export interface DoctorListParams {

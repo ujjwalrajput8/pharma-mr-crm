@@ -23,9 +23,8 @@ import {
 } from '@/services/doctors.service';
 import { usersApi } from '@/services/users.service';
 
-/** Same fields, same order, as the company MSL sheet. */
+/** Same fields, same order, as the company MSL sheet — MSL No is the system's. */
 interface DoctorForm {
-  mslNo: string;
   area: string;
   areaType: DoctorAreaType | '';
   fullName: string;
@@ -40,7 +39,6 @@ interface DoctorForm {
 }
 
 const emptyForm: DoctorForm = {
-  mslNo: '',
   area: '',
   areaType: '',
   fullName: '',
@@ -55,7 +53,6 @@ const emptyForm: DoctorForm = {
 
 function toForm(doctor: Doctor): DoctorForm {
   return {
-    mslNo: doctor.mslNo ?? '',
     area: doctor.area ?? '',
     areaType: doctor.areaType ?? '',
     fullName: doctor.fullName,
@@ -73,7 +70,6 @@ function toForm(doctor: Doctor): DoctorForm {
 function toPayload(form: DoctorForm): CreateDoctorPayload {
   const orNull = (value: string): string | null => value.trim() || null;
   return {
-    mslNo: orNull(form.mslNo),
     area: orNull(form.area),
     areaType: form.areaType || null,
     fullName: form.fullName.trim(),
@@ -392,9 +388,10 @@ export function DoctorsPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
                 label="MSL No"
-                placeholder="e.g. M001"
-                value={form.mslNo}
-                onChange={(e) => setForm((prev) => ({ ...prev, mslNo: e.target.value }))}
+                value={editing?.mslNo ?? 'Assigned on save'}
+                hint="Given by the system (JL-001, JL-002 …)"
+                readOnly
+                disabled
               />
               <Input
                 label="MSL Class"

@@ -15,7 +15,8 @@ export interface Doctor {
   id: number;
   /** Starred by the signed-in user — each user has their own. */
   isFavorite: boolean;
-  mslNo: string | null;
+  /** Assigned by the system: JL-001, JL-002 … */
+  mslNo: string;
   area: string | null;
   areaType: DoctorAreaType | null;
   fullName: string;
@@ -34,7 +35,6 @@ export interface Doctor {
 
 /** Optional fields: `null` clears on update, omitted leaves them unchanged. */
 export interface CreateDoctorPayload {
-  mslNo?: string | null;
   area?: string | null;
   areaType?: DoctorAreaType | null;
   fullName: string;

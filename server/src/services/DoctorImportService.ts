@@ -115,9 +115,9 @@ function parseRow(values: Record<string, unknown>): DoctorRow | null {
     const value = toText(values[key]);
     return value !== undefined && value.length <= max ? value : undefined;
   };
+  // No mslNo: the database assigns it (JL-001 …); a sheet's MYMSL NO repeats per MR.
   const row: DoctorRow = {
     fullName,
-    mslNo: text('mslNo', 40),
     mslClass: text('mslClass', 20)?.toUpperCase(),
     specialization: text('specialization', 120),
     address: text('address', 500),
