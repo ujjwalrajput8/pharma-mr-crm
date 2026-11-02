@@ -1,12 +1,13 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/store/AuthContext';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import type { Permission } from '@/types';
 
 function BootstrappingScreen() {
   return (
-    <div className="flex min-h-svh items-center justify-center bg-[var(--color-bg)] text-[var(--color-muted)]">
-      Loading session…
+    <div className="flex min-h-svh items-center justify-center bg-[var(--color-bg)]">
+      <BrandLoader size="lg" label="Loading session…" />
     </div>
   );
 }

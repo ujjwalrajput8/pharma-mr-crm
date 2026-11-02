@@ -178,6 +178,43 @@ textarea {
   animation: scale-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* BrandLoader — one 2.4s cycle: the J hops, the L hops, then the whole JL
+   turns once and rests. index.html runs the same animation before React loads. */
+@keyframes brand-hop-j {
+  0%, 25%, 100% { transform: translateY(0); }
+  12.5% { transform: translateY(-16%); }
+}
+
+@keyframes brand-hop-l {
+  0%, 25%, 50%, 100% { transform: translateY(0); }
+  37.5% { transform: translateY(-16%); }
+}
+
+@keyframes brand-round {
+  0%, 50% { transform: rotate(0deg); }
+  85%, 100% { transform: rotate(360deg); }
+}
+
+.brand-hop-j,
+.brand-hop-l,
+.brand-round {
+  animation-duration: 2.4s;
+  animation-iteration-count: infinite;
+  animation-timing-function: cubic-bezier(0.33, 0, 0.2, 1);
+}
+
+.brand-hop-j { animation-name: brand-hop-j; }
+.brand-hop-l { animation-name: brand-hop-l; }
+.brand-round { animation-name: brand-round; animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-hop-j,
+  .brand-hop-l,
+  .brand-round {
+    animation: none;
+  }
+}
+
 /* Glassmorphism helpers */
 .glass-panel {
   background: color-mix(in srgb, var(--color-surface) 85%, transparent);

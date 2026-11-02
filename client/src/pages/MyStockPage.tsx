@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDownToLine, ArrowUpFromLine, CalendarClock, Package, Pill } from 'lucide-react';
 import { useMemo } from 'react';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { DataTable, Td } from '@/components/ui/DataTable';
 import { Badge, Card, CardHeader, EmptyState, PageHeader, StatTile } from '@/components/ui/Page';
 import { useAuth } from '@/store/AuthContext';
@@ -142,7 +143,7 @@ export function MyStockPage() {
           description="Your last 30 ledger transactions — issues to you, samples you gave, returns"
         />
         {myStockQuery.isLoading ? (
-          <p className="px-5 py-10 text-center text-sm text-[var(--color-muted)]">Loading…</p>
+          <BrandLoader className="py-10" />
         ) : recent.length === 0 ? (
           <EmptyState
             title="No movement yet"
