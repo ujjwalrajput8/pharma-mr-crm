@@ -706,11 +706,12 @@ export function ExpensesPage() {
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title="Delete this claim"
-        description={`${deleteTarget ? formatInr(deleteTarget.amount) : ''} · ${
-          deleteTarget ? EXPENSE_CATEGORY_LABEL[deleteTarget.category] : ''
-        } — a deleted claim cannot be restored.`}
-        confirmLabel="Delete"
+        recordName={
+          deleteTarget
+            ? `${formatInr(deleteTarget.amount)} · ${EXPENSE_CATEGORY_LABEL[deleteTarget.category]}`
+            : undefined
+        }
+        recordContext="Expenses (TA/DA)"
         loading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
         onClose={() => setDeleteTarget(null)}

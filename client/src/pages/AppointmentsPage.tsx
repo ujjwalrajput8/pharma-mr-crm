@@ -56,6 +56,7 @@ export function AppointmentsPage() {
         status: statusFilter || undefined,
       }),
   });
+  const cancelAppointment = appointmentsQuery.data?.find((item) => item.id === cancelId);
   const doctorsQuery = useQuery({
     queryKey: ['doctors'],
     queryFn: () => doctorsApi.list(),
@@ -374,9 +375,13 @@ export function AppointmentsPage() {
       <ConfirmDialog
         open={Boolean(cancelId)}
         variant="delete"
-        title="Confirm Cancel"
-        description="Are you sure you want to cancel this appointment? This action cannot be undone."
+        badge="Cancel"
+        title="Cancel this appointment?"
+        description="The appointment will be marked cancelled. This action cannot be undone."
+        recordName={cancelAppointment?.doctor?.fullName ?? 'Appointment'}
+        recordContext={cancelAppointment ? `Appointment · ${formatDisplayDate(cancelAppointment.date)}` : 'Appointments'}
         confirmLabel="Cancel appointment"
+        cancelLabel="Keep"
         onClose={() => setCancelId(null)}
         loading={cancelMutation.isPending}
         onConfirm={() => cancelId && cancelMutation.mutate(cancelId)}

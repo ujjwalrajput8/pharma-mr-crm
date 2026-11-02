@@ -21,6 +21,7 @@ export function VisitsPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const visitsQuery = useQuery({ queryKey: ['visits'], queryFn: () => visitsApi.list() });
+  const deleteVisit = visitsQuery.data?.find((visit) => visit.id === deleteId);
 
   const table = useClientTable({
     data: visitsQuery.data ?? [],
@@ -169,9 +170,8 @@ export function VisitsPage() {
       <ConfirmDialog
         open={Boolean(deleteId)}
         variant="delete"
-        title="Confirm Delete"
-        description="Are you sure you want to delete this visit record?"
-        confirmLabel="Delete"
+        recordName={deleteVisit?.doctor?.fullName ?? 'Visit'}
+        recordContext={deleteVisit ? `Visit · ${formatDisplayDate(deleteVisit.visitDate)}` : 'Visits'}
         loading={deleteMutation.isPending}
         onClose={() => setDeleteId(null)}
         onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}

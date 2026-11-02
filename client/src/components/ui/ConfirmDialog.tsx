@@ -1,14 +1,23 @@
-import { AlertTriangle, CheckCircle2, LogOut, ShieldAlert, User } from 'lucide-react';
+import { AlertTriangle, LogOut, Trash2, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { useAuth } from '@/store/AuthContext';
-import { Badge } from '@/components/ui/Page';
+import { cn } from '@/utils/cn';
+
+type Variant = 'delete' | 'logout' | 'generic';
 
 interface ConfirmDialogProps {
   open: boolean;
-  variant?: 'delete' | 'logout' | 'generic';
-  title: string;
-  description: string;
+  variant?: Variant;
+  /** Defaults per variant — "Are you sure you want to delete?" for a delete. */
+  title?: string;
+  description?: string;
+  /** What the action applies to, shown under "Selected record". */
+  recordName?: string;
+  /** Where that record lives, e.g. "Doctor Management". */
+  recordContext?: string;
+  /** Pill in the top-right corner; defaults per variant. */
+  badge?: string;
   confirmLabel?: string;
   cancelLabel?: string;
   loading?: boolean;
@@ -16,14 +25,60 @@ interface ConfirmDialogProps {
   onClose: () => void;
 }
 
+const VARIANTS: Record<
+  Variant,
+  {
+    icon: LucideIcon;
+    tone: 'red' | 'gold';
+    badge: string;
+    title: string;
+    description: string;
+    confirmLabel: string;
+  }
+> = {
+  delete: {
+    icon: Trash2,
+    tone: 'red',
+    badge: 'Delete',
+    title: 'Are you sure you want to delete?',
+    description: 'This action cannot be undone. The selected record will be permanently deleted.',
+    confirmLabel: 'Delete',
+  },
+  logout: {
+    icon: LogOut,
+    tone: 'gold',
+    badge: 'Logout',
+    title: 'Log out of your account?',
+    description: 'You will return to the sign-in screen and can log back in any time.',
+    confirmLabel: 'Logout',
+  },
+  generic: {
+    icon: AlertTriangle,
+    tone: 'gold',
+    badge: 'Confirm',
+    title: 'Are you sure?',
+    description: 'Please confirm to continue.',
+    confirmLabel: 'Confirm',
+  },
+};
+
+const TONE_CIRCLE = {
+  red: 'bg-[var(--color-brand-red-soft)] text-[var(--color-brand-red)]',
+  gold: 'bg-[var(--color-brand-gold-soft)] text-[var(--color-brand-gold)]',
+};
+
 /**
- * Branded enterprise confirmation dialog for destructive / logout actions.
+ * Confirmation dialog in the Jovance colours (logo red + gold): icon and pill
+ * on top, the question, the record it applies to, then Cancel / confirm.
  */
 export function ConfirmDialog({
   open,
   variant = 'delete',
   title,
   description,
+  recordName,
+  recordContext,
+  badge,
   confirmLabel,
   cancelLabel = 'Cancel',
   loading,
@@ -31,103 +86,76 @@ export function ConfirmDialog({
   onClose,
 }: ConfirmDialogProps) {
   const { user } = useAuth();
-  const isLogout = variant === 'logout';
-  const resolvedConfirm = confirmLabel ?? (isLogout ? 'Logout' : 'Delete');
+  const preset = VARIANTS[variant];
+  const Icon = preset.icon;
+  const resolvedTitle = title ?? preset.title;
+
+  // Logging out applies to the signed-in account.
+  const record =
+    recordName !== undefined
+      ? { name: recordName, context: recordContext }
+      : variant === 'logout' && user
+        ? { name: user.fullName, context: user.email }
+        : null;
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      icon={isLogout ? LogOut : AlertTriangle}
-      badge={isLogout ? 'Account' : 'Irreversible'}
-      title={title}
-      description={description}
-      className="max-w-md"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={loading}>
-            {cancelLabel}
-          </Button>
-          <Button
-            variant={isLogout ? 'primary' : 'destructive'}
-            onClick={onConfirm}
-            loading={loading}
-            disabled={loading}
+    <Modal open={open} onClose={onClose} title={resolvedTitle} bare className="max-w-[400px]">
+      <div
+        className="h-1 bg-[linear-gradient(90deg,var(--color-brand-red),var(--color-brand-gold))]"
+        aria-hidden
+      />
+      <div className="space-y-5 p-6">
+        <div className="flex items-start justify-between gap-3">
+          <span
+            className={cn(
+              'flex h-14 w-14 shrink-0 items-center justify-center rounded-full',
+              TONE_CIRCLE[preset.tone],
+            )}
           >
-            {loading ? 'Please wait…' : resolvedConfirm}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {/* Jovance Corporate Header Banner */}
-        <div className="flex items-center justify-between rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/80 p-3.5 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <img
-              src="/jovance-logo.png"
-              alt="Jovance Laboratories"
-              className="h-8.5 w-auto object-contain [[data-theme=dark]_&]:hidden"
-            />
-            <img
-              src="/jovance-logo-dark.png"
-              alt="Jovance Laboratories"
-              className="hidden h-8.5 w-auto object-contain [[data-theme=dark]_&]:block"
-            />
-            <div className="min-w-0">
-              <p className="truncate text-xs font-bold tracking-wider text-[var(--color-ink)] uppercase">
-                JOVANCE LABORATORIES
-              </p>
-              <p className="text-[11px] text-[var(--color-muted)] font-medium">Field Force CRM</p>
-            </div>
-          </div>
-          {isLogout && user?.role ? (
-            <Badge tone="primary">{user.role}</Badge>
-          ) : null}
+            <Icon size={24} />
+          </span>
+          <span className="rounded-full bg-[var(--color-brand-gold-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-brand-gold)]">
+            {badge ?? preset.badge}
+          </span>
         </div>
 
-        {/* User Account Info Card for Logout */}
-        {isLogout && user ? (
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-bg)]/50 p-3.5 space-y-2.5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary)] text-white text-xs font-bold shadow-xs">
-                {user.fullName
-                  .split(' ')
-                  .filter(Boolean)
-                  .slice(0, 2)
-                  .map((p) => p[0]?.toUpperCase())
-                  .join('') || <User size={16} />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-[var(--color-ink)]">
-                  {user.fullName}
-                </p>
-                <p className="truncate text-xs text-[var(--color-muted)]">{user.email}</p>
-              </div>
-            </div>
+        <div>
+          <h3 className="text-[17px] leading-snug font-bold tracking-[-0.015em] text-[var(--color-ink)]">
+            {resolvedTitle}
+          </h3>
+          <p className="mt-2 text-sm leading-relaxed text-[var(--color-muted)]">
+            {description ?? preset.description}
+          </p>
+        </div>
 
-            <div className="flex items-center gap-2 pt-1 border-t border-[var(--color-border)] text-[11px] text-[var(--color-muted)]">
-              <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
-              <span>All doctor visits, reports, and attendance records are synced.</span>
-            </div>
+        {record ? (
+          <div className="rounded-xl border-l-[3px] border-[var(--color-brand-gold)] bg-[var(--color-bg)] px-4 py-3">
+            <p className="text-[10.5px] font-semibold tracking-[0.08em] text-[var(--color-brand-gold)] uppercase">
+              Selected record
+            </p>
+            <p className="mt-1 truncate text-[15px] font-bold text-[var(--color-ink)]">{record.name}</p>
+            {record.context ? (
+              <p className="mt-0.5 truncate text-xs text-[var(--color-muted)]">{record.context}</p>
+            ) : null}
           </div>
         ) : null}
 
-        {/* Informational or Warning Callout */}
-        {isLogout ? (
-          <p className="text-xs text-[var(--color-muted)] leading-relaxed px-1">
-            You will be returned to the secure sign-in screen. You can log back in at any time with your employee credentials.
-          </p>
-        ) : (
-          <div className="flex items-start gap-2.5 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3.5 text-xs text-rose-700 dark:text-rose-300">
-            <ShieldAlert size={16} className="shrink-0 mt-0.5" />
-            <span>
-              This operation cannot be undone and will permanently delete records from the central database.
-            </span>
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          <Button variant="secondary" size="lg" fullWidth onClick={onClose} disabled={loading}>
+            {cancelLabel}
+          </Button>
+          <Button
+            variant={preset.tone === 'red' ? 'brand' : 'primary'}
+            size="lg"
+            fullWidth
+            onClick={onConfirm}
+            loading={loading}
+          >
+            {loading ? null : <Icon size={15} />}
+            {loading ? 'Please wait…' : (confirmLabel ?? preset.confirmLabel)}
+          </Button>
+        </div>
       </div>
     </Modal>
   );
 }
-
-

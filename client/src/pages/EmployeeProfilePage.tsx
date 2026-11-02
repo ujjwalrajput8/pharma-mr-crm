@@ -1025,8 +1025,9 @@ export function EmployeeProfilePage() {
 
       <ConfirmDialog
         open={Boolean(docDeleteTarget)}
-        title={`Remove ${docDeleteTarget?.title ?? 'document'}`}
         description="The document is removed from the employee record. The uploaded file stays in storage for the audit trail."
+        recordName={docDeleteTarget?.title}
+        recordContext="Employee documents"
         confirmLabel="Remove"
         loading={removeDocMutation.isPending}
         onConfirm={() => docDeleteTarget && removeDocMutation.mutate(docDeleteTarget.id)}

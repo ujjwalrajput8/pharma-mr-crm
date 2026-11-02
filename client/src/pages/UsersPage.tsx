@@ -403,8 +403,9 @@ export function UsersPage() {
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         variant="delete"
-        title="Confirm Delete"
-        description={`Are you sure you want to delete “${deleteTarget?.name}”? Accounts with direct reports must be reassigned first.`}
+        description="This action cannot be undone. Accounts with direct reports must be reassigned first."
+        recordName={deleteTarget?.name}
+        recordContext="Users & Hierarchy"
         loading={actionMutation.isPending}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() =>
