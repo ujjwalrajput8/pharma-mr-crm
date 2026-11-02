@@ -54,7 +54,7 @@ export class AuthService {
     dto: LoginDto,
     meta: { userAgent?: string; ipAddress?: string } = {},
   ): Promise<LoginResult> {
-    const user = await this.users.findByEmail(dto.email.toLowerCase());
+    const user = await this.users.findForLogin(dto.email);
 
     if (!user) {
       throw new UnauthorizedError('Invalid email or password');
@@ -83,26 +83,24 @@ export class AuthService {
     }
 
     const authUser = this.toAuthUser(user.id, user.email, user.role, user.fullName);
-    const tokens = await this.issueSession(authUser, meta);
-    await this.users.update(user.id, {
-      lastLoginAt: new Date(),
-      failedLoginCount: 0,
-      lockedUntil: null,
-    });
-    const permissions = await this.permissions.resolveForUser(user.id);
+    // Independent round trips to the database — run them side by side.
+    const [tokens, permissions] = await Promise.all([
+      this.issueSession(authUser, meta),
+      this.permissions.resolveFor(user),
+      this.recordLogin(user.id, user.passwordHash, dto.password),
+    ]);
 
-    try {
-      await this.audits.log({
+    // Audit must not block (or slow down) authentication.
+    void this.audits
+      .log({
         userId: user.id,
         action: 'LOGIN',
         entity: 'User',
         entityId: String(user.id),
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
-      });
-    } catch {
-      // Audit must not block authentication
-    }
+      })
+      .catch(() => undefined);
 
     return {
       user: {
@@ -143,8 +141,10 @@ export class AuthService {
     await this.refreshTokens.revoke(stored.id);
 
     const authUser = this.toAuthUser(user.id, user.email, user.role, user.fullName);
-    const tokens = await this.issueSession(authUser, meta);
-    const permissions = await this.permissions.resolveForUser(user.id);
+    const [tokens, permissions] = await Promise.all([
+      this.issueSession(authUser, meta),
+      this.permissions.resolveFor(user),
+    ]);
 
     return {
       user: {
@@ -181,7 +181,7 @@ export class AuthService {
       throw new UnauthorizedError('User not found or inactive');
     }
 
-    const permissions = await this.permissions.resolveForUser(user.id);
+    const permissions = await this.permissions.resolveFor(user);
 
     return {
       id: user.id,
@@ -306,6 +306,17 @@ export class AuthService {
   }
 
   /** Counts a wrong password; the 5th in a row locks the account for a while. */
+  /**
+   * A hash made with an older (costlier) bcrypt setting is upgraded on the
+   * next good sign-in, so every login gets as fast as the current setting.
+   */
+  private async recordLogin(userId: number, passwordHash: string, plain: string): Promise<void> {
+    const upgraded = this.passwords.needsRehash(passwordHash)
+      ? await this.passwords.hash(plain)
+      : undefined;
+    await this.users.recordLogin(userId, upgraded);
+  }
+
   private async registerFailedLogin(
     userId: number,
     currentCount: number,

@@ -54,6 +54,38 @@ export class UserRepository {
     });
   }
 
+  /** Just what sign-in needs — one query, no profile / manager joins. */
+  public findForLogin(email: string) {
+    return this.prisma.user.findFirst({
+      where: { email: email.toLowerCase(), deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        status: true,
+        passwordHash: true,
+        failedLoginCount: true,
+        lockedUntil: true,
+        permissionsCustomized: true,
+      },
+    });
+  }
+
+  /** Stamps a successful sign-in; `passwordHash` upgrades an older hash. */
+  public async recordLogin(id: number, passwordHash?: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        lastLoginAt: new Date(),
+        failedLoginCount: 0,
+        lockedUntil: null,
+        ...(passwordHash ? { passwordHash } : {}),
+      },
+      select: { id: true },
+    });
+  }
+
   public findById(id: number): Promise<UserWithProfile | null> {
     return this.prisma.user.findFirst({
       where: { id, deletedAt: null },

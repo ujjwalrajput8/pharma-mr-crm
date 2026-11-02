@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge, Card, CardHeader, EmptyState, StatTile } from '@/components/ui/Page';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { useAuth } from '@/store/AuthContext';
 import { ATTENDANCE_STATUS_META, WORK_TYPE_LABEL, type AttendanceMarkStatus, type WorkType } from '@/services/attendance.service';
 import { myDayApi } from '@/services/myday.service';
@@ -75,11 +75,7 @@ export function MyDayPage() {
       </div>
 
       {snapshotQuery.isLoading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-32 w-full" />
-        </div>
+        <BrandLoader className="py-16" />
       ) : (
         <>
           {/* ── Context banners ────────────────────────────────────────────── */}
