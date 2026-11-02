@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/store/AuthContext';
 import { useTheme } from '@/store/ThemeContext';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Page';
@@ -246,9 +247,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                   </div>
 
                   {notificationsQuery.isLoading ? (
-                    <div className="px-4 py-8 text-center text-xs text-[var(--color-muted)]">
-                      Loading…
-                    </div>
+                    <BrandLoader size="sm" className="py-8" />
                   ) : (feed?.items.length ?? 0) === 0 ? (
                     <div className="px-4 py-8 text-center">
                       <BellOff size={20} className="mx-auto text-[var(--color-muted)]" />

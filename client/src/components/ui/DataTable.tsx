@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { cn } from '@/utils/cn';
 import type { SortDir } from '@/hooks/useClientTable';
 
@@ -82,14 +83,8 @@ export function DataTable({
         <tbody className="divide-y divide-[var(--color-border)]">
           {loading ? (
             <tr>
-              <td
-                colSpan={normalized.length}
-                className="px-4 py-16 text-center text-sm text-[var(--color-muted)]"
-              >
-                <div className="flex flex-col items-center justify-center gap-2">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
-                  <span className="text-xs font-medium">Loading data…</span>
-                </div>
+              <td colSpan={normalized.length} className="px-4 py-14">
+                <BrandLoader label="Loading data" />
               </td>
             </tr>
           ) : null}

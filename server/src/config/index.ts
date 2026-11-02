@@ -38,7 +38,9 @@ const envSchema = z.object({
   CORS_ORIGIN: z
     .string()
     .default('http://localhost:5173,https://pharma-mr-crm-1.onrender.com'),
-  BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(15).default(12),
+  // 10 is the bcrypt floor OWASP accepts; each step up doubles every sign-in's
+  // CPU time, which on a 0.1-CPU host is seconds per login.
+  BCRYPT_SALT_ROUNDS: z.coerce.number().int().min(10).max(15).default(10),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(900000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
   ADMIN_EMAIL: z.string().email().optional(),

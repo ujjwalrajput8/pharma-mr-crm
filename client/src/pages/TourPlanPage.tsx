@@ -26,7 +26,7 @@ import { Modal, FormSection } from '@/components/ui/Modal';
 import { MonthCalendar, type MonthCalendarCell } from '@/components/ui/MonthCalendar';
 import { Alert, Badge, Card, DetailRow, EmptyState, PageHeader } from '@/components/ui/Page';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
@@ -648,11 +648,7 @@ function ManagerView({ mode }: { mode: 'inbox' | 'team' }) {
 
       <Card>
         {listQuery.isLoading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
+          <BrandLoader className="py-14" />
         ) : rows.length === 0 ? (
           <EmptyState
             title={mode === 'inbox' ? 'Inbox is clear' : 'No plans for this filter'}
@@ -738,11 +734,7 @@ function ManagerView({ mode }: { mode: 'inbox' | 'team' }) {
       >
         {error ? <Alert message={error} /> : null}
         {detailQuery.isLoading ? (
-          <div className="space-y-2">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 w-full" />
-            ))}
-          </div>
+          <BrandLoader className="py-10" />
         ) : detail ? (
           <div className="space-y-4">
             {detail.remark ? (

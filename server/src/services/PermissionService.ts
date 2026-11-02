@@ -1,3 +1,4 @@
+import type { Role } from '@prisma/client';
 import { AppRoles } from '../constants';
 import {
   DEFAULT_ADMIN_PERMISSIONS,
@@ -61,9 +62,17 @@ export class PermissionService {
   public async resolveForUser(userId: number): Promise<string[]> {
     const user = await this.users.findById(userId);
     if (!user) return [];
+    return this.resolveFor(user);
+  }
 
+  /** Same as `resolveForUser` when the caller already holds the user row — saves a lookup. */
+  public async resolveFor(user: {
+    id: number;
+    role: Role;
+    permissionsCustomized: boolean;
+  }): Promise<string[]> {
     if (user.permissionsCustomized) {
-      const custom = await this.permissions.listUserPermissions(userId);
+      const custom = await this.permissions.listUserPermissions(user.id);
       return this.ensureProfile(custom);
     }
 

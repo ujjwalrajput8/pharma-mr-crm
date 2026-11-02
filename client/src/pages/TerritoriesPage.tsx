@@ -16,7 +16,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Field';
 import { Modal, FormSection } from '@/components/ui/Modal';
 import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
-import { Skeleton } from '@/components/ui/Skeleton';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { useToast } from '@/components/ui/Toast';
 import {
   TERRITORY_CHILD_OF,
@@ -199,11 +199,7 @@ export function TerritoriesPage() {
 
       <Card>
         {treeQuery.isLoading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full" />
-            ))}
-          </div>
+          <BrandLoader className="py-14" />
         ) : rows.length === 0 ? (
           <EmptyState
             title="No territories yet"

@@ -29,4 +29,13 @@ export class PasswordService {
   public async compare(plain: string, hash: string): Promise<boolean> {
     return bcrypt.compare(plain, hash);
   }
+
+  /** True when `hash` was made with a different cost than the current setting. */
+  public needsRehash(hash: string): boolean {
+    try {
+      return bcrypt.getRounds(hash) !== this.saltRounds;
+    } catch {
+      return false;
+    }
+  }
 }
