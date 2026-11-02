@@ -54,9 +54,8 @@ export class DoctorController {
 
   public import = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
-    const dto = req.body as ImportDoctorsDto;
-    const result = await this.importer.import(dto, actor.id);
-    ApiResponse.success(res, result, dto.dryRun ? 'Import preview ready' : 'Doctors imported');
+    const result = await this.importer.import(req.body as ImportDoctorsDto, actor.id);
+    ApiResponse.success(res, result, 'Doctors imported');
   };
 
   public update = async (req: Request, res: Response): Promise<void> => {

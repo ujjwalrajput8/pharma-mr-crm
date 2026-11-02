@@ -45,13 +45,9 @@ export const assignMrSchema = z.object({
 
 export const DOCTOR_IMPORT_MAX_ROWS = 2000;
 
-/** Bulk create / update of doctors from an MSL spreadsheet. */
+/** Adds doctors from an MSL spreadsheet; same name + area as an existing doctor is skipped. */
 export const importDoctorsSchema = z.object({
-  /** Defaults to a preview so a bare call can never write. */
-  dryRun: z.boolean().default(true),
   fileName: z.string().max(255).optional(),
-  /** MR every doctor in the file is assigned to; omit to leave assignments alone. */
-  mrId: idSchema.optional(),
   rows: z
     .array(
       z.object({
