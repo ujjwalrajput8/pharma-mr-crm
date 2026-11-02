@@ -29,7 +29,7 @@ export interface Territory {
   geofenceRadiusM: number | null;
   parentId: number | null;
   parent: { id: number; name: string; type: string } | null;
-  counts: { children: number; users: number; doctors: number };
+  counts: { children: number; users: number };
 }
 
 export interface TerritoryTreeNode extends Territory {

@@ -360,7 +360,6 @@ model Territory {
   parent   Territory?  @relation("TerritoryTree", fields: [parentId], references: [id], onDelete: SetNull)
   children Territory[] @relation("TerritoryTree")
   users    User[]
-  doctors  Doctor[]
   chemists MedicalStore[]
   tourPlanDays TourPlanDay[]
   holidays Holiday[]
@@ -376,6 +375,7 @@ model Territory {
 
 /// Fields follow the company MSL sheet: MSL No · Area (HQ/EX) · Doctor's Name ·
 /// Mobile No · MSL Class · Speciality · Address · Email ID · Birthday · Anniversary.
+/// The old form's columns were dropped in 20261102140000_drop_legacy_doctor_columns.
 model Doctor {
   id             Int             @id @default(autoincrement())
   /// MSL (must-see list) number — the doctor's code on the company list.
@@ -393,33 +393,12 @@ model Doctor {
   anniversary    DateTime?       @db.Date
   status         RecordStatus    @default(ACTIVE)
 
-  /// Legacy columns from the old doctor form — no longer read or written by the
-  /// app, kept so existing data is not lost.
-  degree        String?
-  regNo         String?
-  hospital      String?
-  clinic        String?
-  addressLine1  String?
-  addressLine2  String?
-  city          String?
-  state         String?
-  pincode       String?
-  latitude      Float?
-  longitude     Float?
-  territoryId   Int?
-  visitFreqPm   Int?
-  visitingDays  String?
-  preferredTime String?
-  notes         String?
-  approvedBy    Int?
-
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   createdBy Int?
   updatedBy Int?
   deletedAt DateTime?
 
-  territory     Territory?         @relation(fields: [territoryId], references: [id], onDelete: SetNull)
   assignments   DoctorAssignment[]
   appointments  Appointment[]
   visits        Visit[]
@@ -431,7 +410,6 @@ model Doctor {
   @@index([fullName])
   @@index([mslNo])
   @@index([area])
-  @@index([territoryId])
   @@index([status])
   @@index([deletedAt])
   @@map("doctors")
