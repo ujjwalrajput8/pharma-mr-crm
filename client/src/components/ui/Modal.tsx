@@ -1,7 +1,10 @@
-import { useEffect, type ReactNode, type ComponentType } from 'react';
+import { useEffect, useRef, type ReactNode, type ComponentType } from 'react';
 import { X } from 'lucide-react';
 import { Button, ButtonRow } from '@/components/ui/Button';
 import { cn } from '@/utils/cn';
+
+/** Dialogs currently open, innermost last — Escape and the scroll lock follow it. */
+const openDialogs: object[] = [];
 
 interface ModalProps {
   open: boolean;
@@ -35,18 +38,31 @@ export function Modal({
   footer,
   bare = false,
 }: ModalProps) {
+  // Kept in a ref so a parent re-render (new onClose identity) doesn't re-run
+  // the effect below and move this dialog to the top of the stack.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!open) return;
+    const token = {};
+    openDialogs.push(token);
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      // A dialog opened on top of another one: Escape closes only the top one.
+      if (event.key === 'Escape' && openDialogs[openDialogs.length - 1] === token) {
+        onCloseRef.current();
+      }
     };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      openDialogs.splice(openDialogs.indexOf(token), 1);
+      if (openDialogs.length === 0) document.body.style.overflow = '';
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
