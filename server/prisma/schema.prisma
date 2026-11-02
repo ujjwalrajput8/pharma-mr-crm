@@ -37,10 +37,11 @@ enum TerritoryType {
   BEAT
 }
 
-enum DoctorCategory {
-  A
-  B
-  C
+/// Where a doctor's area sits relative to the MR's headquarter: HQ, ex-HQ or out-station.
+enum DoctorAreaType {
+  HQ
+  EX
+  OS
 }
 
 enum ChemistType {
@@ -372,33 +373,44 @@ model Territory {
 
 // ─── Masters ─────────────────────────────────────────────────────────────────
 
+/// Fields follow the company MSL sheet: MSL No · Area (HQ/EX) · Doctor's Name ·
+/// Mobile No · MSL Class · Speciality · Address · Email ID · Birthday · Anniversary.
 model Doctor {
   id             Int             @id @default(autoincrement())
+  /// MSL (must-see list) number — the doctor's code on the company list.
+  mslNo          String?
+  area           String?
+  areaType       DoctorAreaType?
   fullName       String
-  specialization String?
-  degree         String?
-  regNo          String?
-  category       DoctorCategory  @default(B)
-  hospital       String?
-  clinic         String?
-  email          String?
   phone          String?
-  addressLine1   String?
-  addressLine2   String?
-  city           String?
-  state          String?
-  pincode        String?
-  latitude       Float?
-  longitude      Float?
-  territoryId    Int?
-  visitFreqPm    Int?
-  visitingDays   String?
-  preferredTime  String?
+  /// Free text so a sheet's own classes (A / B / C / CORE …) import as-is.
+  mslClass       String?
+  specialization String?
+  address        String?
+  email          String?
   birthday       DateTime?       @db.Date
   anniversary    DateTime?       @db.Date
-  notes          String?
   status         RecordStatus    @default(ACTIVE)
-  approvedBy     Int?
+
+  /// Legacy columns from the old doctor form — no longer read or written by the
+  /// app, kept so existing data is not lost.
+  degree        String?
+  regNo         String?
+  hospital      String?
+  clinic        String?
+  addressLine1  String?
+  addressLine2  String?
+  city          String?
+  state         String?
+  pincode       String?
+  latitude      Float?
+  longitude     Float?
+  territoryId   Int?
+  visitFreqPm   Int?
+  visitingDays  String?
+  preferredTime String?
+  notes         String?
+  approvedBy    Int?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -415,8 +427,8 @@ model Doctor {
   tourPlanCalls TourPlanCall[]
 
   @@index([fullName])
-  @@index([city])
-  @@index([category])
+  @@index([mslNo])
+  @@index([area])
   @@index([territoryId])
   @@index([status])
   @@index([deletedAt])

@@ -6,7 +6,7 @@ import type {
   ListDoctorsQueryDto,
   UpdateDoctorDto,
 } from '../dto/doctor.dto';
-import { ForbiddenError, NotFoundError } from '../errors/AppError';
+import { ConflictError, ForbiddenError, NotFoundError } from '../errors/AppError';
 import { DoctorRepository } from '../repositories/DoctorRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import type { AuthUser } from '../types/auth.types';
@@ -219,10 +219,12 @@ export class DoctorService {
 
   public async create(dto: CreateDoctorDto, actor: AuthUser) {
     this.assertAdmin(actor);
+    await this.assertMslNoFree(dto.mslNo);
 
     const { mrId, birthday, anniversary, ...rest } = dto;
     const doctor = await this.doctors.create({
       ...rest,
+      ...this.normalizeMslClass(rest.mslClass),
       ...this.toDateColumns({ birthday, anniversary }),
       createdBy: actor.id,
       updatedBy: actor.id,
@@ -238,10 +240,12 @@ export class DoctorService {
   public async update(id: number, dto: UpdateDoctorDto, actor: AuthUser) {
     this.assertAdmin(actor);
     await this.requireAccessible(id, actor);
+    await this.assertMslNoFree(dto.mslNo, id);
 
     const { mrId, birthday, anniversary, ...rest } = dto;
     await this.doctors.update(id, {
       ...rest,
+      ...this.normalizeMslClass(rest.mslClass),
       ...this.toDateColumns({ birthday, anniversary }),
       updatedBy: actor.id,
     });
@@ -301,6 +305,21 @@ export class DoctorService {
     }
   }
 
+  /** MSL No identifies a doctor (the bulk import matches on it), so it must be unique. */
+  private async assertMslNoFree(mslNo: string | null | undefined, exceptId?: number): Promise<void> {
+    if (!mslNo?.trim()) return;
+    const holder = await this.doctors.findByMslNo(mslNo.trim());
+    if (holder && holder.id !== exceptId) {
+      throw new ConflictError(`MSL No ${mslNo.trim()} is already used by ${holder.fullName}`);
+    }
+  }
+
+  /** "a" and "A" are the same class. */
+  private normalizeMslClass(mslClass: string | null | undefined): { mslClass?: string | null } {
+    if (mslClass === undefined) return {};
+    return { mslClass: mslClass?.trim().toUpperCase() || null };
+  }
+
   /** `YYYY-MM-DD` → storage form; null clears, undefined is left out. */
   private toDateColumns(
     dates: Record<'birthday' | 'anniversary', string | null | undefined>,
@@ -318,22 +337,17 @@ export class DoctorService {
   private toPublic(doctor: DoctorWithAssignments) {
     return {
       id: doctor.id,
+      mslNo: doctor.mslNo,
+      area: doctor.area,
+      areaType: doctor.areaType,
       fullName: doctor.fullName,
-      specialization: doctor.specialization,
-      hospital: doctor.hospital,
-      clinic: doctor.clinic,
-      email: doctor.email,
       phone: doctor.phone,
-      addressLine1: doctor.addressLine1,
-      addressLine2: doctor.addressLine2,
-      city: doctor.city,
-      state: doctor.state,
-      pincode: doctor.pincode,
-      visitingDays: doctor.visitingDays,
-      preferredTime: doctor.preferredTime,
+      mslClass: doctor.mslClass,
+      specialization: doctor.specialization,
+      address: doctor.address,
+      email: doctor.email,
       birthday: doctor.birthday ? formatDateOnly(doctor.birthday) : null,
       anniversary: doctor.anniversary ? formatDateOnly(doctor.anniversary) : null,
-      notes: doctor.notes,
       status: doctor.status,
       assignedMrs:
         doctor.assignments?.map((assignment) => ({

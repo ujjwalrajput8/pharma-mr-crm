@@ -39,6 +39,16 @@ export class DoctorRepository {
     return this.prisma.doctor.findFirst({ where: { id, deletedAt: null } });
   }
 
+  public findByMslNo(mslNo: string): Promise<Doctor | null> {
+    return this.prisma.doctor.findFirst({
+      where: { mslNo: { equals: mslNo, mode: 'insensitive' }, deletedAt: null },
+    });
+  }
+
+  public getPrisma() {
+    return this.prisma;
+  }
+
   public findByIdWithAssignments(id: number) {
     return this.prisma.doctor.findFirst({
       where: { id, deletedAt: null },
@@ -83,10 +93,10 @@ export class DoctorRepository {
         ? {
             OR: [
               { fullName: { contains: params.search, mode: 'insensitive' } },
+              { mslNo: { contains: params.search, mode: 'insensitive' } },
               { specialization: { contains: params.search, mode: 'insensitive' } },
-              { hospital: { contains: params.search, mode: 'insensitive' } },
-              { clinic: { contains: params.search, mode: 'insensitive' } },
-              { city: { contains: params.search, mode: 'insensitive' } },
+              { area: { contains: params.search, mode: 'insensitive' } },
+              { phone: { contains: params.search } },
             ],
           }
         : {}),
@@ -113,6 +123,36 @@ export class DoctorRepository {
     ]);
 
     return { items, total };
+  }
+
+  /** Same as `assignMr`, for many doctors in three statements (bulk import). */
+  public async assignMrToMany(
+    doctorIds: number[],
+    mrId: number,
+    actorId: number,
+    client: Prisma.TransactionClient = this.prisma,
+  ): Promise<void> {
+    if (doctorIds.length === 0) return;
+    const now = new Date();
+    await client.doctorAssignment.updateMany({
+      where: { doctorId: { in: doctorIds }, isActive: true, deletedAt: null },
+      data: { isActive: false, unassignedAt: now, updatedBy: actorId },
+    });
+    await client.doctorAssignment.createMany({
+      data: doctorIds.map((doctorId) => ({
+        doctorId,
+        mrId,
+        isActive: true,
+        createdBy: actorId,
+        updatedBy: actorId,
+      })),
+      skipDuplicates: true,
+    });
+    // Pairs from an earlier, ended assignment were skipped above; bring them back.
+    await client.doctorAssignment.updateMany({
+      where: { doctorId: { in: doctorIds }, mrId },
+      data: { isActive: true, unassignedAt: null, assignedAt: now, deletedAt: null, updatedBy: actorId },
+    });
   }
 
   public async assignMr(doctorId: number, mrId: number, actorId: number): Promise<void> {

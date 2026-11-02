@@ -99,7 +99,7 @@ export function InvoiceCreateModal({
       return (doctorsQuery.data ?? []).map((doctor) => ({
         value: String(doctor.id),
         label: doctor.fullName,
-        meta: [doctor.specialization, doctor.city].filter(Boolean).join(' · ') || undefined,
+        meta: [doctor.specialization, doctor.area].filter(Boolean).join(' · ') || undefined,
       }));
     }
     return (storesQuery.data ?? []).map((store) => ({

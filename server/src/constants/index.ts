@@ -54,6 +54,15 @@ export const RecordStatuses = {
 
 export type RecordStatus = (typeof RecordStatuses)[keyof typeof RecordStatuses];
 
+/** HQ, ex-HQ or out-station — the "HQ/EX" half of a doctor's MSL area. */
+export const DoctorAreaTypes = {
+  HQ: 'HQ',
+  EX: 'EX',
+  OS: 'OS',
+} as const;
+
+export type DoctorAreaType = (typeof DoctorAreaTypes)[keyof typeof DoctorAreaTypes];
+
 export const StockTxnTypes = {
   OPENING: 'OPENING',
   RECEIPT: 'RECEIPT',

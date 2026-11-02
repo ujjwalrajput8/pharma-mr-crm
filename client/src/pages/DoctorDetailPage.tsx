@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { DataTable, Td } from '@/components/ui/DataTable';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { InvoiceStatusBadge } from '@/components/sales/InvoiceStatusBadge';
-import { doctorsApi } from '@/services/doctors.service';
+import { DOCTOR_AREA_TYPE_LABEL, doctorsApi, formatDoctorArea } from '@/services/doctors.service';
 import { invoicesApi } from '@/services/invoices.service';
 import { formatINR } from '@/utils/currency';
 import { formatDisplayDate } from '@/utils/datetime';
@@ -81,7 +81,11 @@ export function DoctorDetailPage() {
     <div className="space-y-5">
       <PageHeader
         title={profile.fullName}
-        description={[profile.specialization, profile.hospital || profile.clinic, profile.city]
+        description={[
+          profile.mslNo ? `MSL ${profile.mslNo}` : null,
+          profile.specialization,
+          formatDoctorArea(profile),
+        ]
           .filter(Boolean)
           .join(' · ')}
         actions={
@@ -127,11 +131,20 @@ export function DoctorDetailPage() {
           <Card className="space-y-3 p-5">
             <h3 className="font-semibold text-[var(--color-ink)]">Doctor Profile</h3>
             <dl className="space-y-2 text-sm">
-              <Row label="Phone" value={profile.phone} />
-              <Row label="Email" value={profile.email} />
-              <Row label="City" value={profile.city} />
-              <Row label="Visiting days" value={profile.visitingDays} />
-              <Row label="Preferred time" value={profile.preferredTime} />
+              <Row label="MSL No" value={profile.mslNo} />
+              <Row
+                label="Area"
+                value={
+                  [profile.area, profile.areaType ? DOCTOR_AREA_TYPE_LABEL[profile.areaType] : null]
+                    .filter(Boolean)
+                    .join(' · ') || null
+                }
+              />
+              <Row label="MSL Class" value={profile.mslClass} />
+              <Row label="Speciality" value={profile.specialization} />
+              <Row label="Mobile No" value={profile.phone} />
+              <Row label="Email ID" value={profile.email} />
+              <Row label="Address" value={profile.address} />
               <Row
                 label="Birthday"
                 value={profile.birthday ? formatDisplayDate(profile.birthday) : null}

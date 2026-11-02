@@ -26,10 +26,10 @@ const dayInclude = {
         select: {
           id: true,
           fullName: true,
-          category: true,
+          mslClass: true,
           specialization: true,
           phone: true,
-          city: true,
+          area: true,
         },
       },
       chemist: { select: { id: true, name: true, phone: true, city: true } },
@@ -51,10 +51,10 @@ export interface PublicTourPlanCall {
   doctor: {
     id: number;
     fullName: string;
-    category: string;
+    mslClass: string | null;
     specialization: string | null;
     phone: string | null;
-    city: string | null;
+    area: string | null;
   } | null;
   chemist: { id: number; name: string; phone: string | null; city: string | null } | null;
 }
@@ -496,10 +496,10 @@ export class TourPlanService {
           ? {
               id: call.doctor.id,
               fullName: call.doctor.fullName,
-              category: call.doctor.category,
+              mslClass: call.doctor.mslClass,
               specialization: call.doctor.specialization,
               phone: call.doctor.phone,
-              city: call.doctor.city,
+              area: call.doctor.area,
             }
           : null,
         chemist: call.chemist

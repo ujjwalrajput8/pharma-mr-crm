@@ -9,10 +9,10 @@ export interface TourPlanCall {
   doctor: {
     id: number;
     fullName: string;
-    category: string;
+    mslClass: string | null;
     specialization: string | null;
     phone: string | null;
-    city: string | null;
+    area: string | null;
   } | null;
   chemist: { id: number; name: string; phone: string | null; city: string | null } | null;
 }

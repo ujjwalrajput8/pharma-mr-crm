@@ -3,6 +3,7 @@ import { DoctorController } from '../controllers/DoctorController';
 import {
   assignMrSchema,
   createDoctorSchema,
+  importDoctorsSchema,
   listDoctorsQuerySchema,
   updateDoctorSchema,
 } from '../dto/doctor.dto';
@@ -26,6 +27,12 @@ router.post(
   authorize(AppRoles.ADMIN),
   validateRequest(createDoctorSchema),
   asyncHandler(controller.create),
+);
+router.post(
+  '/import',
+  authorize(AppRoles.ADMIN),
+  validateRequest(importDoctorsSchema),
+  asyncHandler(controller.import),
 );
 router.patch(
   '/:id',
