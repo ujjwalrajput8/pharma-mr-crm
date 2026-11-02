@@ -38,7 +38,9 @@ import {
 import { DashboardCharts } from '@/components/dashboard/DashboardCharts';
 import { GreetingHero } from '@/components/dashboard/GreetingHero';
 import { QuickAction } from '@/components/layout/QuickAction';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { Modal } from '@/components/ui/Modal';
 import { Card } from '@/components/ui/Page';
 import { NeedsAttention } from '@/components/dashboard/NeedsAttention';
 import { UpcomingOccasions } from '@/components/dashboard/UpcomingOccasions';
@@ -92,6 +94,7 @@ export function DashboardPage() {
   const [selectedVisit, setSelectedVisit] = useState<Visit | null>(null);
   const [completeFor, setCompleteFor] = useState<Appointment | null>(null);
   const [rescheduleFor, setRescheduleFor] = useState<Appointment | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const summaryQuery = useQuery({
     queryKey: ['dashboard', 'summary'],
@@ -101,13 +104,16 @@ export function DashboardPage() {
     queryKey: ['dashboard', 'trends', 30],
     queryFn: () => dashboardApi.trends(30),
   });
+  // The calendar opens on demand, so its data loads only then.
   const appointmentsQuery = useQuery({
     queryKey: ['appointments', 'calendar'],
     queryFn: () => appointmentsApi.list({ limit: 100 }),
+    enabled: calendarOpen,
   });
   const visitsQuery = useQuery({
     queryKey: ['visits', 'calendar'],
     queryFn: () => visitsApi.list(),
+    enabled: calendarOpen,
   });
   const doctorsQuery = useQuery({
     queryKey: ['doctors'],
@@ -238,6 +244,7 @@ export function DashboardPage() {
           Quick actions
         </p>
         <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap">
+          <QuickAction onClick={() => setCalendarOpen(true)} icon={CalendarDays} label="View Calendar" />
           {can('myday:own') ? <QuickAction to="/my-day" icon={Sun} label="My Day" /> : null}
           {can('approvals:team') ? (
             <QuickAction to="/approvals" icon={Inbox} label="Approvals" />
@@ -401,22 +408,33 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      <div>
-        <h3 className="mb-3 text-lg font-semibold text-[var(--color-ink)]">Schedule Calendar</h3>
-        <ErrorBoundary title="Calendar failed to load">
-          <DashboardCalendar
-            appointments={appointmentsQuery.data ?? []}
-            visits={visitsQuery.data ?? []}
-            showMrName={canManage}
-            onSelectSlot={(selection) => {
-              setSlot(selection);
-              setCreateOpen(true);
-            }}
-            onEventClick={onEventClick}
-            onAppointmentMove={(id, date, time) => moveMutation.mutate({ id, date, time })}
-          />
-        </ErrorBoundary>
-      </div>
+      {/* Rendered before the appointment / visit dialogs so those open on top of it. */}
+      <Modal
+        open={calendarOpen}
+        onClose={() => setCalendarOpen(false)}
+        title="Schedule Calendar"
+        description="Appointments and visits. Pick a day to book an appointment; drag a pending one to move it."
+        icon={CalendarDays}
+        className="max-w-6xl"
+      >
+        {appointmentsQuery.isLoading || visitsQuery.isLoading ? (
+          <BrandLoader className="py-16" label="Loading calendar" />
+        ) : (
+          <ErrorBoundary title="Calendar failed to load">
+            <DashboardCalendar
+              appointments={appointmentsQuery.data ?? []}
+              visits={visitsQuery.data ?? []}
+              showMrName={canManage}
+              onSelectSlot={(selection) => {
+                setSlot(selection);
+                setCreateOpen(true);
+              }}
+              onEventClick={onEventClick}
+              onAppointmentMove={(id, date, time) => moveMutation.mutate({ id, date, time })}
+            />
+          </ErrorBoundary>
+        )}
+      </Modal>
 
       <AppointmentFormDialog
         open={createOpen}
