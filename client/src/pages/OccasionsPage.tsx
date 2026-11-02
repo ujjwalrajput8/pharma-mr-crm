@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Stethoscope, Users } from 'lucide-react';
 import { OccasionRow } from '@/components/dashboard/UpcomingOccasions';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { Input, Select } from '@/components/ui/Field';
 import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { Tabs, type TabItem } from '@/components/ui/Tabs';
@@ -139,7 +140,9 @@ export function OccasionsPage() {
       </div>
 
       {query.isLoading ? (
-        <Card className="p-8 text-center text-sm text-[var(--color-muted)]">Loading…</Card>
+        <Card className="p-10">
+          <BrandLoader label="Loading occasions…" />
+        </Card>
       ) : groups.length === 0 ? (
         <Card>
           <EmptyState

@@ -31,6 +31,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import { getApiErrorMessage } from '@/api/client';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { DatePicker } from '@/components/ui/DatePicker';
@@ -303,9 +304,8 @@ export function EmployeeProfilePage() {
 
   if (profileQuery.isLoading) {
     return (
-      <Card className="p-12 text-center">
-        <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent" />
-        <p className="mt-3 text-sm text-[var(--color-muted)]">Loading employee record…</p>
+      <Card className="p-12">
+        <BrandLoader label="Loading employee record…" />
       </Card>
     );
   }

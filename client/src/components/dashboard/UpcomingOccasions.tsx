@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { BriefcaseBusiness, Cake, ChevronRight, Heart, Phone } from 'lucide-react';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { Badge, Card } from '@/components/ui/Page';
 import { dashboardApi, type Occasion, type OccasionKind } from '@/services/dashboard.service';
 import { parseIsoDate } from '@/utils/datetime';
@@ -154,7 +155,7 @@ export function UpcomingOccasions() {
       </div>
 
       {query.isLoading ? (
-        <p className="px-4 py-6 text-center text-xs text-[var(--color-muted)]">Loading…</p>
+        <BrandLoader size="sm" className="py-6" />
       ) : query.isError ? (
         <p className="px-4 py-6 text-center text-xs text-[var(--color-danger)]">
           Could not load upcoming occasions.

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { Button } from '@/components/ui/Button';
 import { DataTable, Td } from '@/components/ui/DataTable';
 import { Card, EmptyState, PageHeader } from '@/components/ui/Page';
@@ -43,7 +44,11 @@ export function MedicineDetailPage() {
   }, [data]);
 
   if (detailsQuery.isLoading) {
-    return <Card className="p-8 text-sm text-[var(--color-muted)]">Loading medicine details…</Card>;
+    return (
+      <Card className="p-12">
+        <BrandLoader label="Loading medicine details…" />
+      </Card>
+    );
   }
 
   if (detailsQuery.isError || !data || !profile) {

@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
+import { BrandLoader } from '@/components/ui/BrandLoader';
 import { useToast } from '@/components/ui/Toast';
 import { DataTable, Td } from '@/components/ui/DataTable';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
@@ -73,7 +74,11 @@ export function DoctorDetailPage() {
   }, [data, profile]);
 
   if (detailsQuery.isLoading) {
-    return <Card className="p-8 text-sm text-[var(--color-muted)]">Loading doctor details…</Card>;
+    return (
+      <Card className="p-12">
+        <BrandLoader label="Loading doctor details…" />
+      </Card>
+    );
   }
 
   if (detailsQuery.isError || !data || !profile) {
