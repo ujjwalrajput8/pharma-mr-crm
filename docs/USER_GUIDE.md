@@ -295,6 +295,11 @@ The doctor list follows the company's MSL sheet. Each doctor has these fields: *
 
 - **MSL No:** the system gives every new doctor the next number — JL-001, JL-002, JL-003 and so on. Nobody types or changes it, so two doctors can never have the same MSL No.
 - **List:** sorted by MSL No, smallest first. Search by MSL No, name, mobile, area or speciality. MRs see only the doctors assigned to them.
+- **Assign doctors to an MR (Admin):** doctors added by Excel import have no MR, so they show an orange **Unassigned** label.
+    - **Many at once:** pick **Unassigned only** in the filter next to the search box, click **Select all** (or tick the doctors you want), choose the MR and click **Assign**. **Unassign** takes the ticked doctors off their MR.
+    - **One doctor:** click **Edit** and choose the MR under **MR Assignment**. Choose "Unassigned" to take the doctor off their MR.
+    - An MR sees a doctor in their list (and in My Day, Appointments and Tour Plan) only after the doctor is assigned to them.
+    - The same filter also shows the doctors of any one MR.
 - **Favourite (star):** every doctor has a star. Click it — the star turns yellow and the doctor moves to the **top of the list**. Each user has their own favourites.
 - **Actions:** the blue eye button **Open** (the doctor's full file), the amber pencil button **Edit**, and the red bin button **Delete** (after a confirmation).
 - **Add Doctor (Admin):** fill in the fields above (MSL No is added for you when you save) and, if you want, assign an MR. If a doctor with the **same name and same area** already exists, the app shows an error so you do not create a duplicate.

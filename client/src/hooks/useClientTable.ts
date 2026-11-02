@@ -128,6 +128,8 @@ export function useClientTable<T>({
     setPageSize: changePageSize,
     pageSizeOptions,
     rows,
+    /** Every row that passes the search, in sort order — not just this page. */
+    allRows: sorted,
     filteredTotal: total,
     totalAll: data.length,
     totalPages,

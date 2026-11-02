@@ -203,6 +203,51 @@ export class DoctorRepository {
     });
   }
 
+  /** Same as `assignMr` for many doctors, in three statements whatever the count. */
+  public async assignMrToMany(doctorIds: number[], mrId: number, actorId: number): Promise<void> {
+    if (doctorIds.length === 0) return;
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.doctorAssignment.updateMany({
+        where: { doctorId: { in: doctorIds }, isActive: true, deletedAt: null },
+        data: { isActive: false, unassignedAt: now, updatedBy: actorId },
+      }),
+      this.prisma.doctorAssignment.createMany({
+        data: doctorIds.map((doctorId) => ({
+          doctorId,
+          mrId,
+          isActive: true,
+          createdBy: actorId,
+          updatedBy: actorId,
+        })),
+        skipDuplicates: true,
+      }),
+      // Pairs from an earlier, ended assignment were skipped above; bring them back.
+      this.prisma.doctorAssignment.updateMany({
+        where: { doctorId: { in: doctorIds }, mrId },
+        data: { isActive: true, unassignedAt: null, assignedAt: now, deletedAt: null, updatedBy: actorId },
+      }),
+    ]);
+  }
+
+  /** Takes the doctors off whichever MR they are with. */
+  public async unassignMany(doctorIds: number[], actorId: number): Promise<void> {
+    if (doctorIds.length === 0) return;
+    await this.prisma.doctorAssignment.updateMany({
+      where: { doctorId: { in: doctorIds }, isActive: true, deletedAt: null },
+      data: { isActive: false, unassignedAt: new Date(), updatedBy: actorId },
+    });
+  }
+
+  /** The ids in `ids` that are live doctors. */
+  public async existingIds(ids: number[]): Promise<number[]> {
+    const rows = await this.prisma.doctor.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
   /** Aggregated doctor workspace data for detail tabs. */
   public async getDetailBundle(doctorId: number) {
     const [appointments, visits, sampleTxns, visitProductGroups] = await Promise.all([
