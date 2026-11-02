@@ -219,7 +219,7 @@ export class DoctorService {
 
   public async create(dto: CreateDoctorDto, actor: AuthUser) {
     this.assertAdmin(actor);
-    await this.assertMslNoFree(dto.mslNo);
+    await this.assertNotDuplicate(dto.fullName, dto.area);
 
     const { mrId, birthday, anniversary, ...rest } = dto;
     const doctor = await this.doctors.create({
@@ -239,8 +239,14 @@ export class DoctorService {
 
   public async update(id: number, dto: UpdateDoctorDto, actor: AuthUser) {
     this.assertAdmin(actor);
-    await this.requireAccessible(id, actor);
-    await this.assertMslNoFree(dto.mslNo, id);
+    const current = await this.requireAccessible(id, actor);
+    if (dto.fullName !== undefined || dto.area !== undefined) {
+      await this.assertNotDuplicate(
+        dto.fullName ?? current.fullName,
+        dto.area !== undefined ? dto.area : current.area,
+        id,
+      );
+    }
 
     const { mrId, birthday, anniversary, ...rest } = dto;
     await this.doctors.update(id, {
@@ -305,12 +311,16 @@ export class DoctorService {
     }
   }
 
-  /** MSL No identifies a doctor (the bulk import matches on it), so it must be unique. */
-  private async assertMslNoFree(mslNo: string | null | undefined, exceptId?: number): Promise<void> {
-    if (!mslNo?.trim()) return;
-    const holder = await this.doctors.findByMslNo(mslNo.trim());
-    if (holder && holder.id !== exceptId) {
-      throw new ConflictError(`MSL No ${mslNo.trim()} is already used by ${holder.fullName}`);
+  /** Same name + same area is the same doctor — the rule the Excel import skips on. */
+  private async assertNotDuplicate(
+    fullName: string,
+    area: string | null | undefined,
+    exceptId?: number,
+  ): Promise<void> {
+    const duplicate = await this.doctors.findDuplicate(fullName, area, exceptId);
+    if (duplicate) {
+      const where = duplicate.area ? ` in ${duplicate.area}` : '';
+      throw new ConflictError(`${duplicate.fullName}${where} is already in the doctor list`);
     }
   }
 

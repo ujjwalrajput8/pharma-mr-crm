@@ -51,37 +51,17 @@ export function formatDoctorArea(doctor: Pick<Doctor, 'area' | 'areaType'>): str
   return [doctor.area, doctor.areaType].filter(Boolean).join(' · ') || null;
 }
 
-export interface DoctorImportRowResult {
-  rowNumber: number;
-  action: 'create' | 'update' | 'unchanged' | 'error';
-  doctorId: number | null;
-  doctorName: string | null;
-  mslNo: string | null;
-  matchedBy: 'mslNo' | 'mobile' | null;
-  changes: Array<{ field: string; from: string | null; to: string | null }>;
-  /** Cells that were skipped; the rest of the row still imports. */
-  warnings: string[];
-  errors: string[];
-}
-
-export interface DoctorImportResult {
-  dryRun: boolean;
-  summary: {
-    total: number;
-    create: number;
-    update: number;
-    unchanged: number;
-    error: number;
-    warning: number;
-  };
-  rows: DoctorImportRowResult[];
+export interface DoctorImportSummary {
+  total: number;
+  added: number;
+  /** Same name + area as a doctor already on the list, or as an earlier row. */
+  duplicates: number;
+  /** Rows without a usable doctor's name. */
+  invalid: number;
 }
 
 export interface DoctorImportPayload {
-  dryRun: boolean;
   fileName?: string;
-  /** MR every doctor in the file is assigned to. */
-  mrId?: number;
   rows: Array<{ rowNumber: number; values: Record<string, string | number> }>;
 }
 
@@ -192,8 +172,8 @@ export const doctorsApi = {
     return data.data;
   },
 
-  async importRows(payload: DoctorImportPayload): Promise<DoctorImportResult> {
-    const { data } = await api.post<ApiSuccess<DoctorImportResult>>('/doctors/import', payload, {
+  async importRows(payload: DoctorImportPayload): Promise<{ summary: DoctorImportSummary }> {
+    const { data } = await api.post<ApiSuccess<{ summary: DoctorImportSummary }>>('/doctors/import', payload, {
       // A couple of thousand rows run in one transaction on the server.
       timeout: 180_000,
     });

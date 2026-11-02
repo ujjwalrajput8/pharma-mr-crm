@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileSpreadsheet, Pencil, Plus } from 'lucide-react';
+import { Eye, FileSpreadsheet, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
@@ -93,6 +93,7 @@ export function DoctorsPage() {
   const { can } = useAuth();
   const isAdmin = can('doctors:manage');
   const toast = useToast();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +113,8 @@ export function DoctorsPage() {
     searchKeys: ['mslNo', 'fullName', 'phone', 'area', 'mslClass', 'specialization', 'email'],
     getSortValue: (row, key) =>
       key === 'mr' ? row.assignedMrs.map((mr) => mr.fullName).join(', ') : undefined,
-    initialSortKey: 'fullName',
+    // MSL order, the way the sheet reads; doctors without an MSL No go last.
+    initialSortKey: 'mslNo',
   });
 
   const mrsQuery = useQuery({
@@ -229,7 +231,7 @@ export function DoctorsPage() {
             { key: 'mslClass', label: 'Class', sortable: true },
             { key: 'specialization', label: 'Speciality', sortable: true },
             { key: 'mr', label: 'Assigned MR', sortable: true },
-            { key: 'actions', label: 'Actions' },
+            { key: 'actions', label: '', className: 'w-px' },
           ]}
           sortKey={table.sortKey}
           sortDir={table.sortDir}
@@ -249,7 +251,10 @@ export function DoctorsPage() {
           }
         >
           {table.rows.map((doctor) => (
-            <tr key={doctor.id} className="border-b border-[var(--color-border)] last:border-0">
+            <tr
+              key={doctor.id}
+              className="border-b border-[var(--color-border)] transition-colors last:border-0 hover:bg-[var(--color-bg)]/60"
+            >
               <Td className="font-mono">{doctor.mslNo ?? '—'}</Td>
               <Td>
                 <Link to={`/doctors/${doctor.id}`} className="font-medium text-[var(--color-primary)] hover:underline">
@@ -266,27 +271,41 @@ export function DoctorsPage() {
               <Td>{doctor.mslClass ? <Badge tone="primary">{doctor.mslClass}</Badge> : '—'}</Td>
               <Td>{doctor.specialization ?? '—'}</Td>
               <Td>{doctor.assignedMrs.map((mr) => mr.fullName).join(', ') || 'Unassigned'}</Td>
-              <Td>
-                <div className="flex flex-wrap gap-2">
-                  <Link to={`/doctors/${doctor.id}`}>
-                    <Button variant="secondary" size="sm">
-                      Open
-                    </Button>
-                  </Link>
+              <Td className="text-right whitespace-nowrap">
+                <div className="flex items-center justify-end gap-1">
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={`Open ${doctor.fullName}`}
+                    title="Open"
+                    className="hover:text-[var(--color-primary)]"
+                    onClick={() => navigate(`/doctors/${doctor.id}`)}
+                  >
+                    <Eye size={14} />
+                  </Button>
                   {isAdmin ? (
-                    <Button variant="secondary" size="sm" onClick={() => openEdit(doctor)}>
-                      <Pencil size={13} />
-                      Edit
-                    </Button>
-                  ) : null}
-                  {isAdmin ? (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => setDeleteTarget({ id: doctor.id, name: doctor.fullName })}
-                    >
-                      Delete
-                    </Button>
+                    <>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={`Edit ${doctor.fullName}`}
+                        title="Edit"
+                        className="hover:text-[var(--color-primary)]"
+                        onClick={() => openEdit(doctor)}
+                      >
+                        <Pencil size={13} />
+                      </Button>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label={`Delete ${doctor.fullName}`}
+                        title="Delete"
+                        className="hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
+                        onClick={() => setDeleteTarget({ id: doctor.id, name: doctor.fullName })}
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    </>
                   ) : null}
                 </div>
               </Td>
