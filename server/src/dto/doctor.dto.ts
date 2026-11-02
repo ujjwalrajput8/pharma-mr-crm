@@ -10,9 +10,11 @@ const optionalDate = z
   .nullable()
   .optional();
 
-/** Mirrors the MSL sheet's columns, in the sheet's order. */
+/**
+ * Mirrors the MSL sheet's columns, in the sheet's order — except MSL No, which
+ * the database assigns (JL-001 …) and nobody can set or change.
+ */
 export const createDoctorSchema = z.object({
-  mslNo: optionalText(40),
   area: optionalText(120),
   areaType: z
     .enum([DoctorAreaTypes.HQ, DoctorAreaTypes.EX, DoctorAreaTypes.OS])

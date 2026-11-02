@@ -378,8 +378,9 @@ model Territory {
 /// The old form's columns were dropped in 20261102140000_drop_legacy_doctor_columns.
 model Doctor {
   id             Int             @id @default(autoincrement())
-  /// MSL (must-see list) number — the doctor's code on the company list.
-  mslNo          String?
+  /// MSL (must-see list) number, assigned by the database — JL-001, JL-002, …
+  /// in the order doctors are added, never reused (20261102150000_doctor_msl_no_sequence).
+  mslNo          String          @unique @default(dbgenerated("next_doctor_msl_no()"))
   area           String?
   areaType       DoctorAreaType?
   fullName       String
@@ -408,7 +409,6 @@ model Doctor {
   favorites     DoctorFavorite[]
 
   @@index([fullName])
-  @@index([mslNo])
   @@index([area])
   @@index([status])
   @@index([deletedAt])

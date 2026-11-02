@@ -291,13 +291,14 @@ Managers get a default set of screens (see the table in section 1). To give one 
 
 ### Doctors
 
-The doctor list follows the company's MSL sheet. Each doctor has these fields: **MSL No**, **Area** with HQ / EX / Out-station, **Doctor's Name**, **Mobile No**, **MSL Class**, **Speciality**, **Address**, **Email ID**, **Birthday** and **Anniversary**.
+The doctor list follows the company's MSL sheet. Each doctor has these fields: **MSL No** (given by the system), **Area** with HQ / EX / Out-station, **Doctor's Name**, **Mobile No**, **MSL Class**, **Speciality**, **Address**, **Email ID**, **Birthday** and **Anniversary**.
 
+- **MSL No:** the system gives every new doctor the next number — JL-001, JL-002, JL-003 and so on. Nobody types or changes it, so two doctors can never have the same MSL No.
 - **List:** sorted by MSL No, smallest first. Search by MSL No, name, mobile, area or speciality. MRs see only the doctors assigned to them.
 - **Favourite (star):** every doctor has a star. Click it — the star turns yellow and the doctor moves to the **top of the list**. Each user has their own favourites.
 - **Actions:** the blue eye button **Open** (the doctor's full file), the amber pencil button **Edit**, and the red bin button **Delete** (after a confirmation).
-- **Add Doctor (Admin):** fill in the fields above and, if you want, assign an MR. If a doctor with the **same name and same area** already exists, the app shows an error so you do not create a duplicate.
-- **Import Excel (Admin):** click **Import Excel** and choose your MSL sheet. The columns should be: MYMSL NO, AREA-HQ/EX, DOCTOR'S NAME, MOBILE NO, MSLCLASS, SPECIALITY, ADDRESS, EMAIL ID, BIRTHDAY, ANNIVERSARY. The doctors are added as soon as you pick the file, and a message shows the result, for example "120 doctors added · 8 duplicates skipped". Doctors whose name and area are already in the list are skipped. A cell like "BORING ROAD-HQ" is read as Area = Boring Road and type = HQ.
+- **Add Doctor (Admin):** fill in the fields above (MSL No is added for you when you save) and, if you want, assign an MR. If a doctor with the **same name and same area** already exists, the app shows an error so you do not create a duplicate.
+- **Import Excel (Admin):** click **Import Excel** and choose your MSL sheet. The columns should be: AREA-HQ/EX, DOCTOR'S NAME, MOBILE NO, MSLCLASS, SPECIALITY, ADDRESS, EMAIL ID, BIRTHDAY, ANNIVERSARY. A MYMSL NO column can stay in the sheet, but it is ignored — each doctor gets a system MSL No. The doctors are added as soon as you pick the file, and a message shows the result, for example "120 doctors added · 8 duplicates skipped". Doctors whose name and area are already in the list are skipped. A cell like "BORING ROAD-HQ" is read as Area = Boring Road and type = HQ.
 - **Doctor's file (Open):** the top shows the name, MSL No, speciality and area, and an **Add to favourites** button. Below are tabs: **Overview** (profile and history), **Appointments**, **Visits**, **Medicines** (how often each medicine was discussed), **Sample History**, **Billing** (invoices) and **Reports**.
 
 ### Territories (Admin)

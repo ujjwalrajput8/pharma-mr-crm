@@ -1,8 +1,10 @@
 import { parseSpreadsheet, type ParsedSheet } from '@/utils/spreadsheetImport';
 
-/** Canonical import columns — the keys the API's doctor import endpoint reads. */
+/**
+ * Canonical import columns — the keys the API's doctor import endpoint reads.
+ * No MSL No: the system assigns it, so a sheet's MYMSL NO column is ignored.
+ */
 export const DOCTOR_IMPORT_FIELDS = [
-  'mslNo',
   'area',
   'areaType',
   'fullName',
@@ -19,7 +21,6 @@ export type DoctorImportField = (typeof DOCTOR_IMPORT_FIELDS)[number];
 
 /** Header spellings seen in MSL sheets ("DOCTOR'S NAME" → "doctorsname"). */
 const HEADER_ALIASES: Record<DoctorImportField, string[]> = {
-  mslNo: ['mymslno', 'mslno', 'msl', 'mymsl', 'mslnumber', 'mslcode', 'doctorcode', 'drcode'],
   area: ['areahqex', 'areahqexos', 'area', 'areaname', 'patch', 'town', 'city', 'place', 'locality'],
   areaType: ['hqex', 'hqexos', 'station', 'stationtype', 'areatype'],
   fullName: ['doctorsname', 'doctorname', 'drname', 'drsname', 'name', 'doctor', 'fullname', 'nameofdoctor'],
@@ -49,8 +50,8 @@ export function parseDoctorFile(file: File): Promise<ParsedDoctorFile> {
   return parseSpreadsheet(file, {
     aliases: HEADER_ALIASES,
     dateFields: DATE_FIELDS,
-    isHeader: (fields) => fields.includes('fullName') || fields.includes('mslNo'),
+    isHeader: (fields) => fields.includes('fullName'),
     headerHint:
-      'Could not find the header row. The first row should name the columns — at least "DOCTOR\'S NAME" or "MYMSL NO".',
+      'Could not find the header row. The first row should name the columns — at least "DOCTOR\'S NAME".',
   });
 }
