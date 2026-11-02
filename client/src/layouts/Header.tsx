@@ -410,8 +410,6 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       <ConfirmDialog
         open={logoutOpen}
         variant="logout"
-        title="Confirm Logout"
-        description="Are you sure you want to logout from your account?"
         loading={loggingOut}
         onClose={() => setLogoutOpen(false)}
         onConfirm={() => void confirmLogout()}

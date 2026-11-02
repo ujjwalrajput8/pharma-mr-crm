@@ -46,6 +46,7 @@ export function InvoiceDetailModal({
     enabled: invoiceId !== null,
   });
   const invoice = detailQuery.data;
+  const paymentRow = invoice?.payments.find((payment) => payment.id === paymentToDelete);
 
   async function refresh() {
     await Promise.all([
@@ -316,18 +317,22 @@ export function InvoiceDetailModal({
 
       <ConfirmDialog
         open={confirmCancel}
-        variant="generic"
+        badge="Cancel"
         title="Cancel this invoice?"
-        description={`${invoice?.invoiceNo ?? ''} will be marked CANCELLED and its sale lines removed from all reports.`}
+        description="It will be marked CANCELLED and its sale lines removed from all reports."
+        recordName={invoice?.invoiceNo}
+        recordContext={invoice?.party ? `Invoice · ${invoice.party.name}` : 'Invoice'}
         confirmLabel="Cancel invoice"
+        cancelLabel="Keep"
         loading={cancelMutation.isPending}
         onConfirm={() => cancelMutation.mutate()}
         onClose={() => setConfirmCancel(false)}
       />
       <ConfirmDialog
         open={paymentToDelete !== null}
-        title="Delete this payment?"
         description="The invoice's paid amount and status will be recalculated."
+        recordName={paymentRow ? `${formatINR(paymentRow.amount)} · ${paymentRow.mode.replace('_', ' ')}` : undefined}
+        recordContext={paymentRow ? `Payment · ${paymentRow.paymentDate}` : undefined}
         confirmLabel="Delete payment"
         loading={deletePaymentMutation.isPending}
         onConfirm={() => {

@@ -61,6 +61,48 @@ function directUrl(connectionString) {
   return url.toString();
 }
 
+/** Prisma's `migrate deploy` advisory-lock key. */
+const MIGRATE_LOCK_KEY = 72707369;
+
+/**
+ * A lock taken through the pooler can stay behind on a pooled server
+ * connection after the deploy that took it is gone; every later deploy then
+ * times out (P1002). Render runs one deploy at a time, so a session that holds
+ * the lock while idle — not running a statement — is such a leftover: end it.
+ * A session that is actively running a statement is left alone.
+ */
+async function releaseStaleMigrateLock(connectionString) {
+  const client = new Client({ connectionString });
+  await client.connect();
+  try {
+    const { rows } = await client.query(
+      `SELECT a.pid, a.state, a.state_change
+         FROM pg_locks l
+         JOIN pg_stat_activity a ON a.pid = l.pid
+        WHERE l.locktype = 'advisory' AND l.granted
+          AND l.classid = 0 AND l.objid = $1 AND l.objsubid = 1
+          AND a.pid <> pg_backend_pid()`,
+      [MIGRATE_LOCK_KEY],
+    );
+    if (rows.length === 0) return;
+    for (const row of rows) {
+      const since = row.state_change ? new Date(row.state_change).toISOString() : 'unknown';
+      if (row.state === 'active') {
+        log(`migrate lock held by pid ${row.pid} (running a statement since ${since}) — left alone`);
+        continue;
+      }
+      const { rows: result } = await client.query('SELECT pg_terminate_backend($1) AS ended', [row.pid]);
+      log(
+        `migrate lock held by pid ${row.pid} (${row.state} since ${since}) — ${
+          result[0]?.ended ? 'stale session ended' : 'could not end it'
+        }`,
+      );
+    }
+  } finally {
+    await client.end();
+  }
+}
+
 let prismaEnv = process.env;
 
 function runPrisma(args) {
@@ -147,6 +189,11 @@ async function main() {
   log(`migrations via: ${new URL(migrateUrl).hostname}`);
 
   await baselineIfNeeded(connectionString);
+
+  // Best effort: if this check fails, migrate deploy still runs and reports.
+  await releaseStaleMigrateLock(migrateUrl).catch((error) => {
+    log(`could not check the migrate lock: ${error.message}`);
+  });
 
   log('applying pending migrations');
   runPrisma(['migrate', 'deploy']);

@@ -13,6 +13,8 @@ interface ModalProps {
   children: ReactNode;
   className?: string;
   footer?: ReactNode;
+  /** No header bar or footer strip: the children draw the whole dialog (confirmations). */
+  bare?: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ export function Modal({
   children,
   className,
   footer,
+  bare = false,
 }: ModalProps) {
   useEffect(() => {
     if (!open) return;
@@ -58,6 +61,7 @@ export function Modal({
       <div
         role="dialog"
         aria-modal="true"
+        aria-label={bare ? title : undefined}
         className={cn(
           'relative z-10 flex max-h-[min(94vh,900px)] w-full max-w-lg flex-col overflow-hidden',
           'rounded-t-[26px] border border-[var(--color-border)] bg-[var(--color-surface)]',
@@ -70,53 +74,59 @@ export function Modal({
           <span className="h-1 w-9 rounded-full bg-[var(--color-border-strong)]" />
         </div>
 
-        <header className="flex shrink-0 items-start justify-between gap-4 px-5 pt-4 pb-4 sm:px-6 sm:pt-5">
-          <div className="flex min-w-0 items-start gap-3">
-            {Icon ? (
-              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary-soft)] text-[var(--color-primary)]">
-                <Icon size={17} />
-              </span>
-            ) : null}
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                {title ? (
-                  <h3 className="text-[15px] leading-tight font-bold tracking-[-0.015em] text-[var(--color-ink)] sm:text-base">
-                    {title}
-                  </h3>
-                ) : null}
-                {badge ? (
-                  <span className="rounded-full bg-[var(--color-primary-soft)] px-2 py-0.5 text-[10px] font-bold tracking-wide text-[var(--color-primary)] uppercase">
-                    {badge}
+        {bare ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        ) : (
+          <>
+            <header className="flex shrink-0 items-start justify-between gap-4 px-5 pt-4 pb-4 sm:px-6 sm:pt-5">
+              <div className="flex min-w-0 items-start gap-3">
+                {Icon ? (
+                  <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary-soft)] text-[var(--color-primary)]">
+                    <Icon size={17} />
                   </span>
                 ) : null}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {title ? (
+                      <h3 className="text-[15px] leading-tight font-bold tracking-[-0.015em] text-[var(--color-ink)] sm:text-base">
+                        {title}
+                      </h3>
+                    ) : null}
+                    {badge ? (
+                      <span className="rounded-full bg-[var(--color-primary-soft)] px-2 py-0.5 text-[10px] font-bold tracking-wide text-[var(--color-primary)] uppercase">
+                        {badge}
+                      </span>
+                    ) : null}
+                  </div>
+                  {description ? (
+                    <p className="mt-1 text-xs leading-relaxed text-[var(--color-muted)]">
+                      {description}
+                    </p>
+                  ) : null}
+                </div>
               </div>
-              {description ? (
-                <p className="mt-1 text-xs leading-relaxed text-[var(--color-muted)]">
-                  {description}
-                </p>
-              ) : null}
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-            aria-label="Close"
-            className="-mt-0.5 rounded-full text-[var(--color-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]"
-          >
-            <X size={16} />
-          </Button>
-        </header>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onClose}
+                aria-label="Close"
+                className="-mt-0.5 rounded-full text-[var(--color-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-ink)]"
+              >
+                <X size={16} />
+              </Button>
+            </header>
 
-        <div className="h-px shrink-0 bg-[var(--color-border)]" />
+            <div className="h-px shrink-0 bg-[var(--color-border)]" />
 
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
 
-        {footer ? (
-          <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-bg)]/60 px-5 py-3.5 backdrop-blur-sm sm:px-6">
-            <ButtonRow align="end">{footer}</ButtonRow>
-          </div>
-        ) : null}
+            {footer ? (
+              <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-bg)]/60 px-5 py-3.5 backdrop-blur-sm sm:px-6">
+                <ButtonRow align="end">{footer}</ButtonRow>
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );

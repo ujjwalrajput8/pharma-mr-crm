@@ -8,6 +8,7 @@ type Variant =
   | 'ghost'
   | 'danger'
   | 'warning'
+  | 'brand'
   | 'soft'
   | 'destructive'
   | 'outline';
@@ -37,6 +38,9 @@ const variants: Record<Variant, string> = {
     'bg-[var(--color-danger-soft)] text-[var(--color-danger)] border border-[var(--color-danger)]/20 hover:bg-[var(--color-danger)] hover:text-white hover:border-transparent active:scale-[0.985]',
   warning:
     'bg-[var(--color-warning-soft)] text-[var(--color-warning)] border border-[var(--color-warning)]/20 hover:bg-[var(--color-warning)] hover:text-white hover:border-transparent active:scale-[0.985]',
+  /** Jovance logo red — the confirm button of a delete dialog. */
+  brand:
+    'text-white border border-transparent bg-[var(--color-brand-red)] shadow-[0_1px_2px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-[var(--color-brand-red-hover)] active:scale-[0.985]',
   destructive: cn(
     'text-white border border-transparent',
     'bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-danger)_92%,white)_0%,var(--color-danger)_100%)]',

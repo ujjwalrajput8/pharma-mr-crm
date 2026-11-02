@@ -391,8 +391,9 @@ export function TerritoriesPage() {
 
       <ConfirmDialog
         open={Boolean(deleting)}
-        title={`Delete ${deleting?.name ?? ''}?`}
-        description="Deletion is blocked while child territories or employees still point here."
+        description="This action cannot be undone. Deletion is blocked while child territories or employees still point here."
+        recordName={deleting?.name}
+        recordContext={deleting ? `Territories · ${TERRITORY_TYPE_LABEL[deleting.type]}` : undefined}
         loading={deleteMutation.isPending}
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
         onClose={() => setDeleting(null)}

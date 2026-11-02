@@ -354,8 +354,8 @@ export function MedicinesPage() {
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         variant="delete"
-        title="Confirm Delete"
-        description={`Are you sure you want to delete medicine “${deleteTarget?.name}”?`}
+        recordName={deleteTarget?.name}
+        recordContext="Medicines"
         loading={deleteMutation.isPending}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}

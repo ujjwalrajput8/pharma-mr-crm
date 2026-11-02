@@ -429,10 +429,9 @@ export function HolidaysPage() {
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title="Remove holiday"
-        description={`${deleteTarget?.name ?? ''} on ${
-          deleteTarget ? formatDisplayDate(deleteTarget.holidayDate) : ''
-        } will no longer be treated as a holiday. Leave already approved is not recalculated.`}
+        description="It will no longer be treated as a holiday. Leave already approved is not recalculated."
+        recordName={deleteTarget?.name}
+        recordContext={deleteTarget ? `Holiday · ${formatDisplayDate(deleteTarget.holidayDate)}` : undefined}
         confirmLabel="Remove"
         loading={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}

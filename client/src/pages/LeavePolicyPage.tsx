@@ -682,8 +682,9 @@ export function LeavePolicyPage() {
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title={`Remove ${deleteTarget?.code ?? ''}`}
         description="Only unused leave types can be deleted. If requests already reference it, set it Inactive instead."
+        recordName={deleteTarget ? `${deleteTarget.name} (${deleteTarget.code})` : undefined}
+        recordContext="Leave policy"
         confirmLabel="Remove"
         loading={deleteTypeMutation.isPending}
         onConfirm={() => deleteTarget && deleteTypeMutation.mutate(deleteTarget.id)}

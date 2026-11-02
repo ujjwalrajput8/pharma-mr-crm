@@ -235,6 +235,7 @@ function ManagerTargets({
   }
 
   const monthTargets = targetsQuery.data ?? [];
+  const deleteTargetRow = monthTargets.find((target) => target.id === targetToDelete);
 
   return (
     <div className="space-y-4">
@@ -433,8 +434,14 @@ function ManagerTargets({
 
       <ConfirmDialog
         open={targetToDelete !== null}
-        title="Remove this target?"
         description="The employee will show as having no target for the month."
+        recordName={
+          deleteTargetRow
+            ? (deleteTargetRow.user?.fullName ?? `#${deleteTargetRow.userId}`) +
+              (deleteTargetRow.medicine ? ` · ${deleteTargetRow.medicine.name}` : '')
+            : undefined
+        }
+        recordContext={deleteTargetRow ? `Target · ${formatINR(deleteTargetRow.targetAmount)}` : undefined}
         confirmLabel="Remove target"
         loading={deleteMutation.isPending}
         onConfirm={() => {
