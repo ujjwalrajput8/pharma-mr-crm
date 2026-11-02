@@ -45,11 +45,30 @@ function log(message) {
   console.log(`[db-deploy] ${message}`);
 }
 
+/**
+ * Connection string for the Prisma CLI. `migrate deploy` holds a session-level
+ * advisory lock; through a transaction-mode pooler (Neon's "-pooler" host) that
+ * lock can outlive a killed deploy and then every later deploy times out with
+ * P1002. So migrate over a direct connection: DIRECT_URL if set, else the Neon
+ * pooled URL with "-pooler" dropped from the host (same credentials).
+ */
+function directUrl(connectionString) {
+  if (process.env.DIRECT_URL) return process.env.DIRECT_URL;
+  const url = new URL(connectionString);
+  if (url.hostname.endsWith('.neon.tech') && url.hostname.includes('-pooler.')) {
+    url.hostname = url.hostname.replace('-pooler.', '.');
+  }
+  return url.toString();
+}
+
+let prismaEnv = process.env;
+
 function runPrisma(args) {
   execFileSync('npx', ['prisma', ...args], {
     cwd: serverDir,
     stdio: 'inherit',
     shell: process.platform === 'win32',
+    env: prismaEnv,
   });
 }
 
@@ -123,6 +142,9 @@ async function main() {
     throw new Error('DATABASE_URL is required');
   }
   log(`target: ${new URL(connectionString).hostname}`);
+  const migrateUrl = directUrl(connectionString);
+  prismaEnv = { ...process.env, DIRECT_URL: migrateUrl };
+  log(`migrations via: ${new URL(migrateUrl).hostname}`);
 
   await baselineIfNeeded(connectionString);
 

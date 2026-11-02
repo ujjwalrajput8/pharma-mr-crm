@@ -23,7 +23,7 @@ export interface PublicTerritory {
   geofenceRadiusM: number | null;
   parentId: number | null;
   parent: { id: number; name: string; type: string } | null;
-  counts: { children: number; users: number; doctors: number };
+  counts: { children: number; users: number };
 }
 
 export interface TerritoryTreeNode extends PublicTerritory {
@@ -36,7 +36,6 @@ const territoryInclude = {
     select: {
       children: { where: { deletedAt: null } },
       users: { where: { deletedAt: null } },
-      doctors: { where: { deletedAt: null } },
     },
   },
 } satisfies Prisma.TerritoryInclude;
@@ -213,7 +212,7 @@ export class TerritoryService {
     return this.toPublic(row);
   }
 
-  /** Soft delete — refused (409) while children / users / doctors still point here. */
+  /** Soft delete — refused (409) while children / users still point here. */
   public async remove(id: number, actor: AuthUser): Promise<void> {
     const existing = await this.prisma.territory.findFirst({
       where: { id, deletedAt: null },
@@ -222,7 +221,6 @@ export class TerritoryService {
           select: {
             children: { where: { deletedAt: null } },
             users: { where: { deletedAt: null } },
-            doctors: { where: { deletedAt: null } },
           },
         },
       },
@@ -232,7 +230,6 @@ export class TerritoryService {
     const blockers: string[] = [];
     if (existing._count.children > 0) blockers.push(`${existing._count.children} child territory(ies)`);
     if (existing._count.users > 0) blockers.push(`${existing._count.users} employee(s)`);
-    if (existing._count.doctors > 0) blockers.push(`${existing._count.doctors} doctor(s)`);
     if (blockers.length > 0) {
       throw new ConflictError(
         `Cannot delete ${existing.name} — it still has ${blockers.join(', ')}. Reassign or delete them first.`,
@@ -296,7 +293,6 @@ export class TerritoryService {
       counts: {
         children: row._count.children,
         users: row._count.users,
-        doctors: row._count.doctors,
       },
     };
   }

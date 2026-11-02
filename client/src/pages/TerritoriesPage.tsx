@@ -9,7 +9,6 @@ import {
   Plus,
   Trash2,
   Users,
-  Stethoscope,
 } from 'lucide-react';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
@@ -265,11 +264,6 @@ export function TerritoriesPage() {
                           <Users size={11} /> {node.counts.users} staff
                         </span>
                       ) : null}
-                      {node.counts.doctors > 0 ? (
-                        <span className="inline-flex items-center gap-1">
-                          <Stethoscope size={11} /> {node.counts.doctors} doctors
-                        </span>
-                      ) : null}
                       {node.latitude != null && node.longitude != null ? (
                         <span
                           className="inline-flex items-center gap-1 text-[var(--color-success)]"
@@ -398,7 +392,7 @@ export function TerritoriesPage() {
       <ConfirmDialog
         open={Boolean(deleting)}
         title={`Delete ${deleting?.name ?? ''}?`}
-        description="Deletion is blocked while child territories, employees or doctors still point here."
+        description="Deletion is blocked while child territories or employees still point here."
         loading={deleteMutation.isPending}
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
         onClose={() => setDeleting(null)}
