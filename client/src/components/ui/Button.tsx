@@ -2,7 +2,15 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'soft' | 'destructive' | 'outline';
+type Variant =
+  | 'primary'
+  | 'secondary'
+  | 'ghost'
+  | 'danger'
+  | 'warning'
+  | 'soft'
+  | 'destructive'
+  | 'outline';
 type Size = 'sm' | 'md' | 'lg' | 'icon' | 'icon-sm';
 
 /**
@@ -27,6 +35,8 @@ const variants: Record<Variant, string> = {
     'bg-transparent text-[var(--color-ink)] border border-[var(--color-border-strong)] hover:bg-[var(--color-bg)] hover:border-[var(--color-primary)]/50 active:scale-[0.985]',
   danger:
     'bg-[var(--color-danger-soft)] text-[var(--color-danger)] border border-[var(--color-danger)]/20 hover:bg-[var(--color-danger)] hover:text-white hover:border-transparent active:scale-[0.985]',
+  warning:
+    'bg-[var(--color-warning-soft)] text-[var(--color-warning)] border border-[var(--color-warning)]/20 hover:bg-[var(--color-warning)] hover:text-white hover:border-transparent active:scale-[0.985]',
   destructive: cn(
     'text-white border border-transparent',
     'bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-danger)_92%,white)_0%,var(--color-danger)_100%)]',

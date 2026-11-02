@@ -68,6 +68,18 @@ export class DoctorController {
     ApiResponse.success(res, doctor, 'Doctor updated');
   };
 
+  public favorite = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const result = await this.doctors.setFavorite(Number(req.params.id), true, actor);
+    ApiResponse.success(res, result, 'Doctor added to favourites');
+  };
+
+  public unfavorite = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const result = await this.doctors.setFavorite(Number(req.params.id), false, actor);
+    ApiResponse.success(res, result, 'Doctor removed from favourites');
+  };
+
   public remove = async (req: Request, res: Response): Promise<void> => {
     const actor = this.requireUser(req);
     await this.doctors.remove(Number(req.params.id), actor);

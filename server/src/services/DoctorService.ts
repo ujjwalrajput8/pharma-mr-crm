@@ -37,15 +37,18 @@ export class DoctorService {
   }
 
   public async list(query: ListDoctorsQueryDto, actor: AuthUser) {
-    const { items, total } = await this.doctors.list({
+    const { items, total, favoriteIds } = await this.doctors.list({
       page: query.page,
       limit: query.limit,
       search: query.search,
       mrId: actor.role === AppRoles.MR ? actor.id : undefined,
+      viewerId: actor.id,
     });
 
     return {
-      items: items.map((item) => this.toPublic(item as DoctorWithAssignments)),
+      items: items.map((item) =>
+        this.toPublic(item as DoctorWithAssignments, favoriteIds.has(item.id)),
+      ),
       meta: {
         page: query.page,
         limit: query.limit,
@@ -57,11 +60,21 @@ export class DoctorService {
 
   public async getById(id: number, actor: AuthUser) {
     await this.requireAccessible(id, actor);
-    const doctor = await this.doctors.findByIdWithAssignments(id);
+    const [doctor, favorite] = await Promise.all([
+      this.doctors.findByIdWithAssignments(id),
+      this.doctors.isFavorite(actor.id, id),
+    ]);
     if (!doctor) {
       throw new NotFoundError('Doctor not found');
     }
-    return this.toPublic(doctor as DoctorWithAssignments);
+    return this.toPublic(doctor as DoctorWithAssignments, favorite);
+  }
+
+  /** Stars or unstars a doctor for the signed-in user only. */
+  public async setFavorite(id: number, favorite: boolean, actor: AuthUser) {
+    await this.requireAccessible(id, actor);
+    await this.doctors.setFavorite(actor.id, id, favorite);
+    return { id, isFavorite: favorite };
   }
 
   /**
@@ -69,13 +82,16 @@ export class DoctorService {
    */
   public async getDetails(id: number, actor: AuthUser) {
     await this.requireAccessible(id, actor);
-    const doctor = await this.doctors.findByIdWithAssignments(id);
+    const [doctor, favorite] = await Promise.all([
+      this.doctors.findByIdWithAssignments(id),
+      this.doctors.isFavorite(actor.id, id),
+    ]);
     if (!doctor) {
       throw new NotFoundError('Doctor not found');
     }
 
     const bundle = await this.doctors.getDetailBundle(id);
-    const profile = this.toPublic(doctor as DoctorWithAssignments);
+    const profile = this.toPublic(doctor as DoctorWithAssignments, favorite);
 
     const formatTime = (value: Date): string =>
       `${String(value.getUTCHours()).padStart(2, '0')}:${String(value.getUTCMinutes()).padStart(2, '0')}`;
@@ -344,9 +360,11 @@ export class DoctorService {
     return columns;
   }
 
-  private toPublic(doctor: DoctorWithAssignments) {
+  private toPublic(doctor: DoctorWithAssignments, isFavorite = false) {
     return {
       id: doctor.id,
+      /** Starred by the user asking — each user has their own. */
+      isFavorite,
       mslNo: doctor.mslNo,
       area: doctor.area,
       areaType: doctor.areaType,

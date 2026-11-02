@@ -33,6 +33,8 @@ export interface UseClientTableOptions<T> {
   getSortValue?: (row: T, key: string) => unknown;
   initialSortKey?: string;
   initialSortDir?: SortDir;
+  /** Rows that stay above the rest whatever the sort (e.g. starred). */
+  pinFirst?: (row: T) => boolean;
   pageSize?: number;
   pageSizeOptions?: number[];
 }
@@ -44,6 +46,7 @@ export function useClientTable<T>({
   getSortValue,
   initialSortKey,
   initialSortDir = 'asc',
+  pinFirst,
   pageSize: initialPageSize = 10,
   pageSizeOptions = [5, 10, 20, 50],
 }: UseClientTableOptions<T>) {
@@ -86,9 +89,14 @@ export function useClientTable<T>({
   }, [data, search, searchKeys, getSearchText]);
 
   const sorted = useMemo(() => {
-    if (!sortKey) return filtered;
+    if (!sortKey && !pinFirst) return filtered;
     const copy = [...filtered];
     copy.sort((left, right) => {
+      if (pinFirst) {
+        const pinned = Number(pinFirst(right)) - Number(pinFirst(left));
+        if (pinned !== 0) return pinned;
+      }
+      if (!sortKey) return 0;
       const a =
         (getSortValue ? getSortValue(left, sortKey) : undefined) ?? readPath(left, sortKey);
       const b =
@@ -97,7 +105,7 @@ export function useClientTable<T>({
       return sortDir === 'asc' ? result : -result;
     });
     return copy;
-  }, [filtered, sortKey, sortDir, getSortValue]);
+  }, [filtered, sortKey, sortDir, getSortValue, pinFirst]);
 
   const total = sorted.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
