@@ -169,7 +169,11 @@ export const doctorsApi = {
     return data.data;
   },
 
-  async update(id: number, payload: Partial<CreateDoctorPayload>): Promise<Doctor> {
+  /** `mrId: null` takes the doctor off their MR; leave it out to keep the MR. */
+  async update(
+    id: number,
+    payload: Partial<Omit<CreateDoctorPayload, 'mrId'>> & { mrId?: number | null },
+  ): Promise<Doctor> {
     const { data } = await api.patch<ApiSuccess<Doctor>>(`/doctors/${id}`, payload);
     return data.data;
   },
@@ -184,6 +188,17 @@ export const doctorsApi = {
 
   async remove(id: number): Promise<void> {
     await api.delete(`/doctors/${id}`);
+  },
+
+  /** Many doctors to one MR at once; `mrId: null` unassigns them. */
+  async assignMr(
+    doctorIds: number[],
+    mrId: number | null,
+  ): Promise<{ doctors: number; mr: { id: number; fullName: string } | null }> {
+    const { data } = await api.post<
+      ApiSuccess<{ doctors: number; mr: { id: number; fullName: string } | null }>
+    >('/doctors/assign-mr', { doctorIds, mrId });
+    return data.data;
   },
 
   async setFavorite(id: number, favorite: boolean): Promise<void> {

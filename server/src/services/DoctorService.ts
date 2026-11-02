@@ -2,6 +2,7 @@ import type { Doctor } from '@prisma/client';
 import { AppRoles } from '../constants';
 import type {
   AssignMrDto,
+  BulkAssignMrDto,
   CreateDoctorDto,
   ListDoctorsQueryDto,
   UpdateDoctorDto,
@@ -236,6 +237,7 @@ export class DoctorService {
   public async create(dto: CreateDoctorDto, actor: AuthUser) {
     this.assertAdmin(actor);
     await this.assertNotDuplicate(dto.fullName, dto.area);
+    if (dto.mrId) await this.requireMr(dto.mrId);
 
     const { mrId, birthday, anniversary, ...rest } = dto;
     const doctor = await this.doctors.create({
@@ -263,6 +265,7 @@ export class DoctorService {
         id,
       );
     }
+    if (dto.mrId) await this.requireMr(dto.mrId);
 
     const { mrId, birthday, anniversary, ...rest } = dto;
     await this.doctors.update(id, {
@@ -272,11 +275,28 @@ export class DoctorService {
       updatedBy: actor.id,
     });
 
-    if (mrId) {
+    // undefined = leave the MR as is; null = unassign; an id = (re)assign.
+    if (mrId === null) {
+      await this.doctors.unassignMany([id], actor.id);
+    } else if (mrId) {
       await this.doctors.assignMr(id, mrId, actor.id);
     }
 
     return this.getById(id, actor);
+  }
+
+  /** Gives many doctors to one MR (or, with `mrId: null`, unassigns them). */
+  public async bulkAssignMr(dto: BulkAssignMrDto, actor: AuthUser) {
+    this.assertAdmin(actor);
+    const mr = dto.mrId ? await this.requireMr(dto.mrId) : null;
+    const ids = await this.doctors.existingIds([...new Set(dto.doctorIds)]);
+
+    if (mr) {
+      await this.doctors.assignMrToMany(ids, mr.id, actor.id);
+    } else {
+      await this.doctors.unassignMany(ids, actor.id);
+    }
+    return { doctors: ids.length, mr: mr ? { id: mr.id, fullName: mr.fullName } : null };
   }
 
   public async remove(id: number, actor: AuthUser) {
@@ -288,14 +308,18 @@ export class DoctorService {
   public async assignMr(id: number, dto: AssignMrDto, actor: AuthUser) {
     this.assertAdmin(actor);
     await this.requireAccessible(id, actor);
-
-    const mr = await this.users.findById(dto.mrId);
-    if (!mr || mr.role !== AppRoles.MR) {
-      throw new NotFoundError('Medical Representative not found');
-    }
+    await this.requireMr(dto.mrId);
 
     await this.doctors.assignMr(id, dto.mrId, actor.id);
     return this.getById(id, actor);
+  }
+
+  private async requireMr(mrId: number) {
+    const mr = await this.users.findById(mrId);
+    if (!mr || mr.role !== AppRoles.MR) {
+      throw new NotFoundError('Medical Representative not found');
+    }
+    return mr;
   }
 
   private async requireAccessible(id: number, actor: AuthUser): Promise<Doctor> {

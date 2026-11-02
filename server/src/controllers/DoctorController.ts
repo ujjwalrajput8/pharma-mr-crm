@@ -4,6 +4,7 @@ import { DoctorService } from '../services/DoctorService';
 import { ApiResponse } from '../utils/ApiResponse';
 import type {
   AssignMrDto,
+  BulkAssignMrDto,
   CreateDoctorDto,
   ImportDoctorsDto,
   ListDoctorsQueryDto,
@@ -66,6 +67,16 @@ export class DoctorController {
       actor,
     );
     ApiResponse.success(res, doctor, 'Doctor updated');
+  };
+
+  public bulkAssignMr = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const result = await this.doctors.bulkAssignMr(req.body as BulkAssignMrDto, actor);
+    ApiResponse.success(
+      res,
+      result,
+      result.mr ? `${result.doctors} doctor(s) assigned to ${result.mr.fullName}` : `${result.doctors} doctor(s) unassigned`,
+    );
   };
 
   public favorite = async (req: Request, res: Response): Promise<void> => {

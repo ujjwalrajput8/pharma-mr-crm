@@ -32,7 +32,10 @@ export const createDoctorSchema = z.object({
   mrId: idSchema.optional(),
 });
 
-export const updateDoctorSchema = createDoctorSchema.partial();
+export const updateDoctorSchema = createDoctorSchema.partial().extend({
+  /** An MR's id assigns the doctor to them; null takes the doctor off their MR. */
+  mrId: idSchema.nullable().optional(),
+});
 
 export const listDoctorsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -43,6 +46,12 @@ export const listDoctorsQuerySchema = z.object({
 
 export const assignMrSchema = z.object({
   mrId: idSchema,
+});
+
+/** Many doctors to one MR at once — e.g. right after an Excel import. null = unassign them. */
+export const bulkAssignMrSchema = z.object({
+  doctorIds: z.array(idSchema).min(1, 'Pick at least one doctor').max(5000),
+  mrId: idSchema.nullable(),
 });
 
 export const DOCTOR_IMPORT_MAX_ROWS = 2000;
@@ -66,4 +75,5 @@ export type CreateDoctorDto = z.infer<typeof createDoctorSchema>;
 export type UpdateDoctorDto = z.infer<typeof updateDoctorSchema>;
 export type ListDoctorsQueryDto = z.infer<typeof listDoctorsQuerySchema>;
 export type AssignMrDto = z.infer<typeof assignMrSchema>;
+export type BulkAssignMrDto = z.infer<typeof bulkAssignMrSchema>;
 export type ImportDoctorsDto = z.infer<typeof importDoctorsSchema>;

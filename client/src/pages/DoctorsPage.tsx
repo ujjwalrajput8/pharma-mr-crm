@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, FileSpreadsheet, Pencil, Plus, Star, Trash2 } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
@@ -63,6 +63,7 @@ function toForm(doctor: Doctor): DoctorForm {
     email: doctor.email ?? '',
     birthday: doctor.birthday ?? '',
     anniversary: doctor.anniversary ?? '',
+    mrId: doctor.assignedMrs[0]?.id,
   };
 }
 
@@ -85,6 +86,10 @@ function toPayload(form: DoctorForm): CreateDoctorPayload {
 
 const MSL_CLASS_OPTIONS = ['A', 'B', 'C'];
 
+/** A compact select that sits beside the toolbar's search box. */
+const TOOLBAR_SELECT =
+  'h-9.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm text-[var(--color-ink)] shadow-xs outline-none focus:border-[var(--color-primary)] focus:ring-3 focus:ring-[var(--color-primary)]/15';
+
 export function DoctorsPage() {
   const { can } = useAuth();
   const isAdmin = can('doctors:manage');
@@ -98,14 +103,26 @@ export function DoctorsPage() {
   const [editing, setEditing] = useState<Doctor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  /** 'all', 'unassigned' or an MR's id. */
+  const [mrFilter, setMrFilter] = useState('all');
+  /** Doctors ticked for a bulk MR assignment. */
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkMrId, setBulkMrId] = useState('');
 
   const doctorsQuery = useQuery({
     queryKey: ['doctors'],
     queryFn: () => doctorsApi.list(),
   });
 
+  const filteredDoctors = useMemo(() => {
+    const rows = doctorsQuery.data ?? [];
+    if (mrFilter === 'all') return rows;
+    if (mrFilter === 'unassigned') return rows.filter((row) => row.assignedMrs.length === 0);
+    return rows.filter((row) => row.assignedMrs.some((mr) => String(mr.id) === mrFilter));
+  }, [doctorsQuery.data, mrFilter]);
+
   const table = useClientTable({
-    data: doctorsQuery.data ?? [],
+    data: filteredDoctors,
     searchKeys: ['mslNo', 'fullName', 'phone', 'area', 'mslClass', 'specialization', 'email'],
     getSortValue: (row, key) =>
       key === 'mr' ? row.assignedMrs.map((mr) => mr.fullName).join(', ') : undefined,
@@ -115,11 +132,39 @@ export function DoctorsPage() {
     pinFirst: (row) => row.isFavorite,
   });
 
+  // The filter, the bulk bar and the form all pick from this list.
   const mrsQuery = useQuery({
     queryKey: ['users', 'for-assign', 'MR'],
     queryFn: () => usersApi.list({ role: 'MR' }),
-    enabled: isAdmin && open && !editing,
+    enabled: isAdmin,
   });
+
+  const bulkAssignMutation = useMutation({
+    mutationFn: (mrId: number | null) => doctorsApi.assignMr([...selected], mrId),
+    onSuccess: async (result) => {
+      toast.success(
+        result.mr
+          ? `${result.doctors} doctor${result.doctors === 1 ? '' : 's'} assigned to ${result.mr.fullName}`
+          : `${result.doctors} doctor${result.doctors === 1 ? '' : 's'} unassigned`,
+      );
+      setSelected(new Set());
+      setBulkMrId('');
+      await queryClient.invalidateQueries({ queryKey: ['doctors'] });
+    },
+    onError: (err) => toast.error('Could not assign', getApiErrorMessage(err)),
+  });
+
+  function toggleSelected(id: number): void {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const allFilteredSelected =
+    table.allRows.length > 0 && table.allRows.every((row) => selected.has(row.id));
 
   const createMutation = useMutation({
     mutationFn: doctorsApi.create,
@@ -134,7 +179,7 @@ export function DoctorsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: CreateDoctorPayload }) =>
+    mutationFn: ({ id, payload }: { id: number; payload: Parameters<typeof doctorsApi.update>[1] }) =>
       doctorsApi.update(id, payload),
     onSuccess: async () => {
       setOpen(false);
@@ -199,7 +244,12 @@ export function DoctorsPage() {
   function onSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     if (editing) {
-      updateMutation.mutate({ id: editing.id, payload: toPayload(form) });
+      // Send the MR only when it changed — "Unassigned" (no id) takes the doctor off their MR.
+      const mrChanged = (form.mrId ?? null) !== (editing.assignedMrs[0]?.id ?? null);
+      updateMutation.mutate({
+        id: editing.id,
+        payload: { ...toPayload(form), ...(mrChanged ? { mrId: form.mrId ?? null } : {}) },
+      });
       return;
     }
     createMutation.mutate({ ...toPayload(form), mrId: form.mrId || undefined });
@@ -239,9 +289,86 @@ export function DoctorsPage() {
           search={table.search}
           onSearchChange={table.setSearch}
           placeholder="Search doctors…"
+          actions={
+            isAdmin ? (
+              <select
+                aria-label="Filter by MR"
+                value={mrFilter}
+                onChange={(e) => {
+                  setMrFilter(e.target.value);
+                  setSelected(new Set());
+                }}
+                className={TOOLBAR_SELECT}
+              >
+                <option value="all">All doctors</option>
+                <option value="unassigned">Unassigned only</option>
+                {mrsQuery.data?.map((mr) => (
+                  <option key={mr.id} value={String(mr.id)}>
+                    {mr.fullName}
+                  </option>
+                ))}
+              </select>
+            ) : null
+          }
         />
+        {isAdmin && table.allRows.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg)]/50 px-4 py-2.5">
+            <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-[var(--color-ink)]">
+              <input
+                type="checkbox"
+                checked={allFilteredSelected}
+                onChange={() =>
+                  setSelected(allFilteredSelected ? new Set() : new Set(table.allRows.map((row) => row.id)))
+                }
+                className="h-4 w-4 accent-[var(--color-primary)]"
+              />
+              {selected.size > 0 ? `${selected.size} selected` : `Select all ${table.allRows.length}`}
+            </label>
+            {selected.size > 0 ? (
+              <>
+                <select
+                  aria-label="MR to assign"
+                  value={bulkMrId}
+                  onChange={(e) => setBulkMrId(e.target.value)}
+                  className={TOOLBAR_SELECT}
+                >
+                  <option value="">Choose MR…</option>
+                  {mrsQuery.data?.map((mr) => (
+                    <option key={mr.id} value={String(mr.id)}>
+                      {mr.fullName}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  size="sm"
+                  disabled={!bulkMrId}
+                  loading={bulkAssignMutation.isPending}
+                  onClick={() => bulkAssignMutation.mutate(Number(bulkMrId))}
+                >
+                  Assign
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={bulkAssignMutation.isPending}
+                  onClick={() => bulkAssignMutation.mutate(null)}
+                >
+                  Unassign
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+                  Clear
+                </Button>
+              </>
+            ) : (
+              <span className="text-xs text-[var(--color-muted)]">
+                Tick doctors to give them to an MR in one go.
+              </span>
+            )}
+          </div>
+        ) : null}
         <DataTable
           columns={[
+            ...(isAdmin ? [{ key: 'select', label: '', className: 'w-px' }] : []),
             { key: 'favorite', label: 'Fav', className: 'w-px text-center' },
             { key: 'mslNo', label: 'MSL No', sortable: true },
             { key: 'fullName', label: 'Doctor', sortable: true },
@@ -273,6 +400,17 @@ export function DoctorsPage() {
               key={doctor.id}
               className="border-b border-[var(--color-border)] transition-colors last:border-0 hover:bg-[var(--color-bg)]/60"
             >
+              {isAdmin ? (
+                <Td className="w-px">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${doctor.fullName}`}
+                    checked={selected.has(doctor.id)}
+                    onChange={() => toggleSelected(doctor.id)}
+                    className="h-4 w-4 cursor-pointer accent-[var(--color-primary)]"
+                  />
+                </Td>
+              ) : null}
               <Td className="text-center">
                 <Button
                   size="icon-sm"
@@ -306,7 +444,13 @@ export function DoctorsPage() {
               </Td>
               <Td>{doctor.mslClass ? <Badge tone="primary">{doctor.mslClass}</Badge> : '—'}</Td>
               <Td>{doctor.specialization ?? '—'}</Td>
-              <Td>{doctor.assignedMrs.map((mr) => mr.fullName).join(', ') || 'Unassigned'}</Td>
+              <Td>
+                {doctor.assignedMrs.length > 0 ? (
+                  doctor.assignedMrs.map((mr) => mr.fullName).join(', ')
+                ) : (
+                  <Badge tone="warning">Unassigned</Badge>
+                )}
+              </Td>
               <Td className="text-right whitespace-nowrap">
                 <div className="flex items-center justify-end gap-1">
                   <Button
@@ -494,31 +638,29 @@ export function DoctorsPage() {
             </div>
           </div>
 
-          {editing ? null : (
-            <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                MR Assignment
-              </h4>
-              <Select
-                label="Assign Field Representative (MR)"
-                value={form.mrId ?? ''}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    mrId: e.target.value ? Number(e.target.value) : undefined,
-                  }))
-                }
-              >
-                <option value="">Unassigned (Open Pool)</option>
-                {mrsQuery.data?.map((mr) => (
-                  <option key={mr.id} value={mr.id}>
-                    {mr.fullName} ({mr.email})
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
+          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              MR Assignment
+            </h4>
+            <Select
+              label="Assign Field Representative (MR)"
+              value={form.mrId ?? ''}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  mrId: e.target.value ? Number(e.target.value) : undefined,
+                }))
+              }
+            >
+              <option value="">Unassigned (Open Pool)</option>
+              {mrsQuery.data?.map((mr) => (
+                <option key={mr.id} value={mr.id}>
+                  {mr.fullName} ({mr.email})
+                </option>
+              ))}
+            </Select>
+          </div>
         </form>
       </Modal>
 

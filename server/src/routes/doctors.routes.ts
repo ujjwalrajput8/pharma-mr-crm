@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { DoctorController } from '../controllers/DoctorController';
 import {
   assignMrSchema,
+  bulkAssignMrSchema,
   createDoctorSchema,
   importDoctorsSchema,
   listDoctorsQuerySchema,
@@ -31,6 +32,12 @@ router.post(
   authorize(AppRoles.ADMIN),
   validateRequest(createDoctorSchema),
   asyncHandler(controller.create),
+);
+router.post(
+  '/assign-mr',
+  authorize(AppRoles.ADMIN),
+  validateRequest(bulkAssignMrSchema),
+  asyncHandler(controller.bulkAssignMr),
 );
 router.post(
   '/import',
