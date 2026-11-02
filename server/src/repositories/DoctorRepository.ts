@@ -3,6 +3,20 @@ import { PrismaService } from '../prisma/PrismaService';
 import { StockTxnRepository } from './StockTxnRepository';
 import { doctorDuplicateKey } from '../utils/doctorDuplicate';
 
+/** Doctors without an MSL No go last; same MSL No falls back to the name. */
+function compareByMslNo(
+  a: { mslNo: string | null; fullName: string },
+  b: { mslNo: string | null; fullName: string },
+): number {
+  if (a.mslNo !== b.mslNo) {
+    if (a.mslNo === null) return 1;
+    if (b.mslNo === null) return -1;
+    const order = a.mslNo.localeCompare(b.mslNo, 'en', { numeric: true, sensitivity: 'base' });
+    if (order !== 0) return order;
+  }
+  return a.fullName.localeCompare(b.fullName, 'en', { sensitivity: 'base' });
+}
+
 export interface DoctorListParams {
   page: number;
   limit: number;
@@ -107,27 +121,35 @@ export class DoctorRepository {
         : {}),
     };
 
-    const [items, total] = await Promise.all([
-      this.prisma.doctor.findMany({
-        where,
-        orderBy: { fullName: 'asc' },
-        skip: (params.page - 1) * params.limit,
-        take: params.limit,
-        include: {
-          assignments: {
-            where: { isActive: true, deletedAt: null },
-            include: {
-              mr: {
-                select: { id: true, fullName: true, email: true },
-              },
+    // MSL No ascending the way the sheet reads ("M2" before "M10", "9" before
+    // "10"), which Postgres text order cannot do — so order the light keys
+    // here, then load only the requested page.
+    const keys = await this.prisma.doctor.findMany({
+      where,
+      select: { id: true, mslNo: true, fullName: true },
+    });
+    keys.sort(compareByMslNo);
+    const pageIds = keys
+      .slice((params.page - 1) * params.limit, params.page * params.limit)
+      .map((key) => key.id);
+
+    const rows = await this.prisma.doctor.findMany({
+      where: { id: { in: pageIds } },
+      include: {
+        assignments: {
+          where: { isActive: true, deletedAt: null },
+          include: {
+            mr: {
+              select: { id: true, fullName: true, email: true },
             },
           },
         },
-      }),
-      this.prisma.doctor.count({ where }),
-    ]);
+      },
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const items = pageIds.flatMap((id) => byId.get(id) ?? []);
 
-    return { items, total };
+    return { items, total: keys.length };
   }
 
   public async assignMr(doctorId: number, mrId: number, actorId: number): Promise<void> {
