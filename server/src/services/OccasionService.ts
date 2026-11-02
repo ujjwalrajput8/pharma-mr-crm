@@ -13,7 +13,7 @@ export interface Occasion {
   personType: OccasionPersonType;
   personId: number;
   name: string;
-  /** Specialization · city for doctors, designation for employees. */
+  /** Specialization · area for doctors, designation for employees. */
   subtitle: string | null;
   phone: string | null;
   kind: OccasionKind;
@@ -118,7 +118,7 @@ export class OccasionService {
         id: true,
         fullName: true,
         specialization: true,
-        city: true,
+        area: true,
         phone: true,
         birthday: true,
         anniversary: true,
@@ -130,7 +130,7 @@ export class OccasionService {
         personType: 'DOCTOR',
         personId: doctor.id,
         name: doctor.fullName,
-        subtitle: [doctor.specialization, doctor.city].filter(Boolean).join(' · ') || null,
+        subtitle: [doctor.specialization, doctor.area].filter(Boolean).join(' · ') || null,
         phone: doctor.phone,
         href: `/doctors/${doctor.id}`,
       };

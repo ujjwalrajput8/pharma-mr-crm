@@ -1,9 +1,11 @@
 import type { Request, Response } from 'express';
+import { DoctorImportService } from '../services/DoctorImportService';
 import { DoctorService } from '../services/DoctorService';
 import { ApiResponse } from '../utils/ApiResponse';
 import type {
   AssignMrDto,
   CreateDoctorDto,
+  ImportDoctorsDto,
   ListDoctorsQueryDto,
   UpdateDoctorDto,
 } from '../dto/doctor.dto';
@@ -13,7 +15,10 @@ import { HttpStatus } from '../constants';
 export class DoctorController {
   private static instance: DoctorController | null = null;
 
-  private constructor(private readonly doctors = DoctorService.getInstance()) {}
+  private constructor(
+    private readonly doctors = DoctorService.getInstance(),
+    private readonly importer = DoctorImportService.getInstance(),
+  ) {}
 
   public static getInstance(): DoctorController {
     if (!DoctorController.instance) {
@@ -45,6 +50,13 @@ export class DoctorController {
     const actor = this.requireUser(req);
     const doctor = await this.doctors.create(req.body as CreateDoctorDto, actor);
     ApiResponse.created(res, doctor, 'Doctor created');
+  };
+
+  public import = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const dto = req.body as ImportDoctorsDto;
+    const result = await this.importer.import(dto, actor.id);
+    ApiResponse.success(res, result, dto.dryRun ? 'Import preview ready' : 'Doctors imported');
   };
 
   public update = async (req: Request, res: Response): Promise<void> => {

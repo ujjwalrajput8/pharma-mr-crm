@@ -205,7 +205,7 @@ export function MyDayPage() {
                       const name = call.doctor?.fullName ?? call.chemist?.name ?? '—';
                       const phone = call.doctor?.phone ?? call.chemist?.phone;
                       const sub = call.doctor
-                        ? [call.doctor.specialization, call.doctor.city].filter(Boolean).join(' · ')
+                        ? [call.doctor.specialization, call.doctor.area].filter(Boolean).join(' · ')
                         : (call.chemist?.city ?? '');
                       return (
                         <li key={call.id} className="flex items-center gap-3 py-2.5">

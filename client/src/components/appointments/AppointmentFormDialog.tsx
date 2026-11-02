@@ -22,7 +22,7 @@ interface DoctorOption {
   id: number;
   fullName: string;
   specialization?: string | null;
-  city?: string | null;
+  area?: string | null;
 }
 
 interface AppointmentFormDialogProps {
@@ -144,7 +144,7 @@ export function AppointmentFormDialog({
               options={doctors.map((d) => ({
                 value: String(d.id),
                 label: d.fullName,
-                meta: [d.specialization, d.city].filter(Boolean).join(' · ') || undefined,
+                meta: [d.specialization, d.area].filter(Boolean).join(' · ') || undefined,
               }))}
             />
 

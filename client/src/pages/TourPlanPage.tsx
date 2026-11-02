@@ -85,7 +85,9 @@ function planToDraft(plan: TourPlan | null): Map<string, DraftDay> {
           ? {
               doctorId: call.doctor.id,
               label: call.doctor.fullName,
-              meta: call.doctor.specialization ?? `Cat ${call.doctor.category}`,
+              meta:
+                call.doctor.specialization ??
+                (call.doctor.mslClass ? `Class ${call.doctor.mslClass}` : undefined),
             }
           : {
               chemistId: call.chemist?.id,
@@ -182,7 +184,7 @@ function MyPlanView() {
     return rows.map((d) => ({
       value: String(d.id),
       label: d.fullName,
-      meta: [isMine(d) ? 'Assigned to you' : null, d.specialization, d.city]
+      meta: [isMine(d) ? 'Assigned to you' : null, d.specialization, d.area]
         .filter(Boolean)
         .join(' · '),
     }));

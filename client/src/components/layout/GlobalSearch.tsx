@@ -122,7 +122,7 @@ export function GlobalSearch({
           key: `doctor:${doctor.id}`,
           group: 'Doctors',
           label: doctor.fullName,
-          sub: [doctor.specialization, doctor.city].filter(Boolean).join(' · ') || undefined,
+          sub: [doctor.mslNo ? `MSL ${doctor.mslNo}` : null, doctor.specialization, doctor.area].filter(Boolean).join(' · ') || undefined,
           icon: Stethoscope,
           to: `/doctors/${doctor.id}`,
         });

@@ -1,58 +1,69 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus } from 'lucide-react';
+import { FileSpreadsheet, Pencil, Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
 import { DatePicker } from '@/components/ui/DatePicker';
-import { Input, Select } from '@/components/ui/Field';
+import { DoctorImportDialog } from '@/components/doctors/DoctorImportDialog';
+import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
 import { useClientTable } from '@/hooks/useClientTable';
 import { useAuth } from '@/store/AuthContext';
-import { doctorsApi, type CreateDoctorPayload, type Doctor } from '@/services/doctors.service';
+import {
+  DOCTOR_AREA_TYPE_LABEL,
+  doctorsApi,
+  type CreateDoctorPayload,
+  type Doctor,
+  type DoctorAreaType,
+} from '@/services/doctors.service';
 import { usersApi } from '@/services/users.service';
 
+/** Same fields, same order, as the company MSL sheet. */
 interface DoctorForm {
+  mslNo: string;
+  area: string;
+  areaType: DoctorAreaType | '';
   fullName: string;
-  specialization: string;
-  hospital: string;
-  clinic: string;
   phone: string;
-  city: string;
-  visitingDays: string;
-  preferredTime: string;
+  mslClass: string;
+  specialization: string;
+  address: string;
+  email: string;
   birthday: string;
   anniversary: string;
   mrId?: number;
 }
 
 const emptyForm: DoctorForm = {
+  mslNo: '',
+  area: '',
+  areaType: '',
   fullName: '',
-  specialization: '',
-  hospital: '',
-  clinic: '',
   phone: '',
-  city: '',
-  visitingDays: '',
-  preferredTime: '',
+  mslClass: '',
+  specialization: '',
+  address: '',
+  email: '',
   birthday: '',
   anniversary: '',
 };
 
 function toForm(doctor: Doctor): DoctorForm {
   return {
+    mslNo: doctor.mslNo ?? '',
+    area: doctor.area ?? '',
+    areaType: doctor.areaType ?? '',
     fullName: doctor.fullName,
-    specialization: doctor.specialization ?? '',
-    hospital: doctor.hospital ?? '',
-    clinic: doctor.clinic ?? '',
     phone: doctor.phone ?? '',
-    city: doctor.city ?? '',
-    visitingDays: doctor.visitingDays ?? '',
-    preferredTime: doctor.preferredTime ?? '',
+    mslClass: doctor.mslClass ?? '',
+    specialization: doctor.specialization ?? '',
+    address: doctor.address ?? '',
+    email: doctor.email ?? '',
     birthday: doctor.birthday ?? '',
     anniversary: doctor.anniversary ?? '',
   };
@@ -62,18 +73,21 @@ function toForm(doctor: Doctor): DoctorForm {
 function toPayload(form: DoctorForm): CreateDoctorPayload {
   const orNull = (value: string): string | null => value.trim() || null;
   return {
+    mslNo: orNull(form.mslNo),
+    area: orNull(form.area),
+    areaType: form.areaType || null,
     fullName: form.fullName.trim(),
-    specialization: orNull(form.specialization),
-    hospital: orNull(form.hospital),
-    clinic: orNull(form.clinic),
     phone: orNull(form.phone),
-    city: orNull(form.city),
-    visitingDays: orNull(form.visitingDays),
-    preferredTime: orNull(form.preferredTime),
+    mslClass: orNull(form.mslClass),
+    specialization: orNull(form.specialization),
+    address: orNull(form.address),
+    email: orNull(form.email),
     birthday: form.birthday || null,
     anniversary: form.anniversary || null,
   };
 }
+
+const MSL_CLASS_OPTIONS = ['A', 'B', 'C'];
 
 export function DoctorsPage() {
   const { can } = useAuth();
@@ -86,6 +100,7 @@ export function DoctorsPage() {
   /** Set while the modal edits an existing doctor; null while adding. */
   const [editing, setEditing] = useState<Doctor | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const doctorsQuery = useQuery({
     queryKey: ['doctors'],
@@ -94,15 +109,15 @@ export function DoctorsPage() {
 
   const table = useClientTable({
     data: doctorsQuery.data ?? [],
-    searchKeys: ['fullName', 'phone', 'specialization', 'hospital', 'clinic', 'city'],
+    searchKeys: ['mslNo', 'fullName', 'phone', 'area', 'mslClass', 'specialization', 'email'],
     getSortValue: (row, key) =>
       key === 'mr' ? row.assignedMrs.map((mr) => mr.fullName).join(', ') : undefined,
     initialSortKey: 'fullName',
   });
 
   const mrsQuery = useQuery({
-    queryKey: ['users', 'for-assign'],
-    queryFn: () => usersApi.list(),
+    queryKey: ['users', 'for-assign', 'MR'],
+    queryFn: () => usersApi.list({ role: 'MR' }),
     enabled: isAdmin && open && !editing,
   });
 
@@ -184,10 +199,16 @@ export function DoctorsPage() {
         }
         actions={
           isAdmin ? (
-            <Button onClick={openCreate}>
-              <Plus size={16} />
-              Add Doctor
-            </Button>
+            <>
+              <Button variant="secondary" onClick={() => setImportOpen(true)}>
+                <FileSpreadsheet size={16} />
+                Import Excel
+              </Button>
+              <Button onClick={openCreate}>
+                <Plus size={16} />
+                Add Doctor
+              </Button>
+            </>
           ) : null
         }
       />
@@ -202,9 +223,11 @@ export function DoctorsPage() {
         />
         <DataTable
           columns={[
+            { key: 'mslNo', label: 'MSL No', sortable: true },
             { key: 'fullName', label: 'Doctor', sortable: true },
-            { key: 'specialization', label: 'Specialization', sortable: true },
-            { key: 'visitingDays', label: 'Visiting', sortable: true },
+            { key: 'area', label: 'Area', sortable: true },
+            { key: 'mslClass', label: 'Class', sortable: true },
+            { key: 'specialization', label: 'Speciality', sortable: true },
             { key: 'mr', label: 'Assigned MR', sortable: true },
             { key: 'actions', label: 'Actions' },
           ]}
@@ -227,6 +250,7 @@ export function DoctorsPage() {
         >
           {table.rows.map((doctor) => (
             <tr key={doctor.id} className="border-b border-[var(--color-border)] last:border-0">
+              <Td className="font-mono">{doctor.mslNo ?? '—'}</Td>
               <Td>
                 <Link to={`/doctors/${doctor.id}`} className="font-medium text-[var(--color-primary)] hover:underline">
                   {doctor.fullName}
@@ -234,15 +258,13 @@ export function DoctorsPage() {
                 <div className="text-[var(--color-muted)]">{doctor.phone ?? '—'}</div>
               </Td>
               <Td>
-                <div>{doctor.specialization ?? '—'}</div>
-                <div className="text-[var(--color-muted)]">
-                  {[doctor.hospital, doctor.clinic].filter(Boolean).join(' / ') || ''}
-                </div>
+                <div>{doctor.area ?? '—'}</div>
+                {doctor.areaType ? (
+                  <div className="text-[var(--color-muted)]">{DOCTOR_AREA_TYPE_LABEL[doctor.areaType]}</div>
+                ) : null}
               </Td>
-              <Td>
-                <div>{doctor.visitingDays ?? '—'}</div>
-                <div className="text-[var(--color-muted)]">{doctor.preferredTime ?? ''}</div>
-              </Td>
+              <Td>{doctor.mslClass ? <Badge tone="primary">{doctor.mslClass}</Badge> : '—'}</Td>
+              <Td>{doctor.specialization ?? '—'}</Td>
               <Td>{doctor.assignedMrs.map((mr) => mr.fullName).join(', ') || 'Unassigned'}</Td>
               <Td>
                 <div className="flex flex-wrap gap-2">
@@ -290,8 +312,8 @@ export function DoctorsPage() {
         title={editing ? 'Edit Doctor' : 'Add Doctor'}
         description={
           editing
-            ? 'Update the doctor profile, practice details and personal occasions.'
-            : 'Register a healthcare professional in the doctor master directory and assign a field representative.'
+            ? "Update the doctor's MSL details, contact and personal occasions."
+            : 'Add a doctor to the MSL directory and assign a field representative.'
         }
         className="max-w-2xl"
         footer={
@@ -309,54 +331,89 @@ export function DoctorsPage() {
           <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
-              Doctor Profile & Contact
+              MSL Details
             </h4>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
-                label="Full Name"
-                required
-                placeholder="Dr. Rajesh Sharma"
-                value={form.fullName}
-                onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
+                label="MSL No"
+                placeholder="e.g. M001"
+                value={form.mslNo}
+                onChange={(e) => setForm((prev) => ({ ...prev, mslNo: e.target.value }))}
               />
               <Input
-                label="Specialization"
-                placeholder="e.g. Cardiologist, Physician"
-                value={form.specialization}
-                onChange={(e) => setForm((prev) => ({ ...prev, specialization: e.target.value }))}
+                label="MSL Class"
+                placeholder="A / B / C"
+                list="doctor-msl-class-options"
+                value={form.mslClass}
+                onChange={(e) => setForm((prev) => ({ ...prev, mslClass: e.target.value }))}
               />
+              <datalist id="doctor-msl-class-options">
+                {MSL_CLASS_OPTIONS.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
               <Input
-                label="Phone Number"
-                placeholder="+91 98765 43210"
-                value={form.phone}
-                onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                label="Area"
+                placeholder="e.g. Boring Road"
+                value={form.area}
+                onChange={(e) => setForm((prev) => ({ ...prev, area: e.target.value }))}
               />
-              <Input
-                label="City / Territory"
-                placeholder="e.g. Mumbai, Pune"
-                value={form.city}
-                onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
-              />
+              <Select
+                label="HQ / EX"
+                value={form.areaType}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, areaType: e.target.value as DoctorAreaType | '' }))
+                }
+              >
+                <option value="">Not set</option>
+                {(Object.keys(DOCTOR_AREA_TYPE_LABEL) as DoctorAreaType[]).map((type) => (
+                  <option key={type} value={type}>
+                    {DOCTOR_AREA_TYPE_LABEL[type]}
+                  </option>
+                ))}
+              </Select>
             </div>
           </div>
 
           <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-teal-500" />
-              Practice & Affiliation
+              Doctor Profile & Contact
             </h4>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
-                label="Primary Hospital"
-                placeholder="e.g. Apollo Hospital"
-                value={form.hospital}
-                onChange={(e) => setForm((prev) => ({ ...prev, hospital: e.target.value }))}
+                label="Doctor's Name"
+                required
+                placeholder="Dr. Rajesh Sharma"
+                value={form.fullName}
+                onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
               />
               <Input
-                label="Private Clinic"
-                placeholder="e.g. Sharma Health Clinic"
-                value={form.clinic}
-                onChange={(e) => setForm((prev) => ({ ...prev, clinic: e.target.value }))}
+                label="Speciality"
+                placeholder="e.g. Cardiologist, Physician"
+                value={form.specialization}
+                onChange={(e) => setForm((prev) => ({ ...prev, specialization: e.target.value }))}
+              />
+              <Input
+                label="Mobile No"
+                placeholder="98765 43210"
+                value={form.phone}
+                onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+              />
+              <Input
+                label="Email ID"
+                type="email"
+                placeholder="doctor@example.com"
+                value={form.email}
+                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+              />
+              <Textarea
+                label="Address"
+                className="sm:col-span-2"
+                rows={2}
+                placeholder="Clinic / residence address"
+                value={form.address}
+                onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
               />
             </div>
           </div>
@@ -375,7 +432,7 @@ export function DoctorsPage() {
                 onChange={(value) => setForm((prev) => ({ ...prev, birthday: value }))}
               />
               <DatePicker
-                label="Wedding Anniversary"
+                label="Anniversary"
                 pastDates
                 placeholder="YYYY-MM-DD"
                 value={form.anniversary}
@@ -384,48 +441,35 @@ export function DoctorsPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              {editing ? 'Visiting Schedule' : 'Visiting Schedule & MR Assignment'}
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                label="Visiting Days"
-                placeholder="Mon, Wed, Fri"
-                value={form.visitingDays}
-                onChange={(e) => setForm((prev) => ({ ...prev, visitingDays: e.target.value }))}
-              />
-              <Input
-                label="Preferred Time Window"
-                placeholder="10:00 AM – 01:00 PM"
-                value={form.preferredTime}
-                onChange={(e) => setForm((prev) => ({ ...prev, preferredTime: e.target.value }))}
-              />
-              {editing ? null : (
-                <Select
-                  label="Assign Field Representative (MR)"
-                  className="sm:col-span-2"
-                  value={form.mrId ?? ''}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      mrId: e.target.value ? Number(e.target.value) : undefined,
-                    }))
-                  }
-                >
-                  <option value="">Unassigned (Open Pool)</option>
-                  {mrsQuery.data?.map((mr) => (
-                    <option key={mr.id} value={mr.id}>
-                      {mr.fullName} ({mr.email})
-                    </option>
-                  ))}
-                </Select>
-              )}
+          {editing ? null : (
+            <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                MR Assignment
+              </h4>
+              <Select
+                label="Assign Field Representative (MR)"
+                value={form.mrId ?? ''}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    mrId: e.target.value ? Number(e.target.value) : undefined,
+                  }))
+                }
+              >
+                <option value="">Unassigned (Open Pool)</option>
+                {mrsQuery.data?.map((mr) => (
+                  <option key={mr.id} value={mr.id}>
+                    {mr.fullName} ({mr.email})
+                  </option>
+                ))}
+              </Select>
             </div>
-          </div>
+          )}
         </form>
       </Modal>
+
+      <DoctorImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}

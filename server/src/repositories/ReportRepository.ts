@@ -242,7 +242,7 @@ export class ReportRepository {
 
     const doctors = await this.prisma.doctor.findMany({
       where: { id: { in: doctorIds } },
-      select: { id: true, fullName: true, specialization: true, city: true },
+      select: { id: true, fullName: true, specialization: true, area: true },
     });
     const doctorMap = new Map(doctors.map((d) => [d.id, d]));
 
@@ -254,7 +254,7 @@ export class ReportRepository {
           doctorId: row.doctorId,
           doctorName: doctor?.fullName ?? 'Unknown',
           specialization: doctor?.specialization ?? null,
-          city: doctor?.city ?? null,
+          area: doctor?.area ?? null,
           visitCount: row._count.doctorId,
         };
       });

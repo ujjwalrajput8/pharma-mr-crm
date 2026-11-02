@@ -1,42 +1,88 @@
 import { api } from '@/api/client';
 import type { ApiSuccess } from '@/types';
 
+/** HQ, ex-HQ or out-station — the "HQ/EX" half of a doctor's MSL area. */
+export type DoctorAreaType = 'HQ' | 'EX' | 'OS';
+
+export const DOCTOR_AREA_TYPE_LABEL: Record<DoctorAreaType, string> = {
+  HQ: 'HQ',
+  EX: 'EX-HQ',
+  OS: 'Out-station',
+};
+
+/** Fields follow the company MSL sheet, in the sheet's order. */
 export interface Doctor {
   id: number;
+  mslNo: string | null;
+  area: string | null;
+  areaType: DoctorAreaType | null;
   fullName: string;
-  specialization: string | null;
-  hospital: string | null;
-  clinic: string | null;
-  email: string | null;
   phone: string | null;
-  city: string | null;
-  state?: string | null;
-  addressLine1?: string | null;
-  visitingDays: string | null;
-  preferredTime: string | null;
+  mslClass: string | null;
+  specialization: string | null;
+  address: string | null;
+  email: string | null;
   /** `YYYY-MM-DD` */
   birthday: string | null;
   /** `YYYY-MM-DD` */
   anniversary: string | null;
-  notes?: string | null;
   status: string;
   assignedMrs: Array<{ id: number; fullName: string; email: string }>;
 }
 
 /** Optional fields: `null` clears on update, omitted leaves them unchanged. */
 export interface CreateDoctorPayload {
+  mslNo?: string | null;
+  area?: string | null;
+  areaType?: DoctorAreaType | null;
   fullName: string;
-  specialization?: string | null;
-  hospital?: string | null;
-  clinic?: string | null;
-  email?: string | null;
   phone?: string | null;
-  city?: string | null;
-  visitingDays?: string | null;
-  preferredTime?: string | null;
+  mslClass?: string | null;
+  specialization?: string | null;
+  address?: string | null;
+  email?: string | null;
   birthday?: string | null;
   anniversary?: string | null;
   mrId?: number;
+}
+
+/** "Boring Road · HQ" */
+export function formatDoctorArea(doctor: Pick<Doctor, 'area' | 'areaType'>): string | null {
+  return [doctor.area, doctor.areaType].filter(Boolean).join(' · ') || null;
+}
+
+export interface DoctorImportRowResult {
+  rowNumber: number;
+  action: 'create' | 'update' | 'unchanged' | 'error';
+  doctorId: number | null;
+  doctorName: string | null;
+  mslNo: string | null;
+  matchedBy: 'mslNo' | 'mobile' | null;
+  changes: Array<{ field: string; from: string | null; to: string | null }>;
+  /** Cells that were skipped; the rest of the row still imports. */
+  warnings: string[];
+  errors: string[];
+}
+
+export interface DoctorImportResult {
+  dryRun: boolean;
+  summary: {
+    total: number;
+    create: number;
+    update: number;
+    unchanged: number;
+    error: number;
+    warning: number;
+  };
+  rows: DoctorImportRowResult[];
+}
+
+export interface DoctorImportPayload {
+  dryRun: boolean;
+  fileName?: string;
+  /** MR every doctor in the file is assigned to. */
+  mrId?: number;
+  rows: Array<{ rowNumber: number; values: Record<string, string | number> }>;
 }
 
 export interface DoctorDetails {
@@ -124,8 +170,9 @@ export interface DoctorDetails {
 
 export const doctorsApi = {
   async list(search?: string): Promise<Doctor[]> {
+    // Screens filter and page client-side, so fetch the whole list, not the API's first 20.
     const { data } = await api.get<ApiSuccess<Doctor[]>>('/doctors', {
-      params: search ? { search, limit: 100 } : { limit: 100 },
+      params: { limit: 5000, ...(search ? { search } : {}) },
     });
     return data.data;
   },
@@ -142,6 +189,14 @@ export const doctorsApi = {
 
   async update(id: number, payload: Partial<CreateDoctorPayload>): Promise<Doctor> {
     const { data } = await api.patch<ApiSuccess<Doctor>>(`/doctors/${id}`, payload);
+    return data.data;
+  },
+
+  async importRows(payload: DoctorImportPayload): Promise<DoctorImportResult> {
+    const { data } = await api.post<ApiSuccess<DoctorImportResult>>('/doctors/import', payload, {
+      // A couple of thousand rows run in one transaction on the server.
+      timeout: 180_000,
+    });
     return data.data;
   },
 
