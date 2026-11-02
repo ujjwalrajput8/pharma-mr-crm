@@ -1,8 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, ArrowRight, Star } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
+import { useToast } from '@/components/ui/Toast';
 import { DataTable, Td } from '@/components/ui/DataTable';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { InvoiceStatusBadge } from '@/components/sales/InvoiceStatusBadge';
@@ -44,6 +46,14 @@ export function DoctorDetailPage() {
     queryKey: ['invoices', { doctorId: id }],
     queryFn: () => invoicesApi.list({ doctorId: Number(id) }),
     enabled: Boolean(id) && tab === 'billing',
+  });
+
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const favoriteMutation = useMutation({
+    mutationFn: (favorite: boolean) => doctorsApi.setFavorite(Number(id), favorite),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['doctors'] }),
+    onError: (err) => toast.error('Could not update favourite', getApiErrorMessage(err)),
   });
 
   const data = detailsQuery.data;
@@ -89,12 +99,23 @@ export function DoctorDetailPage() {
           .filter(Boolean)
           .join(' · ')}
         actions={
-          <Link to="/doctors">
-            <Button variant="secondary">
-              <ArrowLeft size={16} />
-              Back
+          <>
+            <Button
+              variant={profile.isFavorite ? 'warning' : 'secondary'}
+              aria-pressed={profile.isFavorite}
+              loading={favoriteMutation.isPending}
+              onClick={() => favoriteMutation.mutate(!profile.isFavorite)}
+            >
+              <Star size={15} className={profile.isFavorite ? 'fill-current' : undefined} />
+              {profile.isFavorite ? 'Favourite' : 'Add to favourites'}
             </Button>
-          </Link>
+            <Link to="/doctors">
+              <Button variant="secondary">
+                <ArrowLeft size={16} />
+                Back
+              </Button>
+            </Link>
+          </>
         }
       />
 

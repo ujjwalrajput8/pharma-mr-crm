@@ -262,6 +262,7 @@ model User {
   salesTargets       SalesTarget[]      @relation("UserTargets")
   notifications      Notification[]     @relation("UserNotifications")
   passwordResetTokens PasswordResetToken[]
+  favoriteDoctors    DoctorFavorite[]
 
   @@index([role])
   @@index([status])
@@ -425,6 +426,7 @@ model Doctor {
   sales         Sale[]
   invoices      Invoice[]
   tourPlanCalls TourPlanCall[]
+  favorites     DoctorFavorite[]
 
   @@index([fullName])
   @@index([mslNo])
@@ -433,6 +435,21 @@ model Doctor {
   @@index([status])
   @@index([deletedAt])
   @@map("doctors")
+}
+
+/// A user's starred doctor. Each user has their own; starred doctors list first for them.
+model DoctorFavorite {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  doctorId  Int
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, doctorId])
+  @@index([doctorId])
+  @@map("doctor_favorites")
 }
 
 model DoctorAssignment {

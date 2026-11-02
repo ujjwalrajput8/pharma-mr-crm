@@ -13,6 +13,8 @@ export const DOCTOR_AREA_TYPE_LABEL: Record<DoctorAreaType, string> = {
 /** Fields follow the company MSL sheet, in the sheet's order. */
 export interface Doctor {
   id: number;
+  /** Starred by the signed-in user — each user has their own. */
+  isFavorite: boolean;
   mslNo: string | null;
   area: string | null;
   areaType: DoctorAreaType | null;
@@ -182,5 +184,10 @@ export const doctorsApi = {
 
   async remove(id: number): Promise<void> {
     await api.delete(`/doctors/${id}`);
+  },
+
+  async setFavorite(id: number, favorite: boolean): Promise<void> {
+    if (favorite) await api.put(`/doctors/${id}/favorite`);
+    else await api.delete(`/doctors/${id}/favorite`);
   },
 };

@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, FileSpreadsheet, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Eye, FileSpreadsheet, Pencil, Plus, Star, Trash2 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
@@ -115,6 +115,8 @@ export function DoctorsPage() {
       key === 'mr' ? row.assignedMrs.map((mr) => mr.fullName).join(', ') : undefined,
     // MSL order, the way the sheet reads; doctors without an MSL No go last.
     initialSortKey: 'mslNo',
+    // Starred doctors stay on top whichever column is sorted.
+    pinFirst: (row) => row.isFavorite,
   });
 
   const mrsQuery = useQuery({
@@ -147,6 +149,25 @@ export function DoctorsPage() {
       await queryClient.invalidateQueries({ queryKey: ['occasions'] });
     },
     onError: (err) => setError(getApiErrorMessage(err)),
+  });
+
+  /** Flips the star at once; rolls back if the server says no. */
+  const favoriteMutation = useMutation({
+    mutationFn: ({ id, favorite }: { id: number; favorite: boolean }) =>
+      doctorsApi.setFavorite(id, favorite),
+    onMutate: async ({ id, favorite }) => {
+      await queryClient.cancelQueries({ queryKey: ['doctors'] });
+      const previous = queryClient.getQueryData<Doctor[]>(['doctors']);
+      queryClient.setQueryData<Doctor[]>(['doctors'], (rows) =>
+        rows?.map((row) => (row.id === id ? { ...row, isFavorite: favorite } : row)),
+      );
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['doctors'], context.previous);
+      toast.error('Could not update favourite', getApiErrorMessage(err));
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['doctors'] }),
   });
 
   const deleteMutation = useMutation({
@@ -225,13 +246,14 @@ export function DoctorsPage() {
         />
         <DataTable
           columns={[
+            { key: 'favorite', label: 'Fav', className: 'w-px text-center' },
             { key: 'mslNo', label: 'MSL No', sortable: true },
             { key: 'fullName', label: 'Doctor', sortable: true },
             { key: 'area', label: 'Area', sortable: true },
             { key: 'mslClass', label: 'Class', sortable: true },
             { key: 'specialization', label: 'Speciality', sortable: true },
             { key: 'mr', label: 'Assigned MR', sortable: true },
-            { key: 'actions', label: '', className: 'w-px' },
+            { key: 'actions', label: 'Actions', className: 'w-px text-right' },
           ]}
           sortKey={table.sortKey}
           sortDir={table.sortDir}
@@ -255,6 +277,24 @@ export function DoctorsPage() {
               key={doctor.id}
               className="border-b border-[var(--color-border)] transition-colors last:border-0 hover:bg-[var(--color-bg)]/60"
             >
+              <Td className="text-center">
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={doctor.isFavorite ? `Remove ${doctor.fullName} from favourites` : `Add ${doctor.fullName} to favourites`}
+                  aria-pressed={doctor.isFavorite}
+                  title={doctor.isFavorite ? 'Remove from favourites' : 'Add to favourites'}
+                  className="hover:bg-[var(--color-warning-soft)] hover:text-[var(--color-warning)]"
+                  onClick={() => favoriteMutation.mutate({ id: doctor.id, favorite: !doctor.isFavorite })}
+                >
+                  <Star
+                    size={15}
+                    className={
+                      doctor.isFavorite ? 'fill-[var(--color-warning)] text-[var(--color-warning)]' : undefined
+                    }
+                  />
+                </Button>
+              </Td>
               <Td className="font-mono">{doctor.mslNo ?? '—'}</Td>
               <Td>
                 <Link to={`/doctors/${doctor.id}`} className="font-medium text-[var(--color-primary)] hover:underline">
@@ -275,10 +315,9 @@ export function DoctorsPage() {
                 <div className="flex items-center justify-end gap-1">
                   <Button
                     size="icon-sm"
-                    variant="ghost"
+                    variant="soft"
                     aria-label={`Open ${doctor.fullName}`}
                     title="Open"
-                    className="hover:text-[var(--color-primary)]"
                     onClick={() => navigate(`/doctors/${doctor.id}`)}
                   >
                     <Eye size={14} />
@@ -287,20 +326,18 @@ export function DoctorsPage() {
                     <>
                       <Button
                         size="icon-sm"
-                        variant="ghost"
+                        variant="warning"
                         aria-label={`Edit ${doctor.fullName}`}
                         title="Edit"
-                        className="hover:text-[var(--color-primary)]"
                         onClick={() => openEdit(doctor)}
                       >
                         <Pencil size={13} />
                       </Button>
                       <Button
                         size="icon-sm"
-                        variant="ghost"
+                        variant="danger"
                         aria-label={`Delete ${doctor.fullName}`}
                         title="Delete"
-                        className="hover:bg-[var(--color-danger-soft)] hover:text-[var(--color-danger)]"
                         onClick={() => setDeleteTarget({ id: doctor.id, name: doctor.fullName })}
                       >
                         <Trash2 size={13} />

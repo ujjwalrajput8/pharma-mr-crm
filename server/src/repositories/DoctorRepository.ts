@@ -22,6 +22,8 @@ export interface DoctorListParams {
   limit: number;
   search?: string;
   mrId?: number;
+  /** Whose starred doctors list first. */
+  viewerId?: number;
 }
 
 /**
@@ -68,6 +70,31 @@ export class DoctorRepository {
     return this.prisma;
   }
 
+  /** Ids of the doctors `userId` has starred. */
+  public async favoriteDoctorIds(userId: number): Promise<Set<number>> {
+    const rows = await this.prisma.doctorFavorite.findMany({
+      where: { userId },
+      select: { doctorId: true },
+    });
+    return new Set(rows.map((row) => row.doctorId));
+  }
+
+  public async isFavorite(userId: number, doctorId: number): Promise<boolean> {
+    const row = await this.prisma.doctorFavorite.findUnique({
+      where: { userId_doctorId: { userId, doctorId } },
+      select: { id: true },
+    });
+    return row !== null;
+  }
+
+  public async setFavorite(userId: number, doctorId: number, favorite: boolean): Promise<void> {
+    if (favorite) {
+      await this.prisma.doctorFavorite.createMany({ data: [{ userId, doctorId }], skipDuplicates: true });
+    } else {
+      await this.prisma.doctorFavorite.deleteMany({ where: { userId, doctorId } });
+    }
+  }
+
   public findByIdWithAssignments(id: number) {
     return this.prisma.doctor.findFirst({
       where: { id, deletedAt: null },
@@ -94,7 +121,9 @@ export class DoctorRepository {
     });
   }
 
-  public async list(params: DoctorListParams): Promise<{ items: Doctor[]; total: number }> {
+  public async list(
+    params: DoctorListParams,
+  ): Promise<{ items: Doctor[]; total: number; favoriteIds: Set<number> }> {
     const where: Prisma.DoctorWhereInput = {
       deletedAt: null,
       ...(params.mrId
@@ -121,14 +150,20 @@ export class DoctorRepository {
         : {}),
     };
 
-    // MSL No ascending the way the sheet reads ("M2" before "M10", "9" before
-    // "10"), which Postgres text order cannot do — so order the light keys
-    // here, then load only the requested page.
-    const keys = await this.prisma.doctor.findMany({
-      where,
-      select: { id: true, mslNo: true, fullName: true },
-    });
-    keys.sort(compareByMslNo);
+    // The viewer's starred doctors first, then MSL No ascending the way the
+    // sheet reads ("M2" before "M10", "9" before "10"), which Postgres text
+    // order cannot do — so order the light keys here, then load only the page.
+    const [keys, favoriteIds] = await Promise.all([
+      this.prisma.doctor.findMany({
+        where,
+        select: { id: true, mslNo: true, fullName: true },
+      }),
+      params.viewerId ? this.favoriteDoctorIds(params.viewerId) : Promise.resolve(new Set<number>()),
+    ]);
+    keys.sort(
+      (a, b) =>
+        Number(favoriteIds.has(b.id)) - Number(favoriteIds.has(a.id)) || compareByMslNo(a, b),
+    );
     const pageIds = keys
       .slice((params.page - 1) * params.limit, params.page * params.limit)
       .map((key) => key.id);
@@ -149,7 +184,7 @@ export class DoctorRepository {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const items = pageIds.flatMap((id) => byId.get(id) ?? []);
 
-    return { items, total: keys.length };
+    return { items, total: keys.length, favoriteIds };
   }
 
   public async assignMr(doctorId: number, mrId: number, actorId: number): Promise<void> {

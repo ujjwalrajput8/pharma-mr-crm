@@ -22,6 +22,10 @@ router.get('/', validateRequest(listDoctorsQuerySchema, 'query'), asyncHandler(c
 router.get('/:id/details', asyncHandler(controller.getDetails));
 router.get('/:id', asyncHandler(controller.getById));
 
+// Every role stars doctors for themselves (an MR only among their own doctors).
+router.put('/:id/favorite', asyncHandler(controller.favorite));
+router.delete('/:id/favorite', asyncHandler(controller.unfavorite));
+
 router.post(
   '/',
   authorize(AppRoles.ADMIN),
