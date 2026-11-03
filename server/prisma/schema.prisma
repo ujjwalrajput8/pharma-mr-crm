@@ -210,6 +210,9 @@ model User {
   passwordHash String
   fullName     String
   phone        String?
+  /// Profile photo of any account (Admin too) — `file:<key>` or a URL. Shown
+  /// wherever the person appears. (MrProfile.photoUrl is the old, unused copy.)
+  photoUrl     String?
   role         Role
   status       UserStatus @default(ACTIVE)
   managerId    Int?
@@ -292,6 +295,7 @@ model MrProfile {
   qualification  String?
   emergencyName  String?
   emergencyPhone String?
+  /// Unused since 20261103120000_user_photo (moved to User.photoUrl); drop at the migration squash.
   photoUrl       String?
 
   // ── Statutory / payout (needed for TA-DA settlement) ──

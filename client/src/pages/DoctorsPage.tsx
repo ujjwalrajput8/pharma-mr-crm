@@ -22,6 +22,7 @@ import {
   type DoctorAreaType,
 } from '@/services/doctors.service';
 import { usersApi } from '@/services/users.service';
+import { formatDisplayDate } from '@/utils/datetime';
 
 /** Same fields, same order, as the company MSL sheet — MSL No is the system's. */
 interface DoctorForm {
@@ -123,7 +124,7 @@ export function DoctorsPage() {
 
   const table = useClientTable({
     data: filteredDoctors,
-    searchKeys: ['mslNo', 'fullName', 'phone', 'area', 'mslClass', 'specialization', 'email'],
+    searchKeys: ['mslNo', 'fullName', 'phone', 'area', 'mslClass', 'specialization', 'address', 'email'],
     getSortValue: (row, key) =>
       key === 'mr' ? row.assignedMrs.map((mr) => mr.fullName).join(', ') : undefined,
     // MSL order, the way the sheet reads; doctors without an MSL No go last.
@@ -370,11 +371,17 @@ export function DoctorsPage() {
           columns={[
             ...(isAdmin ? [{ key: 'select', label: '', className: 'w-px' }] : []),
             { key: 'favorite', label: 'Fav', className: 'w-px text-center' },
-            { key: 'mslNo', label: 'MSL No', sortable: true },
-            { key: 'fullName', label: 'Doctor', sortable: true },
-            { key: 'area', label: 'Area', sortable: true },
-            { key: 'mslClass', label: 'Class', sortable: true },
-            { key: 'specialization', label: 'Speciality', sortable: true },
+            // Same headings, same order, as the company MSL sheet.
+            { key: 'mslNo', label: 'MYMSL NO', sortable: true },
+            { key: 'area', label: 'AREA-HQ/EX', sortable: true },
+            { key: 'fullName', label: "DOCTOR'S NAME", sortable: true },
+            { key: 'phone', label: 'MOBILE NO', sortable: true },
+            { key: 'mslClass', label: 'MSLCLASS', sortable: true },
+            { key: 'specialization', label: 'SPECIALITY', sortable: true },
+            { key: 'address', label: 'ADDRESS', sortable: true },
+            { key: 'email', label: 'EMAIL ID', sortable: true },
+            { key: 'birthday', label: 'BIRTHDAY', sortable: true },
+            { key: 'anniversary', label: 'ANNIVERSARY', sortable: true },
             { key: 'mr', label: 'Assigned MR', sortable: true },
             { key: 'actions', label: 'Actions', className: 'w-px text-right' },
           ]}
@@ -429,22 +436,39 @@ export function DoctorsPage() {
                   />
                 </Button>
               </Td>
-              <Td className="font-mono">{doctor.mslNo ?? '—'}</Td>
-              <Td>
+              <Td className="font-mono whitespace-nowrap">{doctor.mslNo ?? '—'}</Td>
+              <Td className="whitespace-nowrap">
+                {doctor.area ?? '—'}
+                {doctor.areaType ? (
+                  <span
+                    title={DOCTOR_AREA_TYPE_LABEL[doctor.areaType]}
+                    className="ml-1.5 rounded bg-[var(--color-bg)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--color-muted)]"
+                  >
+                    {doctor.areaType}
+                  </span>
+                ) : null}
+              </Td>
+              <Td className="whitespace-nowrap">
                 <Link to={`/doctors/${doctor.id}`} className="font-medium text-[var(--color-primary)] hover:underline">
                   {doctor.fullName}
                 </Link>
-                <div className="text-[var(--color-muted)]">{doctor.phone ?? '—'}</div>
               </Td>
-              <Td>
-                <div>{doctor.area ?? '—'}</div>
-                {doctor.areaType ? (
-                  <div className="text-[var(--color-muted)]">{DOCTOR_AREA_TYPE_LABEL[doctor.areaType]}</div>
-                ) : null}
-              </Td>
+              <Td className="whitespace-nowrap">{doctor.phone ?? '—'}</Td>
               <Td>{doctor.mslClass ? <Badge tone="primary">{doctor.mslClass}</Badge> : '—'}</Td>
-              <Td>{doctor.specialization ?? '—'}</Td>
+              <Td className="whitespace-nowrap">{doctor.specialization ?? '—'}</Td>
               <Td>
+                <span className="block max-w-[16rem] truncate" title={doctor.address ?? undefined}>
+                  {doctor.address ?? '—'}
+                </span>
+              </Td>
+              <Td className="whitespace-nowrap">{doctor.email ?? '—'}</Td>
+              <Td className="whitespace-nowrap">
+                {doctor.birthday ? formatDisplayDate(doctor.birthday) : '—'}
+              </Td>
+              <Td className="whitespace-nowrap">
+                {doctor.anniversary ? formatDisplayDate(doctor.anniversary) : '—'}
+              </Td>
+              <Td className="whitespace-nowrap">
                 {doctor.assignedMrs.length > 0 ? (
                   doctor.assignedMrs.map((mr) => mr.fullName).join(', ')
                 ) : (

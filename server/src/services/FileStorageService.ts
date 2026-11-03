@@ -169,6 +169,8 @@ export class FileStorageService {
     if (!row) throw new NotFoundError('File not found');
 
     const allowed =
+      // Profile photos show wherever a person appears, so every signed-in user may see them.
+      row.purpose === 'avatar' ||
       actor.role === AppRoles.ADMIN ||
       (row.uploadedBy !== null && row.uploadedBy === actor.id) ||
       (actor.role === AppRoles.MANAGER &&

@@ -95,7 +95,7 @@ export class EmployeeService {
             ? formatDateOnly(user.mrProfile.joiningDate)
             : null,
           exitDate: user.mrProfile?.exitDate ? formatDateOnly(user.mrProfile.exitDate) : null,
-          photoUrl: user.mrProfile?.photoUrl ?? null,
+          photoUrl: user.photoUrl ?? null,
           manager: user.manager
             ? { id: user.manager.id, fullName: user.manager.fullName, role: user.manager.role }
             : null,
@@ -203,7 +203,7 @@ export class EmployeeService {
         maritalStatus: profile?.maritalStatus ?? null,
         qualification: profile?.qualification ?? null,
         address: profile?.address ?? null,
-        photoUrl: profile?.photoUrl ?? null,
+        photoUrl: user.photoUrl ?? null,
         emergencyName: profile?.emergencyName ?? null,
         emergencyPhone: profile?.emergencyPhone ?? null,
       },
@@ -371,29 +371,32 @@ export class EmployeeService {
 
   // ── Avatar ─────────────────────────────────────────────────────────────────
 
-  /** Self or admin sets the profile photo from an uploaded file key. */
+  /** Photo of every live account that has one; small, read by every signed-in user. */
+  public photos(): Promise<Array<{ userId: number; photoUrl: string }>> {
+    return this.users.listPhotos();
+  }
+
+  /**
+   * Self or admin sets the profile photo from an uploaded file key. Stored on
+   * the user, so any account — Admin included, who has no employee profile —
+   * can have one, and it shows wherever that person appears.
+   */
   public async setAvatar(userId: number, fileKey: string, actor: AuthUser) {
     if (userId !== actor.id && actor.role !== AppRoles.ADMIN) {
       throw new ForbiddenError('You can only change your own photo');
     }
-    const user = await this.employees.findFullById(userId);
-    if (!user || user.deletedAt) throw new NotFoundError('Employee not found');
-    if (!user.mrProfile) {
-      throw new NotFoundError('This account has no employee profile for a photo');
-    }
+    const user = await this.users.findById(userId);
+    if (!user) throw new NotFoundError('User not found');
     await this.files.assertExists(fileKey);
 
     const photoUrl = `file:${fileKey}`;
-    await this.employees.updateProfile(user.mrProfile.id, {
-      photoUrl,
-      updatedBy: actor.id,
-    });
+    await this.users.update(userId, { photoUrl, updatedBy: actor.id });
 
     await this.audits.log({
       userId: actor.id,
       action: 'EMPLOYEE_AVATAR_SET',
-      entity: 'MrProfile',
-      entityId: String(user.mrProfile.id),
+      entity: 'User',
+      entityId: String(userId),
       metadata: { employeeId: userId, fileKey },
     });
 

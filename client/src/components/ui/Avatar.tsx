@@ -1,4 +1,5 @@
 import { useStoredFileUrl } from '@/services/files.service';
+import { useUserPhoto } from '@/services/photos.service';
 import { cn } from '@/utils/cn';
 
 const PALETTE = [
@@ -31,21 +32,29 @@ const sizes = {
   xl: 'h-16 w-16 text-lg',
 };
 
+/**
+ * A person's photo, or their initials. Pass `userId` and the photo comes from
+ * the app-wide photo list, so a change shows on every screen at once; an
+ * explicit `photoUrl` wins when given.
+ */
 export function Avatar({
   name,
+  userId,
   photoUrl,
   size = 'md',
   className,
 }: {
   name: string;
+  userId?: number | null;
   photoUrl?: string | null;
   size?: keyof typeof sizes;
   className?: string;
 }) {
   const palette = paletteFor(name);
+  const directoryPhoto = useUserPhoto(photoUrl ? null : userId);
   // An uploaded photo is stored as `file:<key>` and needs an authed fetch;
   // a plain URL passes straight through. Initials show until it loads.
-  const src = useStoredFileUrl(photoUrl);
+  const src = useStoredFileUrl(photoUrl ?? directoryPhoto);
 
   if (src) {
     return (

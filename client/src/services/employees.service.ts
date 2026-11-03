@@ -128,7 +128,6 @@ export interface EmployeeProfilePayload {
   qualification?: string | null;
   emergencyName?: string | null;
   emergencyPhone?: string | null;
-  photoUrl?: string | null;
   panNumber?: string | null;
   aadhaarNumber?: string | null;
   bankName?: string | null;

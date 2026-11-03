@@ -64,7 +64,8 @@ import { GrantCompOffDialog } from '@/components/leave/GrantCompOffDialog';
 import { ATTENDANCE_STATUS_META, attendanceApi } from '@/services/attendance.service';
 import { LEAVE_STATUS_TONE, type LeaveStatus } from '@/services/leaves.service';
 import { authApi } from '@/services/auth.service';
-import { filesApi, openStoredFile, useStoredFileUrl } from '@/services/files.service';
+import { filesApi, openStoredFile } from '@/services/files.service';
+import { USER_PHOTOS_QUERY_KEY } from '@/services/photos.service';
 import { formatDisplayDate } from '@/utils/datetime';
 import { currentMonthKey, monthAnchorDate } from '@/utils/month';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -164,7 +165,6 @@ export function EmployeeProfilePage() {
 
   const profile = profileQuery.data;
   // `file:<key>` photo values need an authed blob URL; plain URLs pass through.
-  const photoUrl = useStoredFileUrl(profile?.personal.photoUrl);
 
   function openEdit(): void {
     if (!profile) return;
@@ -194,6 +194,8 @@ export function EmployeeProfilePage() {
       const info = await filesApi.upload(file, 'avatar');
       await employeesApi.setAvatar(employeeId, info.key);
       toast.success('Photo updated');
+      // Every avatar of this person (header, lists, profiles) reads this list.
+      await queryClient.invalidateQueries({ queryKey: USER_PHOTOS_QUERY_KEY });
       await queryClient.invalidateQueries({ queryKey: ['employee', employeeId] });
       await queryClient.invalidateQueries({ queryKey: ['employee', 'me'] });
     } catch (err) {
@@ -373,7 +375,7 @@ export function EmployeeProfilePage() {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
             <div className="relative shrink-0">
-              <Avatar name={profile.fullName} photoUrl={photoUrl} size="xl" />
+              <Avatar name={profile.fullName} userId={profile.id} size="xl" />
               {isSelf || canEdit ? (
                 <>
                   <input

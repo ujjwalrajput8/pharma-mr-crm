@@ -159,7 +159,7 @@ export function EmployeesPage() {
             <tr key={row.id} className="transition-colors hover:bg-[var(--color-bg)]/60">
               <Td>
                 <div className="flex items-center gap-3">
-                  <Avatar name={row.fullName} photoUrl={row.photoUrl} />
+                  <Avatar name={row.fullName} userId={row.id} />
                   <div className="min-w-0">
                     <Link
                       to={`/employees/${row.id}`}

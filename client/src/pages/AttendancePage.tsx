@@ -570,7 +570,7 @@ export function AttendancePage() {
                       className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="flex min-w-0 items-start gap-3">
-                        <Avatar name={row.employee?.fullName ?? '?'} />
+                        <Avatar name={row.employee?.fullName ?? '?'} userId={row.employee?.id} />
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="font-semibold">{row.employee?.fullName ?? '—'}</p>
@@ -687,7 +687,7 @@ export function AttendancePage() {
                     {canManage ? (
                       <Td>
                         <div className="flex items-center gap-2.5">
-                          <Avatar name={row.mr?.fullName ?? '?'} size="sm" />
+                          <Avatar name={row.mr?.fullName ?? '?'} userId={row.mr?.id} size="sm" />
                           <span className="truncate text-sm font-medium">
                             {row.mr?.fullName ?? '—'}
                           </span>
