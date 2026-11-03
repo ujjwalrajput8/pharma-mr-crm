@@ -1,3 +1,4 @@
+import { useStoredFileUrl } from '@/services/files.service';
 import { cn } from '@/utils/cn';
 
 const PALETTE = [
@@ -42,11 +43,14 @@ export function Avatar({
   className?: string;
 }) {
   const palette = paletteFor(name);
+  // An uploaded photo is stored as `file:<key>` and needs an authed fetch;
+  // a plain URL passes straight through. Initials show until it loads.
+  const src = useStoredFileUrl(photoUrl);
 
-  if (photoUrl) {
+  if (src) {
     return (
       <img
-        src={photoUrl}
+        src={src}
         alt={name}
         className={cn(
           'shrink-0 rounded-full border border-[var(--color-border)] object-cover',
