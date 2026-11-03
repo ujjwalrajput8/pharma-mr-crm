@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
-import { PanelLeftClose, PanelLeftOpen, Search } from 'lucide-react';
+import {
+  BriefcaseMedical,
+  Handshake,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search,
+  Stethoscope,
+} from 'lucide-react';
 import { APP_VERSION } from '@/constants/appMeta';
 import { NAV_ITEMS, type NavItem } from '@/constants/navigation';
 import { useAuth } from '@/store/AuthContext';
@@ -77,8 +84,16 @@ export function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed, onOp
                 <span className="text-[#f59e0b]">Jovance</span>{' '}
                 <span className="text-[#ef4444]">Laboratories</span>
               </p>
-              <span className="rounded-full border border-teal-500/30 bg-teal-500/12 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-teal-300 uppercase">
-                Field Force
+              {/* Doctor (stethoscope) and MR (medical bag) shaking hands. */}
+              <span
+                role="img"
+                aria-label="Doctors and medical representatives"
+                title="Doctor · MR"
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/14 bg-white/5 px-2 py-1"
+              >
+                <Stethoscope size={12} strokeWidth={2.4} className="text-[#f59e0b]" />
+                <Handshake size={13} strokeWidth={2.2} className="text-slate-200" />
+                <BriefcaseMedical size={12} strokeWidth={2.4} className="text-[#ef4444]" />
               </span>
             </div>
           </>

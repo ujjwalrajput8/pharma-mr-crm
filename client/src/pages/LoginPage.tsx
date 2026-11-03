@@ -27,7 +27,7 @@ export function LoginPage() {
 
     try {
       await login(email.trim(), password);
-      toast.success('Login successful', 'Welcome back to Field Force Panel.');
+      toast.success('Login successful', 'Welcome back.');
       navigate('/dashboard', { replace: true });
     } catch (err) {
       const message = getApiErrorMessage(err, 'Login failed');
