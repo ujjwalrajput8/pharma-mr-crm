@@ -398,7 +398,7 @@ export function ExpensesPage() {
                 {tab === 'team' ? (
                   <Td>
                     <div className="flex items-center gap-2.5">
-                      <Avatar name={row.employee?.fullName ?? '?'} size="sm" />
+                      <Avatar name={row.employee?.fullName ?? '?'} userId={row.employee?.id} size="sm" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">
                           {row.employee?.fullName ?? '—'}

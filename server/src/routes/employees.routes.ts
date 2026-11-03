@@ -26,6 +26,9 @@ router.get(
   asyncHandler(controller.me),
 );
 
+// Every account's photo key, so any screen can show anyone's avatar. Before /:id.
+router.get('/photos', asyncHandler(controller.photos));
+
 router.get(
   '/',
   requirePermission('employees:view'),

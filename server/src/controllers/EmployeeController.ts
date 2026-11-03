@@ -26,6 +26,13 @@ export class EmployeeController {
     ApiResponse.success(res, result.items, 'Employees', HttpStatus.OK, result.meta);
   };
 
+  /** `{ userId, photoUrl }` for every account with a photo — feeds avatars app-wide. */
+  public photos = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const rows = await this.employees.photos();
+    ApiResponse.success(res, rows, 'Profile photos');
+  };
+
   /** Own profile — every role can read this one. */
   public me = async (req: Request, res: Response): Promise<void> => {
     if (!req.user) throw new UnauthorizedError('Authentication required');

@@ -31,7 +31,6 @@ export const updateEmployeeProfileSchema = z.object({
   qualification: nullableText(120),
   emergencyName: nullableText(120),
   emergencyPhone: nullableText(20),
-  photoUrl: nullableText(500),
   panNumber: nullableText(20),
   aadhaarNumber: nullableText(20),
   bankName: nullableText(120),
@@ -67,7 +66,7 @@ export const createEmployeeDocumentSchema = z.object({
   note: z.string().max(300).optional(),
 });
 
-/** Avatar — sets MrProfile.photoUrl to `file:<key>`. */
+/** Avatar — sets User.photoUrl to `file:<key>` (the only way to change a photo). */
 export const setAvatarSchema = z.object({
   fileKey: fileKeySchema,
 });

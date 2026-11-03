@@ -514,7 +514,7 @@ export function LeavePage() {
                 {tab === 'team' ? (
                   <Td>
                     <div className="flex items-center gap-2.5">
-                      <Avatar name={row.employee?.fullName ?? '?'} size="sm" />
+                      <Avatar name={row.employee?.fullName ?? '?'} userId={row.employee?.id} size="sm" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold">
                           {row.employee?.fullName ?? '—'}
@@ -1048,7 +1048,7 @@ function TeamLeaveCalendar({
                     className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] py-0.5 pr-2.5 pl-0.5"
                     title={`${row.fullName} · ${row.leaveType.code} · ${row.status}`}
                   >
-                    <Avatar name={row.fullName} size="sm" />
+                    <Avatar name={row.fullName} userId={row.userId} size="sm" />
                     <span className="max-w-[9rem] truncate text-[11px] font-semibold text-[var(--color-ink)]">
                       {row.fullName}
                     </span>

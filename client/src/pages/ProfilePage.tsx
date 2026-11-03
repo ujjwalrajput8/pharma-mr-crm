@@ -37,7 +37,8 @@ import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/store/AuthContext';
 import { authApi } from '@/services/auth.service';
 import { employeesApi } from '@/services/employees.service';
-import { filesApi, useStoredFileUrl } from '@/services/files.service';
+import { filesApi } from '@/services/files.service';
+import { USER_PHOTOS_QUERY_KEY } from '@/services/photos.service';
 import { formatDisplayDate } from '@/utils/datetime';
 
 /** Live rules mirrored from the server DTO so feedback is instant. */
@@ -78,18 +79,20 @@ export function ProfilePage() {
     retry: false,
   });
   const profile = profileQuery.data;
-  const photoUrl = useStoredFileUrl(profile?.personal.photoUrl);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
 
   async function onPickAvatar(files: FileList | null): Promise<void> {
     const file = files?.[0];
-    if (!file || !profile) return;
+    // Admins have no employee record, so fall back to the signed-in user.
+    const targetId = profile?.id ?? user?.id;
+    if (!file || !targetId) return;
     setAvatarUploading(true);
     try {
       const info = await filesApi.upload(file, 'avatar');
-      await employeesApi.setAvatar(profile.id, info.key);
+      await employeesApi.setAvatar(targetId, info.key);
       toast.success('Photo updated');
+      await queryClient.invalidateQueries({ queryKey: USER_PHOTOS_QUERY_KEY });
       await queryClient.invalidateQueries({ queryKey: ['employee'] });
     } catch (err) {
       toast.error('Photo upload failed', getApiErrorMessage(err));
@@ -164,8 +167,8 @@ export function ProfilePage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <div className="relative shrink-0">
-              <Avatar name={user?.fullName ?? '?'} photoUrl={photoUrl} size="xl" />
-              {profile ? (
+              <Avatar name={user?.fullName ?? '?'} userId={user?.id} size="xl" />
+              {user ? (
                 <>
                   <input
                     ref={avatarInputRef}
@@ -226,7 +229,7 @@ export function ProfilePage() {
                 Reports to
               </p>
               <p className="mt-1 flex items-center gap-2 text-sm font-semibold">
-                <Avatar name={profile.manager.fullName} size="sm" />
+                <Avatar name={profile.manager.fullName} userId={profile.manager.id} size="sm" />
                 {profile.manager.fullName}
               </p>
             </div>

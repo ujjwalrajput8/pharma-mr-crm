@@ -86,6 +86,14 @@ export class UserRepository {
     });
   }
 
+  public async listPhotos(): Promise<Array<{ userId: number; photoUrl: string }>> {
+    const rows = await this.prisma.user.findMany({
+      where: { deletedAt: null, photoUrl: { not: null } },
+      select: { id: true, photoUrl: true },
+    });
+    return rows.map((row) => ({ userId: row.id, photoUrl: row.photoUrl! }));
+  }
+
   public findById(id: number): Promise<UserWithProfile | null> {
     return this.prisma.user.findFirst({
       where: { id, deletedAt: null },

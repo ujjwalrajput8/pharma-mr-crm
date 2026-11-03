@@ -54,8 +54,46 @@ export function fileKeyFromValue(value: string | null | undefined): string | nul
 }
 
 /**
+ * One download per file, shared by every component showing it (a list can
+ * show the same person's avatar thirty times). The object URL is revoked when
+ * the last user lets go of it.
+ */
+const blobCache = new Map<string, { promise: Promise<string>; users: number; url?: string }>();
+
+function acquireBlobUrl(key: string): Promise<string> {
+  let entry = blobCache.get(key);
+  if (!entry) {
+    const fresh: { promise: Promise<string>; users: number; url?: string } = {
+      users: 0,
+      promise: fetchFileBlobUrl(key).then((url) => {
+        fresh.url = url;
+        return url;
+      }),
+    };
+    // A failed download is forgotten, so the next mount retries it.
+    fresh.promise.catch(() => {
+      if (blobCache.get(key) === fresh) blobCache.delete(key);
+    });
+    blobCache.set(key, fresh);
+    entry = fresh;
+  }
+  entry.users += 1;
+  return entry.promise;
+}
+
+function releaseBlobUrl(key: string): void {
+  const entry = blobCache.get(key);
+  if (!entry) return;
+  entry.users -= 1;
+  if (entry.users <= 0) {
+    blobCache.delete(key);
+    if (entry.url) URL.revokeObjectURL(entry.url);
+  }
+}
+
+/**
  * Resolves a photoUrl-ish value for <img>: `file:<key>` becomes a blob object
- * URL (revoked on unmount); ordinary URLs pass straight through.
+ * URL (shared, revoked when no one uses it); ordinary URLs pass straight through.
  */
 export function useStoredFileUrl(value: string | null | undefined): string | null {
   const [url, setUrl] = useState<string | null>(null);
@@ -68,15 +106,9 @@ export function useStoredFileUrl(value: string | null | undefined): string | nul
     }
 
     let cancelled = false;
-    let objectUrl: string | null = null;
-    fetchFileBlobUrl(key)
+    acquireBlobUrl(key)
       .then((blobUrl) => {
-        if (cancelled) {
-          URL.revokeObjectURL(blobUrl);
-          return;
-        }
-        objectUrl = blobUrl;
-        setUrl(blobUrl);
+        if (!cancelled) setUrl(blobUrl);
       })
       .catch(() => {
         if (!cancelled) setUrl(null);
@@ -84,7 +116,7 @@ export function useStoredFileUrl(value: string | null | undefined): string | nul
 
     return () => {
       cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      releaseBlobUrl(key);
     };
   }, [value]);
 

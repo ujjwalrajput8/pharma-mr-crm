@@ -296,7 +296,7 @@ export function ApprovalsPage() {
                   className="flex flex-col gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--color-bg)]/50 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex min-w-0 items-start gap-3">
-                    <Avatar name={row.employee?.fullName ?? '?'} />
+                    <Avatar name={row.employee?.fullName ?? '?'} userId={row.employee?.id} />
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold">{row.employee?.fullName}</p>
@@ -383,7 +383,7 @@ export function ApprovalsPage() {
                   className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex min-w-0 items-start gap-3">
-                    <Avatar name={row.mr?.fullName ?? '?'} />
+                    <Avatar name={row.mr?.fullName ?? '?'} userId={row.mr?.id} />
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold">{row.mr?.fullName ?? '—'}</p>
@@ -469,7 +469,7 @@ export function ApprovalsPage() {
                   className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex min-w-0 items-start gap-3">
-                    <Avatar name={row.employee?.fullName ?? '?'} />
+                    <Avatar name={row.employee?.fullName ?? '?'} userId={row.employee?.id} />
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold">{row.employee?.fullName ?? '—'}</p>
@@ -542,7 +542,7 @@ export function ApprovalsPage() {
                   className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex min-w-0 items-start gap-3">
-                    <Avatar name={row.employee?.fullName ?? '?'} />
+                    <Avatar name={row.employee?.fullName ?? '?'} userId={row.employee?.id} />
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold">{row.employee?.fullName ?? '—'}</p>

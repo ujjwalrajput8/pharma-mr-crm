@@ -30,6 +30,8 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Page';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { NAV_ITEMS } from '@/constants/navigation';
+import { useStoredFileUrl } from '@/services/files.service';
+import { useUserPhoto } from '@/services/photos.service';
 import {
   countActionable,
   isStoredNotification,
@@ -93,6 +95,8 @@ function initials(name?: string): string {
 
 export function Header({ onToggleSidebar }: HeaderProps) {
   const { user, logout, can } = useAuth();
+  // Own photo from the app-wide list, so changing it shows here at once.
+  const myPhoto = useStoredFileUrl(useUserPhoto(user?.id));
   const { theme, toggle } = useTheme();
   const toast = useToast();
   const navigate = useNavigate();
@@ -343,9 +347,17 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                 }}
                 className="flex items-center gap-2.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] py-1.5 pr-2.5 pl-1.5 shadow-xs transition-all hover:bg-[var(--color-bg)] hover:border-[var(--color-border-strong)] cursor-pointer"
               >
-                <span className="inline-flex h-7.5 w-7.5 items-center justify-center rounded-lg bg-[var(--color-primary)] text-xs font-bold text-white shadow-2xs">
-                  {initials(user?.fullName)}
-                </span>
+                {myPhoto ? (
+                  <img
+                    src={myPhoto}
+                    alt=""
+                    className="h-7.5 w-7.5 rounded-lg border border-[var(--color-border)] object-cover shadow-2xs"
+                  />
+                ) : (
+                  <span className="inline-flex h-7.5 w-7.5 items-center justify-center rounded-lg bg-[var(--color-primary)] text-xs font-bold text-white shadow-2xs">
+                    {initials(user?.fullName)}
+                  </span>
+                )}
                 <span className="hidden text-left sm:block">
                   <span className="block max-w-[8.5rem] truncate text-xs font-bold text-[var(--color-ink)]">
                     {user?.fullName}
