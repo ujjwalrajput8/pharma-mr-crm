@@ -19,17 +19,8 @@ export const fieldControlClass = cn(
   'disabled:cursor-not-allowed disabled:opacity-55 disabled:bg-[var(--color-surface-subtle)]',
 );
 
-/** Select control with a custom chevron rendered by the Field component. */
-export const fieldSelectClass = cn(fieldControlClass, 'appearance-none pr-10 cursor-pointer');
-
 /** Trigger surface for custom popovers (DatePicker, TimePicker, SearchableSelect). */
 export const fieldControlTriggerClass = cn(
   fieldControlClass,
   'inline-flex items-center justify-between text-left font-normal cursor-pointer',
-);
-
-/** Light panel used to group related fields without boxing them in. */
-export const formSectionCardClass = cn(
-  'rounded-2xl border border-[var(--color-border)]/70 bg-[var(--color-bg)]/40 p-4',
-  'transition-colors duration-200',
 );

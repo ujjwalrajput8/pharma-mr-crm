@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { authApi } from '@/services/auth.service';
 import { tokenStorage } from '@/api/client';
 import type { AuthUser, Permission, Role } from '@/types';
@@ -33,6 +34,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     let cancelled = false;
@@ -70,18 +72,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const session = await authApi.login(email, password);
     tokenStorage.set(session.accessToken);
+    // Cached lists belong to whoever was signed in before (e.g. an expired
+    // session) — never show them to the next account.
+    queryClient.clear();
     const role = normalizeRole(session.user.role);
     setUser({ ...session.user, role, permissions: session.user.permissions });
-  }, []);
+  }, [queryClient]);
 
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
     } finally {
       tokenStorage.clear();
+      queryClient.clear();
       setUser(null);
     }
-  }, []);
+  }, [queryClient]);
 
   const value = useMemo<AuthContextValue>(() => {
     const role = user?.role ?? null;

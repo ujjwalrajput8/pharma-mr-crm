@@ -1,5 +1,6 @@
-import dotenv from 'dotenv';
-dotenv.config();
+// Must stay the first import: route modules build singletons (Config) the
+// moment they load, so `.env` has to be in process.env before any of them.
+import 'dotenv/config';
 
 import express, { type Express, type Request, type Response } from 'express';
 import http from 'http';

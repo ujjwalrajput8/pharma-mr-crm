@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { RecordStatuses } from '../constants';
+import { optionalDateOnlySchema } from './common.dto';
 
 export const createMedicineSchema = z.object({
   name: z.string().min(2).max(150),
@@ -13,7 +14,7 @@ export const createMedicineSchema = z.object({
   mrp: z.coerce.number().nonnegative(),
   sku: z.string().max(50).optional(),
   batchNumber: z.string().max(60).optional(),
-  expiryDate: z.string().optional(),
+  expiryDate: optionalDateOnlySchema,
   description: z.string().max(2000).optional(),
   sampleAvailable: z.boolean().optional(),
   status: z.enum([RecordStatuses.ACTIVE, RecordStatuses.INACTIVE]).optional(),

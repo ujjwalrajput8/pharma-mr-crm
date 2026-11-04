@@ -9,6 +9,7 @@ import { Input, Select } from '@/components/ui/Field';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { useToast } from '@/components/ui/Toast';
 import { medicineIssuesApi, type CreateMedicineIssuePayload } from '@/services/medicine-issues.service';
 import { medicinesApi } from '@/services/medicines.service';
 import { usersApi } from '@/services/users.service';
@@ -19,6 +20,7 @@ export function MedicineIssuesPage() {
   const { can } = useAuth();
   const isAdmin = can('medicine-issues:manage');
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateMedicineIssuePayload>({
@@ -78,6 +80,7 @@ export function MedicineIssuesPage() {
     onSuccess: async () => {
       setOpen(false);
       setError(null);
+      toast.success('Samples issued');
       await queryClient.invalidateQueries({ queryKey: ['medicine-issues'] });
       await queryClient.invalidateQueries({ queryKey: ['medicines'] });
       await queryClient.invalidateQueries({ queryKey: ['stock'] });
@@ -85,6 +88,16 @@ export function MedicineIssuesPage() {
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
+
+  function openForm(): void {
+    setError(null);
+    setOpen(true);
+  }
+
+  function closeForm(): void {
+    setOpen(false);
+    setError(null);
+  }
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -106,14 +119,14 @@ export function MedicineIssuesPage() {
         description="Admin issues company samples to MR bag stock. Sample distribution later reduces MR stock."
         actions={
           isAdmin ? (
-            <Button onClick={() => setOpen(true)}>
+            <Button onClick={openForm}>
               <Plus size={16} />
               Issue to MR
             </Button>
           ) : null
         }
       />
-      {error ? <Alert message={error} /> : null}
+      {error && !open ? <Alert message={error} /> : null}
 
       <Card>
         <TableToolbar
@@ -175,13 +188,14 @@ export function MedicineIssuesPage() {
 
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeForm}
+        error={error}
         title="Issue Sample Stock to MR"
         description="Allocate promotional and sample inventory from warehouse to field representative bag stock."
         className="max-w-2xl"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
+            <Button variant="secondary" onClick={closeForm}>
               Cancel
             </Button>
             <Button type="submit" form="medicine-issue-form" loading={createMutation.isPending}>

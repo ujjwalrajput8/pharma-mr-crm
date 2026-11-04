@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { idSchema } from './common.dto';
+import { dateOnlySchema, idSchema, optionalDateOnlySchema } from './common.dto';
 
 export const createSaleSchema = z.object({
   doctorId: idSchema.optional(),
@@ -8,7 +8,7 @@ export const createSaleSchema = z.object({
   mrId: idSchema.optional(),
   quantity: z.coerce.number().int().positive(),
   amount: z.coerce.number().nonnegative(),
-  invoiceDate: z.string().min(1),
+  invoiceDate: dateOnlySchema,
   invoiceNumber: z.string().max(80).optional(),
   remarks: z.string().max(1000).optional(),
 });
@@ -20,8 +20,8 @@ export const listSalesQuerySchema = z.object({
   medicineId: idSchema.optional(),
   doctorId: idSchema.optional(),
   medicalStoreId: idSchema.optional(),
-  from: z.string().optional(),
-  to: z.string().optional(),
+  from: optionalDateOnlySchema,
+  to: optionalDateOnlySchema,
 });
 
 export type CreateSaleDto = z.infer<typeof createSaleSchema>;

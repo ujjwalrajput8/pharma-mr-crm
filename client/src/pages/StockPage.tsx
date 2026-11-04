@@ -7,10 +7,12 @@ import { useClientTable } from '@/hooks/useClientTable';
 import { Input, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { useToast } from '@/components/ui/Toast';
 import { stockApi, type StockItem } from '@/services/stock.service';
 
 export function StockPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [lowOnly, setLowOnly] = useState(false);
   const [adjustFor, setAdjustFor] = useState<StockItem | null>(null);
@@ -44,11 +46,17 @@ export function StockPage() {
       setQuantityDelta('0');
       setRemarks('');
       setError(null);
+      toast.success('Stock adjusted');
       await queryClient.invalidateQueries({ queryKey: ['stock'] });
       await queryClient.invalidateQueries({ queryKey: ['medicines'] });
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
+
+  function closeAdjust(): void {
+    setAdjustFor(null);
+    setError(null);
+  }
 
   function onAdjustSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -80,7 +88,7 @@ export function StockPage() {
         }
       />
 
-      {error ? <Alert message={error} /> : null}
+      {error && !adjustFor ? <Alert message={error} /> : null}
 
       <Card>
         <TableToolbar
@@ -173,8 +181,9 @@ export function StockPage() {
 
       <Modal
         open={Boolean(adjustFor)}
-        onClose={() => setAdjustFor(null)}
+        onClose={closeAdjust}
         title="Adjust Inventory Stock"
+        error={error}
         description={
           adjustFor
             ? `Manual stock correction for ${adjustFor.medicineName} (Current available: ${adjustFor.available})`
@@ -183,7 +192,7 @@ export function StockPage() {
         className="max-w-lg"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setAdjustFor(null)}>
+            <Button variant="secondary" onClick={closeAdjust}>
               Cancel
             </Button>
             <Button

@@ -173,6 +173,7 @@ export function DoctorsPage() {
       setForm(emptyForm);
       setOpen(false);
       setError(null);
+      toast.success('Doctor added');
       await queryClient.invalidateQueries({ queryKey: ['doctors'] });
       await queryClient.invalidateQueries({ queryKey: ['occasions'] });
     },
@@ -228,18 +229,21 @@ export function DoctorsPage() {
   function openCreate(): void {
     setEditing(null);
     setForm(emptyForm);
+    setError(null);
     setOpen(true);
   }
 
   function openEdit(doctor: Doctor): void {
     setEditing(doctor);
     setForm(toForm(doctor));
+    setError(null);
     setOpen(true);
   }
 
   function closeModal(): void {
     setOpen(false);
     setEditing(null);
+    setError(null);
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>): void {
@@ -283,7 +287,7 @@ export function DoctorsPage() {
         }
       />
 
-      {error ? <Alert message={error} /> : null}
+      {error && !open ? <Alert message={error} /> : null}
 
       <Card>
         <TableToolbar
@@ -530,6 +534,7 @@ export function DoctorsPage() {
         open={open}
         onClose={closeModal}
         title={editing ? 'Edit Doctor' : 'Add Doctor'}
+        error={error}
         description={
           editing
             ? "Update the doctor's MSL details, contact and personal occasions."

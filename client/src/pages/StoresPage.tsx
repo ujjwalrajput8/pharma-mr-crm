@@ -46,6 +46,7 @@ export function StoresPage() {
       setForm(emptyForm);
       setOpen(false);
       setError(null);
+      toast.success('Medical store added');
       await queryClient.invalidateQueries({ queryKey: ['stores'] });
     },
     onError: (err) => setError(getApiErrorMessage(err)),
@@ -63,6 +64,16 @@ export function StoresPage() {
       toast.error('Delete failed', getApiErrorMessage(err));
     },
   });
+
+  function openForm(): void {
+    setError(null);
+    setOpen(true);
+  }
+
+  function closeForm(): void {
+    setOpen(false);
+    setError(null);
+  }
 
   function onCreate(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -82,14 +93,14 @@ export function StoresPage() {
         title="Medical Stores"
         description="Partner store directory with GST and contact details."
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button onClick={openForm}>
             <Plus size={16} />
             Add Store
           </Button>
         }
       />
 
-      {error ? <Alert message={error} /> : null}
+      {error && !open ? <Alert message={error} /> : null}
 
       <Card>
         <TableToolbar
@@ -160,13 +171,14 @@ export function StoresPage() {
 
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeForm}
+        error={error}
         title="Add Medical Store"
         description="Register a partner pharmacy or retail medical store with GST and drug license credentials."
         className="max-w-2xl"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
+            <Button variant="secondary" onClick={closeForm}>
               Cancel
             </Button>
             <Button type="submit" form="create-store-form" loading={createMutation.isPending}>

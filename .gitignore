@@ -31,5 +31,8 @@ Thumbs.db
 # Coverage
 coverage
 
+# Local regression output (screenshots, JSON results, saved test tokens)
+tests/results
+
 # Prisma
 prisma/dev.db

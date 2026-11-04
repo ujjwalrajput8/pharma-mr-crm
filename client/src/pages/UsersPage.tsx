@@ -76,6 +76,7 @@ export function UsersPage() {
       setForm(emptyForm);
       setOpen(false);
       setError(null);
+      toast.success('Account created');
       await queryClient.invalidateQueries({ queryKey: ['users'] });
     },
     onError: (err) => setError(getApiErrorMessage(err)),
@@ -104,6 +105,21 @@ export function UsersPage() {
     onError: (err) => setError(getApiErrorMessage(err)),
   });
 
+  function openForm(): void {
+    setError(null);
+    setOpen(true);
+  }
+
+  function closeForm(): void {
+    setOpen(false);
+    setError(null);
+  }
+
+  function closeReset(): void {
+    setResetTarget(null);
+    setError(null);
+  }
+
   function onCreate(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     createMutation.mutate({
@@ -123,14 +139,14 @@ export function UsersPage() {
         title="Users & Hierarchy"
         description="Create MR and Manager (ASM / RSM) logins and set who reports to whom."
         actions={
-          <Button size="lg" onClick={() => setOpen(true)}>
+          <Button size="lg" onClick={openForm}>
             <UserPlus size={15} />
             Add employee
           </Button>
         }
       />
 
-      {error ? <Alert message={error} /> : null}
+      {error && !open && !resetTarget ? <Alert message={error} /> : null}
 
       <Card>
         <TableToolbar
@@ -216,6 +232,7 @@ export function UsersPage() {
                     variant="secondary"
                     size="sm"
                     onClick={() => {
+                      setError(null);
                       setResetTarget({ id: user.id, name: user.fullName });
                       setResetPassword('');
                     }}
@@ -249,14 +266,15 @@ export function UsersPage() {
 
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeForm}
+        error={error}
         title="Add employee"
         description="Create the login and place it in the reporting hierarchy. HR details like PAN and bank can be filled later from the employee record."
         icon={UserPlus}
         className="max-w-2xl"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
+            <Button variant="secondary" onClick={closeForm}>
               Cancel
             </Button>
             <Button type="submit" form="create-mr-form" loading={createMutation.isPending}>
@@ -415,12 +433,13 @@ export function UsersPage() {
 
       <Modal
         open={Boolean(resetTarget)}
-        onClose={() => setResetTarget(null)}
+        onClose={closeReset}
         title="Reset Password"
+        error={error}
         description={`Set a new temporary password for ${resetTarget?.name}`}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setResetTarget(null)}>
+            <Button variant="secondary" onClick={closeReset}>
               Cancel
             </Button>
             <Button

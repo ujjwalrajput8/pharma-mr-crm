@@ -32,6 +32,10 @@ export class MedicineRepository {
     expiryDate: Date | null,
     actorId: number,
   ): Promise<MedicineWithBatches> {
+    // Resolved before the transaction opens: a lookup on another connection while
+    // it is open is not part of it (and blocks on single-connection databases).
+    const warehouseId = openingStock > 0 ? await this.ledger.getDefaultWarehouseId() : null;
+
     return this.prisma.$transaction(async (tx) => {
       const medicine = await tx.medicine.create({ data });
 
@@ -47,8 +51,7 @@ export class MedicineRepository {
         tx,
       );
 
-      if (openingStock > 0) {
-        const warehouseId = await this.ledger.getDefaultWarehouseId();
+      if (warehouseId !== null) {
         await this.ledger.postOpening({
           warehouseId,
           medicineId: medicine.id,

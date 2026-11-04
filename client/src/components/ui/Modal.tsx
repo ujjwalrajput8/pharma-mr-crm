@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode, type ComponentType } from 'react';
 import { X } from 'lucide-react';
 import { Button, ButtonRow } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Page';
 import { cn } from '@/utils/cn';
 
 /** Dialogs currently open, innermost last — Escape and the scroll lock follow it. */
@@ -18,6 +19,8 @@ interface ModalProps {
   footer?: ReactNode;
   /** No header bar or footer strip: the children draw the whole dialog (confirmations). */
   bare?: boolean;
+  /** A failed save, shown at the top of the dialog — where the user is looking. */
+  error?: string | null;
 }
 
 /**
@@ -37,6 +40,7 @@ export function Modal({
   className,
   footer,
   bare = false,
+  error,
 }: ModalProps) {
   // Kept in a ref so a parent re-render (new onClose identity) doesn't re-run
   // the effect below and move this dialog to the top of the stack.
@@ -44,6 +48,12 @@ export function Modal({
   useEffect(() => {
     onCloseRef.current = onClose;
   });
+
+  // A long form is usually scrolled to the bottom when Save fails — bring the message into view.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) bodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [error]);
 
   useEffect(() => {
     if (!open) return;
@@ -134,7 +144,14 @@ export function Modal({
 
             <div className="h-px shrink-0 bg-[var(--color-border)]" />
 
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
+            <div ref={bodyRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6">
+              {error ? (
+                <div role="alert">
+                  <Alert message={error} />
+                </div>
+              ) : null}
+              {children}
+            </div>
 
             {footer ? (
               <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-bg)]/60 px-5 py-3.5 backdrop-blur-sm sm:px-6">

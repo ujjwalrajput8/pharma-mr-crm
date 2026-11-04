@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { idSchema } from './common.dto';
+import { dateOnlySchema, idSchema, optionalDateOnlySchema } from './common.dto';
 import { AppointmentStatuses } from '../constants';
 
 export const createAppointmentSchema = z.object({
   doctorId: idSchema,
   mrId: idSchema.optional(),
-  date: z.string().min(1),
+  date: dateOnlySchema,
   time: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM'),
   purpose: z.string().max(500).optional(),
   remarks: z.string().max(2000).optional(),
@@ -37,7 +37,7 @@ export const listAppointmentsQuerySchema = z.object({
 });
 
 export const completeAppointmentSchema = z.object({
-  visitDate: z.string().min(1),
+  visitDate: dateOnlySchema,
   visitTime: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM'),
   checkInTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   checkOutTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
@@ -45,7 +45,7 @@ export const completeAppointmentSchema = z.object({
   discussionNotes: z.string().max(5000).optional(),
   doctorFeedback: z.string().max(5000).optional(),
   visitOutcome: z.string().max(100).optional(),
-  nextFollowUp: z.string().optional(),
+  nextFollowUp: optionalDateOnlySchema,
   remarks: z.string().max(5000).optional(),
   medicineIds: z.array(idSchema).default([]),
   products: z
@@ -70,7 +70,7 @@ export const completeAppointmentSchema = z.object({
 });
 
 export const rescheduleAppointmentSchema = z.object({
-  date: z.string().min(1),
+  date: dateOnlySchema,
   time: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:MM'),
   remarks: z.string().max(2000).optional(),
 });

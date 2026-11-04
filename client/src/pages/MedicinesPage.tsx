@@ -59,6 +59,7 @@ export function MedicinesPage() {
       setForm(emptyForm);
       setOpen(false);
       setError(null);
+      toast.success('Medicine added');
       await queryClient.invalidateQueries({ queryKey: ['medicines'] });
     },
     onError: (err) => setError(getApiErrorMessage(err)),
@@ -76,6 +77,16 @@ export function MedicinesPage() {
       toast.error('Delete failed', getApiErrorMessage(err));
     },
   });
+
+  function openForm(): void {
+    setError(null);
+    setOpen(true);
+  }
+
+  function closeForm(): void {
+    setOpen(false);
+    setError(null);
+  }
 
   function onCreate(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -108,7 +119,7 @@ export function MedicinesPage() {
               <FileSpreadsheet size={16} />
               Import Excel / CSV
             </Button>
-            <Button onClick={() => setOpen(true)}>
+            <Button onClick={openForm}>
               <Plus size={16} />
               Add Medicine
             </Button>
@@ -116,7 +127,7 @@ export function MedicinesPage() {
         }
       />
 
-      {error ? <Alert message={error} /> : null}
+      {error && !open ? <Alert message={error} /> : null}
 
       <Card>
         <TableToolbar
@@ -214,13 +225,14 @@ export function MedicinesPage() {
 
       <Modal
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={closeForm}
+        error={error}
         title="Add Medicine Master"
         description="Register pharmaceutical products into catalog with batch specifications, MRP, and stock controls."
         className="max-w-3xl"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setOpen(false)}>
+            <Button variant="secondary" onClick={closeForm}>
               Cancel
             </Button>
             <Button type="submit" form="create-medicine-form" loading={createMutation.isPending}>
