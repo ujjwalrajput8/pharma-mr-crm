@@ -117,10 +117,68 @@ export interface ManageAttendancePayload {
   remarks?: string;
 }
 
+/** GET /attendance/overview — own (MR), team (Manager) or company (Admin). */
+export interface AttendanceOverview {
+  date: string;
+  scope: 'SELF' | 'TEAM' | 'COMPANY';
+  members: number;
+  workingDay: boolean;
+  holidayName: string | null;
+  today: {
+    present: number;
+    late: number;
+    absent: number;
+    onLeave: number;
+    halfDay: number;
+    office: number;
+    jointWork: number;
+    flagged: number;
+    notMarked: number;
+  };
+  notCheckedIn: Array<{ id: number; fullName: string; role: string }>;
+  month: {
+    month: string;
+    present: number;
+    late: number;
+    absent: number;
+    leave: number;
+    office: number;
+    jointWork: number;
+    flagged: number;
+    attendanceRate: number | null;
+  };
+  pending: { leaves: number; regularizations: number; flagged: number };
+  onLeave: Array<{
+    userId: number;
+    fullName: string;
+    leaveType: string;
+    fromDate: string;
+    toDate: string;
+    dayPart: string;
+  }>;
+  upcomingHolidays: Array<{ date: string; name: string; type: string; isOptional: boolean }>;
+}
+
 export const attendanceApi = {
-  async list(params: { userId?: number; from?: string; to?: string } = {}): Promise<Attendance[]> {
+  async list(
+    params: {
+      userId?: number;
+      from?: string;
+      to?: string;
+      status?: AttendanceMarkStatus;
+      /** Only check-ins still waiting for a manager's review. */
+      flagged?: boolean;
+      limit?: number;
+    } = {},
+  ): Promise<Attendance[]> {
     const { data } = await api.get<ApiSuccess<Attendance[]>>('/attendance', {
       params: { limit: 200, ...params },
+    });
+    return data.data;
+  },
+  async overview(date?: string): Promise<AttendanceOverview> {
+    const { data } = await api.get<ApiSuccess<AttendanceOverview>>('/attendance/overview', {
+      params: date ? { date } : {},
     });
     return data.data;
   },

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Page';
+import { useAuth } from '@/store/AuthContext';
 import {
   ACTIONABLE_KINDS,
   notificationsApi,
@@ -43,6 +44,9 @@ const TONE: Record<string, { chip: string; bar: string }> = {
  */
 export function NeedsAttention() {
   const navigate = useNavigate();
+  const { can } = useAuth();
+  // Only people who approve anything get the inbox link (an MR would just bounce).
+  const canApprove = can('leaves:manage') || can('attendance:manage');
   const query = useQuery({
     queryKey: ['notifications'],
     queryFn: () => notificationsApi.list(),
@@ -83,12 +87,14 @@ export function NeedsAttention() {
             </p>
           </div>
         </div>
-        <Link to="/approvals">
-          <Button size="sm" variant={actionable.length > 0 ? 'primary' : 'secondary'}>
-            Open approvals
-            <ChevronRight size={13} />
-          </Button>
-        </Link>
+        {canApprove ? (
+          <Link to="/attendance-leave?tab=approvals">
+            <Button size="sm" variant={actionable.length > 0 ? 'primary' : 'secondary'}>
+              Open approvals
+              <ChevronRight size={13} />
+            </Button>
+          </Link>
+        ) : null}
       </div>
 
       <ul className="divide-y divide-[var(--color-border)]">

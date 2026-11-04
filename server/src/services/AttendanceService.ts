@@ -1,6 +1,7 @@
 import { AppRoles, AttendanceStatuses, WorkTypes } from '../constants';
 import type {
   AttendanceCalendarQueryDto,
+  AttendanceOverviewQueryDto,
   AttendanceSummaryQueryDto,
   CheckInDto,
   CheckOutDto,
@@ -21,6 +22,7 @@ import {
   AttendanceRepository,
   type RegularizationRow,
 } from '../repositories/AttendanceRepository';
+import { LeaveRepository } from '../repositories/LeaveRepository';
 import { SettingRepository } from '../repositories/SettingRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import { AuditService } from './AuditService';
@@ -73,6 +75,52 @@ export interface AttendanceCalendarDay {
   isFuture: boolean;
 }
 
+/** The Attendance & Leave landing tab — one call, scoped to what the viewer may see. */
+export interface AttendanceOverview {
+  date: string;
+  /** SELF = an MR's own numbers; TEAM = a manager's whole reporting line; COMPANY = Admin. */
+  scope: 'SELF' | 'TEAM' | 'COMPANY';
+  members: number;
+  workingDay: boolean;
+  holidayName: string | null;
+  today: {
+    present: number;
+    late: number;
+    absent: number;
+    onLeave: number;
+    halfDay: number;
+    office: number;
+    jointWork: number;
+    flagged: number;
+    notMarked: number;
+  };
+  /** Working day, no register row and not on leave — only for TEAM / COMPANY. */
+  notCheckedIn: Array<{ id: number; fullName: string; role: string }>;
+  month: {
+    month: string;
+    present: number;
+    late: number;
+    absent: number;
+    leave: number;
+    office: number;
+    jointWork: number;
+    flagged: number;
+    /** Worked days ÷ (worked + absent + flagged), as a percentage; null when nothing is marked. */
+    attendanceRate: number | null;
+  };
+  pending: { leaves: number; regularizations: number; flagged: number };
+  /** Approved leave over the next 7 days (today included). */
+  onLeave: Array<{
+    userId: number;
+    fullName: string;
+    leaveType: string;
+    fromDate: string;
+    toDate: string;
+    dayPart: string;
+  }>;
+  upcomingHolidays: Array<{ date: string; name: string; type: string; isOptional: boolean }>;
+}
+
 /**
  * Attendance rules:
  * - ADMIN: never self check-in; view all; mark statuses for field users
@@ -87,6 +135,7 @@ export class AttendanceService {
 
   private constructor(
     private readonly attendance = AttendanceRepository.getInstance(),
+    private readonly leaves = LeaveRepository.getInstance(),
     private readonly users = UserRepository.getInstance(),
     private readonly settings = SettingRepository.getInstance(),
     private readonly holidays = HolidayService.getInstance(),
@@ -108,6 +157,7 @@ export class AttendanceService {
       userId: scope.userId,
       userIds: scope.userIds,
       status: query.status,
+      flaggedOnly: query.flagged,
       from: query.from ? parseDateOnly(query.from) : undefined,
       to: query.to ? parseDateOnly(query.to) : undefined,
     });
@@ -392,7 +442,7 @@ export class AttendanceService {
         kind: 'REGULARIZATION_PENDING',
         title: `${actor.fullName} asked to regularize attendance`,
         message: `${dto.attDate} · ${dto.reason}`.slice(0, 480),
-        href: '/approvals',
+        href: '/attendance-leave?tab=approvals&type=regularization',
         tone: 'warning',
       });
     }
@@ -529,7 +579,7 @@ export class AttendanceService {
       message: [dto.status === 'APPROVED' ? 'Your attendance was updated' : null, dto.remark]
         .filter(Boolean)
         .join(' · ') || `Decided by ${actor.fullName}`,
-      href: '/attendance',
+      href: '/attendance-leave?tab=attendance',
       tone: dto.status === 'APPROVED' ? 'success' : 'danger',
     });
 
@@ -707,6 +757,116 @@ export class AttendanceService {
       jointWork: counts[AttendanceStatuses.JOINT_WORK] ?? 0,
       flagged: counts[AttendanceStatuses.FLAGGED] ?? 0,
       workingHours: Number((result.workingMins / 60).toFixed(1)),
+    };
+  }
+
+  /**
+   * Overview for the Attendance & Leave tab. An MR sees only themselves, a manager
+   * their whole reporting line (not their own row), Admin every active field user.
+   */
+  public async overview(query: AttendanceOverviewQueryDto, actor: AuthUser): Promise<AttendanceOverview> {
+    const day = query.date ? parseDateOnly(query.date) : todayDateOnly();
+    const scope: AttendanceOverview['scope'] =
+      actor.role === AppRoles.MR ? 'SELF' : actor.role === AppRoles.ADMIN ? 'COMPANY' : 'TEAM';
+
+    let memberIds: number[] | undefined;
+    if (scope === 'SELF') memberIds = [actor.id];
+    else if (scope === 'TEAM') memberIds = ((await this.scope.visibleUserIds(actor)) ?? []).filter((id) => id !== actor.id);
+    const members = (await this.users.listTeamMembers(memberIds)).filter((user) => user.status === 'ACTIVE');
+    const ids = members.map((user) => user.id);
+    // A manager with nobody below them: never fall through to "no filter = everyone".
+    const filterIds = scope === 'COMPANY' ? undefined : ids;
+    const nobody = filterIds !== undefined && filterIds.length === 0;
+
+    const { start: monthStart, end: monthEnd } = monthRange(day);
+    const weekEnd = addDays(day, 6);
+    const [dayHolidays, rows, approvedToday, monthCounts, pendingLeaves, pendingRegs, flagged, weekLeaves, upcoming] =
+      await Promise.all([
+        this.holidays.blockingNamesInRange(day, day),
+        nobody ? [] : this.attendance.listOnDate(filterIds, day),
+        nobody
+          ? { items: [], total: 0 }
+          : this.leaves.listRequests({ page: 1, limit: 1000, userIds: filterIds, status: 'APPROVED', from: day, to: day }),
+        nobody ? {} : this.attendance.countByStatus(filterIds, monthStart, monthEnd),
+        nobody ? 0 : this.leaves.countPending(filterIds),
+        nobody ? 0 : this.pendingRegularizationCount(actor),
+        nobody
+          ? { items: [], total: 0 }
+          : this.attendance.list({ page: 1, limit: 1, userIds: filterIds, flaggedOnly: true }),
+        nobody
+          ? { items: [], total: 0 }
+          : this.leaves.listRequests({ page: 1, limit: 50, userIds: filterIds, status: 'APPROVED', from: day, to: weekEnd }),
+        this.holidays.list({ from: formatDateOnly(day), to: formatDateOnly(addDays(day, 180)), includeInactive: false }),
+      ]);
+
+    const holidayName = dayHolidays.get(formatDateOnly(day)) ?? null;
+    const workingDay = !isSunday(day) && !holidayName;
+    const statusByUser = new Map(rows.map((row) => [row.userId, row.status as string]));
+    // A flag rides on a normal Present / Late row until a manager reviews it.
+    const flaggedToday = new Set(rows.filter((row) => row.flagReason).map((row) => row.userId));
+    const leaveToday = new Map(approvedToday.items.map((leave) => [leave.userId, leave.dayPart as string]));
+
+    const today: AttendanceOverview['today'] = {
+      present: 0, late: 0, absent: 0, onLeave: 0, halfDay: 0, office: 0, jointWork: 0, flagged: 0, notMarked: 0,
+    };
+    const notCheckedIn: AttendanceOverview['notCheckedIn'] = [];
+    for (const member of members) {
+      const status = statusByUser.get(member.id);
+      const leavePart = leaveToday.get(member.id);
+      if (leavePart && leavePart !== 'FULL' && leavePart !== 'SHORT') today.halfDay += 1;
+      if (flaggedToday.has(member.id)) today.flagged += 1;
+      if (status === AttendanceStatuses.PRESENT) today.present += 1;
+      else if (status === AttendanceStatuses.LATE) today.late += 1;
+      else if (status === AttendanceStatuses.ABSENT) today.absent += 1;
+      else if (status === AttendanceStatuses.OFFICE) today.office += 1;
+      else if (status === AttendanceStatuses.JOINT_WORK) today.jointWork += 1;
+      else if (status === AttendanceStatuses.FLAGGED) {
+        if (!flaggedToday.has(member.id)) today.flagged += 1;
+      } else if (status === AttendanceStatuses.LEAVE || leavePart === 'FULL') today.onLeave += 1;
+      else if (!status && workingDay && !leavePart) {
+        today.notMarked += 1;
+        if (scope !== 'SELF') notCheckedIn.push({ id: member.id, fullName: member.fullName, role: member.role });
+      }
+    }
+
+    const count = (status: string) => monthCounts[status as keyof typeof monthCounts] ?? 0;
+    const worked = count('PRESENT') + count('LATE') + count('OFFICE') + count('JOINT_WORK');
+    const marked = worked + count('ABSENT') + count('FLAGGED');
+
+    return {
+      date: formatDateOnly(day),
+      scope,
+      members: members.length,
+      workingDay,
+      holidayName,
+      today,
+      notCheckedIn: notCheckedIn.slice(0, 50),
+      month: {
+        month: formatDateOnly(monthStart).slice(0, 7),
+        present: count('PRESENT'),
+        late: count('LATE'),
+        absent: count('ABSENT'),
+        leave: count('LEAVE'),
+        office: count('OFFICE'),
+        jointWork: count('JOINT_WORK'),
+        flagged: count('FLAGGED'),
+        attendanceRate: marked > 0 ? Math.round((worked / marked) * 100) : null,
+      },
+      pending: { leaves: pendingLeaves, regularizations: pendingRegs, flagged: flagged.total },
+      onLeave: weekLeaves.items.map((leave) => ({
+        userId: leave.userId,
+        fullName: leave.user.fullName,
+        leaveType: leave.leaveType.code,
+        fromDate: formatDateOnly(leave.fromDate),
+        toDate: formatDateOnly(leave.toDate),
+        dayPart: leave.dayPart,
+      })),
+      upcomingHolidays: upcoming.slice(0, 3).map((holiday) => ({
+        date: holiday.holidayDate,
+        name: holiday.name,
+        type: holiday.type,
+        isOptional: holiday.isOptional,
+      })),
     };
   }
 

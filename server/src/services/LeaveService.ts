@@ -6,6 +6,7 @@ import type {
   GrantCompOffDto,
   LeaveBalanceQueryDto,
   LeaveCalendarQueryDto,
+  LeavePreviewQueryDto,
   ListLeavesQueryDto,
   SetLeaveBalanceDto,
   UpdateLeaveTypeDto,
@@ -38,6 +39,41 @@ import type { AuthUser } from '../types/auth.types';
 
 /** Few-hour leave; not part of the LeaveDayParts constant set (schema-only enum value). */
 const SHORT_DAY_PART = 'SHORT';
+
+/** Own leave can be filed this far back (sick leave after the fact); older only by a manager. */
+const MAX_BACK_DAYS = 30;
+/** Nobody files leave more than a year ahead. */
+const MAX_AHEAD_DAYS = 365;
+const DAY_MS = 86_400_000;
+
+/** One reason a request cannot be filed as it stands. */
+interface LeaveProblem {
+  code:
+    | 'TYPE'
+    | 'DAY_PART'
+    | 'RANGE'
+    | 'CROSS_YEAR'
+    | 'TOO_OLD'
+    | 'TOO_FAR'
+    | 'OVERLAP'
+    | 'NO_WORKING_DAYS'
+    | 'BALANCE';
+  message: string;
+}
+
+export interface LeavePreview {
+  /** Days the request would consume (0.5 for a half day). */
+  days: number;
+  /** Days inside the range that are not counted, and why (weekly off / holiday name). */
+  excluded: Array<{ date: string; reason: string }>;
+  /** Sandwich-rule types count the excluded days too. */
+  sandwichRule: boolean;
+  requiresProof: boolean;
+  /** Paid, quota-bound types only. */
+  balance: { code: string; available: number; after: number } | null;
+  /** Empty = the request can be submitted. */
+  problems: Array<{ code: LeaveProblem['code']; message: string }>;
+}
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -241,77 +277,36 @@ export class LeaveService {
     return this.toPublic(row);
   }
 
+  /**
+   * The apply form's live check — exactly the rules `apply` enforces, returned as
+   * a list instead of thrown, so the form and the server can never disagree.
+   */
+  public async preview(query: LeavePreviewQueryDto, actor: AuthUser): Promise<LeavePreview> {
+    const check = await this.evaluate(query, actor);
+    return {
+      days: check.days,
+      excluded: check.excluded,
+      sandwichRule: check.leaveType?.sandwichRule ?? false,
+      requiresProof: check.leaveType?.requiresProof ?? false,
+      balance: check.balance,
+      problems: check.problems.map(({ code, message }) => ({ code, message })),
+    };
+  }
+
   public async apply(dto: ApplyLeaveDto, actor: AuthUser): Promise<PublicLeaveRequest> {
-    const targetUserId = dto.userId ?? actor.id;
-    if (targetUserId !== actor.id) {
-      if (actor.role === AppRoles.MR) {
-        throw new ForbiddenError('You can only apply for your own leave');
-      }
-      await this.scope.assertCanSee(actor, targetUserId);
+    const { problems, target, targetUserId, leaveType, fromDate, toDate, days } = await this.evaluate(dto, actor);
+    const problem = problems[0];
+    if (problem) {
+      throw problem.code === 'OVERLAP' ? new ConflictError(problem.message) : new BadRequestError(problem.message);
     }
+    if (!leaveType) throw new BadRequestError('Select an active leave type');
 
-    const target = await this.users.findById(targetUserId);
-    if (!target || target.deletedAt) throw new NotFoundError('Employee not found');
-    if (target.role === AppRoles.ADMIN) {
-      throw new BadRequestError('Admin workspace accounts do not track leave');
-    }
-
-    const leaveType = await this.leaves.findTypeById(dto.leaveTypeId);
-    if (!leaveType || leaveType.status !== 'ACTIVE') {
-      throw new BadRequestError('Select an active leave type');
-    }
-    if (dto.dayPart === SHORT_DAY_PART) {
-      if (!leaveType.allowShortLeave) {
-        throw new BadRequestError(`${leaveType.name} cannot be taken as a short leave`);
-      }
-      if (!dto.hours) {
-        throw new BadRequestError('Short leave needs the number of hours (0.5–4)');
-      }
-    } else if (dto.dayPart !== LeaveDayParts.FULL && !leaveType.allowHalfDay) {
-      throw new BadRequestError(`${leaveType.name} cannot be taken as a half day`);
-    }
     // Proof can be either a link or an uploaded file key.
     if (leaveType.requiresProof && !dto.attachmentUrl && !dto.attachmentFileKey) {
       throw new BadRequestError(`${leaveType.name} needs a supporting document`);
     }
     if (dto.attachmentFileKey) {
       await this.files.assertExists(dto.attachmentFileKey);
-    }
-
-    const fromDate = parseDateOnly(dto.fromDate);
-    const toDate = parseDateOnly(dto.toDate);
-
-    const overlaps = await this.leaves.findOverlapping({ userId: targetUserId, fromDate, toDate });
-    const clash = overlaps[0];
-    if (clash) {
-      throw new ConflictError(
-        `Overlaps an existing ${clash.leaveType.code} request (${formatDateOnly(clash.fromDate)} → ${formatDateOnly(clash.toDate)})`,
-      );
-    }
-
-    const days = await this.countLeaveDays({
-      fromDate,
-      toDate,
-      dayPart: dto.dayPart,
-      hours: dto.hours,
-      sandwichRule: leaveType.sandwichRule,
-      territoryId: target.territoryId,
-    });
-    if (days <= 0) {
-      throw new BadRequestError(
-        'That range has no working days — it is all weekly offs or holidays.',
-      );
-    }
-
-    // Paid, quota-bound types are checked against the remaining balance.
-    if (leaveType.isPaid && Number(leaveType.annualQuota) > 0) {
-      const balances = await this.balancesFor(targetUserId, fromDate.getUTCFullYear());
-      const balance = balances.find((b) => b.leaveTypeId === leaveType.id);
-      if (balance && days > balance.remaining - balance.pending) {
-        throw new BadRequestError(
-          `Only ${(balance.remaining - balance.pending).toFixed(1)} day(s) of ${leaveType.code} left (this request needs ${days}).`,
-        );
-      }
     }
 
     const row = await this.leaves.createRequest({
@@ -337,7 +332,7 @@ export class LeaveService {
         kind: 'LEAVE_PENDING',
         title: `${target.fullName} applied for leave`,
         message: `${leaveType.code} · ${days} day(s) · ${dto.fromDate} → ${dto.toDate} — needs your approval`,
-        href: '/approvals',
+        href: '/attendance-leave?tab=approvals',
         tone: 'warning',
       });
     }
@@ -394,7 +389,7 @@ export class LeaveService {
       ]
         .filter(Boolean)
         .join(' · '),
-      href: '/leave',
+      href: '/attendance-leave?tab=leave',
       tone: dto.status === LeaveStatuses.APPROVED ? 'success' : 'danger',
     });
 
@@ -672,6 +667,124 @@ export class LeaveService {
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────
+
+  /**
+   * Every rule a leave request must pass, collected rather than thrown. Access
+   * problems (not your team, unknown employee) still throw — there is nothing to preview.
+   */
+  private async evaluate(input: LeavePreviewQueryDto, actor: AuthUser) {
+    const targetUserId = input.userId ?? actor.id;
+    if (targetUserId !== actor.id) {
+      if (actor.role === AppRoles.MR) {
+        throw new ForbiddenError('You can only apply for your own leave');
+      }
+      await this.scope.assertCanSee(actor, targetUserId);
+    }
+
+    const target = await this.users.findById(targetUserId);
+    if (!target || target.deletedAt) throw new NotFoundError('Employee not found');
+    if (target.role === AppRoles.ADMIN) {
+      throw new BadRequestError('Admin workspace accounts do not track leave');
+    }
+
+    const problems: LeaveProblem[] = [];
+    const found = await this.leaves.findTypeById(input.leaveTypeId);
+    const leaveType = found && found.status === 'ACTIVE' ? found : null;
+    if (!leaveType) {
+      problems.push({ code: 'TYPE', message: 'Select an active leave type' });
+    } else if (input.dayPart === SHORT_DAY_PART) {
+      if (!leaveType.allowShortLeave) {
+        problems.push({ code: 'DAY_PART', message: `${leaveType.name} cannot be taken as a short leave` });
+      } else if (!input.hours) {
+        problems.push({ code: 'DAY_PART', message: 'Short leave needs the number of hours (0.5–4)' });
+      }
+    } else if (input.dayPart !== LeaveDayParts.FULL && !leaveType.allowHalfDay) {
+      problems.push({ code: 'DAY_PART', message: `${leaveType.name} cannot be taken as a half day` });
+    }
+
+    const fromDate = parseDateOnly(input.fromDate);
+    const toDate = parseDateOnly(input.toDate);
+    const rangeOrdered = input.fromDate <= input.toDate;
+    if (!rangeOrdered) {
+      problems.push({ code: 'RANGE', message: 'From date cannot be after to date' });
+    } else if (input.dayPart !== LeaveDayParts.FULL && input.fromDate !== input.toDate) {
+      problems.push({ code: 'RANGE', message: 'Half-day / short leave applies to a single date only' });
+    }
+    // Balances are yearly — a request that crosses 31 Dec would be charged to one year only.
+    const crossesYear = fromDate.getUTCFullYear() !== toDate.getUTCFullYear();
+    if (crossesYear) {
+      problems.push({
+        code: 'CROSS_YEAR',
+        message: `Leave cannot run into ${toDate.getUTCFullYear()} — apply separately for each year`,
+      });
+    }
+    const today = todayDateOnly().getTime();
+    if (targetUserId === actor.id && (today - fromDate.getTime()) / DAY_MS > MAX_BACK_DAYS) {
+      problems.push({
+        code: 'TOO_OLD',
+        message: `Leave older than ${MAX_BACK_DAYS} days can only be filed by your manager`,
+      });
+    }
+    if ((toDate.getTime() - today) / DAY_MS > MAX_AHEAD_DAYS) {
+      problems.push({ code: 'TOO_FAR', message: `Leave can be applied at most ${MAX_AHEAD_DAYS} days ahead` });
+    }
+
+    let days = 0;
+    let excluded: LeavePreview['excluded'] = [];
+    let balance: LeavePreview['balance'] = null;
+    if (rangeOrdered && !crossesYear) {
+      const overlaps = await this.leaves.findOverlapping({ userId: targetUserId, fromDate, toDate });
+      const clash = overlaps[0];
+      if (clash) {
+        problems.push({
+          code: 'OVERLAP',
+          message: `Overlaps an existing ${clash.leaveType.code} request (${formatDateOnly(clash.fromDate)} → ${formatDateOnly(clash.toDate)})`,
+        });
+      }
+
+      const holidayNames = await this.holidays.blockingNamesInRange(fromDate, toDate, target.territoryId);
+      excluded = eachDayInclusive(fromDate, toDate).flatMap((day) => {
+        const key = formatDateOnly(day);
+        if (isSunday(day)) return [{ date: key, reason: 'Sunday (weekly off)' }];
+        const name = holidayNames.get(key);
+        return name ? [{ date: key, reason: name }] : [];
+      });
+
+      if (leaveType) {
+        days = await this.countLeaveDays({
+          fromDate,
+          toDate,
+          dayPart: input.dayPart,
+          hours: input.hours,
+          sandwichRule: leaveType.sandwichRule,
+          territoryId: target.territoryId,
+        });
+        if (days <= 0) {
+          problems.push({
+            code: 'NO_WORKING_DAYS',
+            message: 'That range has no working days — it is all weekly offs or holidays.',
+          });
+        }
+        // Paid, quota-bound types are checked against the remaining balance.
+        if (leaveType.isPaid && Number(leaveType.annualQuota) > 0) {
+          const balances = await this.balancesFor(targetUserId, fromDate.getUTCFullYear());
+          const row = balances.find((b) => b.leaveTypeId === leaveType.id);
+          if (row) {
+            const available = round2(row.remaining - row.pending);
+            balance = { code: leaveType.code, available, after: round2(available - days) };
+            if (days > available) {
+              problems.push({
+                code: 'BALANCE',
+                message: `Only ${available.toFixed(1)} day(s) of ${leaveType.code} left (this request needs ${days}).`,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return { problems, target, targetUserId, leaveType, fromDate, toDate, days, excluded, balance };
+  }
 
   /**
    * Days a request consumes.

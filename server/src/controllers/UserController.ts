@@ -4,6 +4,7 @@ import { ApiResponse } from '../utils/ApiResponse';
 import type {
   CreateMrDto,
   ListUsersQueryDto,
+  ManagerOptionsQueryDto,
   ResetPasswordDto,
   UpdateMrDto,
 } from '../dto/user.dto';
@@ -32,8 +33,9 @@ export class UserController {
   };
 
   /** Managers available as a reporting parent (for the create / edit form). */
-  public managerOptions = async (_req: Request, res: Response): Promise<void> => {
-    const rows = await this.users.listManagerOptions();
+  public managerOptions = async (req: Request, res: Response): Promise<void> => {
+    const query = (req.validatedQuery ?? req.query) as ManagerOptionsQueryDto;
+    const rows = await this.users.listManagerOptions(query.forUserId);
     ApiResponse.success(res, rows, 'Manager options');
   };
 

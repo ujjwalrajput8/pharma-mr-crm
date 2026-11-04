@@ -311,13 +311,14 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                     </ul>
                   )}
 
-                  {(feed?.items.length ?? 0) > 0 ? (
+                  {/* Only people who approve anything get the inbox link (an MR would just bounce). */}
+                  {(feed?.items.length ?? 0) > 0 && (can('leaves:manage') || can('attendance:manage')) ? (
                     <div className="border-t border-[var(--color-border)] bg-[var(--color-bg)]/40 px-4 py-2">
                       <button
                         type="button"
                         onClick={() => {
                           setNotifOpen(false);
-                          navigate('/approvals');
+                          navigate('/attendance-leave?tab=approvals');
                         }}
                         className="w-full cursor-pointer text-center text-[11px] font-bold text-[var(--color-primary)] hover:underline"
                       >

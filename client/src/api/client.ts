@@ -58,8 +58,10 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<ApiError>) => {
     const original = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+    // Here a 401 means "wrong current password", not an expired session — show it, don't refresh.
+    const wrongPassword = original?.url?.endsWith('/auth/change-password');
 
-    if (error.response?.status === 401 && original && !original._retry) {
+    if (error.response?.status === 401 && original && !original._retry && !wrongPassword) {
       original._retry = true;
       refreshPromise ??= refreshAccessToken().finally(() => {
         refreshPromise = null;

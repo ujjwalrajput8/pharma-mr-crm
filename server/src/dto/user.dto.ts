@@ -36,6 +36,11 @@ export const updateMrSchema = z.object({
   assignedArea: z.string().max(120).nullable().optional(),
 });
 
+/** GET /users/manager-options — `forUserId` leaves out that person and their whole team. */
+export const managerOptionsQuerySchema = z.object({
+  forUserId: idSchema.optional(),
+});
+
 export const resetPasswordSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
@@ -52,4 +57,5 @@ export const listUsersQuerySchema = z.object({
 export type CreateMrDto = z.infer<typeof createMrSchema>;
 export type UpdateMrDto = z.infer<typeof updateMrSchema>;
 export type ResetPasswordDto = z.infer<typeof resetPasswordSchema>;
+export type ManagerOptionsQueryDto = z.infer<typeof managerOptionsQuerySchema>;
 export type ListUsersQueryDto = z.infer<typeof listUsersQuerySchema>;

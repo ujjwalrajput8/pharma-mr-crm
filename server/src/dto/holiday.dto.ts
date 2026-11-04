@@ -1,8 +1,29 @@
 import { z } from 'zod';
 import { HolidayTypes, RecordStatuses } from '../constants';
-import { idSchema } from './common.dto';
+import { dateOnlySchema, idSchema } from './common.dto';
 
-const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
+/** A real calendar day — "2026-02-31" is rejected, not rolled over to March. */
+const dateOnly = dateOnlySchema;
+
+export const HOLIDAY_IMPORT_MAX_ROWS = 500;
+
+/**
+ * POST /holidays/import — rows as read from the sheet (values keyed by field:
+ * date, name, type, optional, description). `dryRun` returns the preview only.
+ */
+export const importHolidaysSchema = z.object({
+  fileName: z.string().max(200).optional(),
+  dryRun: z.boolean().default(true),
+  rows: z
+    .array(
+      z.object({
+        rowNumber: z.coerce.number().int().positive(),
+        values: z.record(z.string(), z.unknown()),
+      }),
+    )
+    .min(1, 'The file has no holiday rows')
+    .max(HOLIDAY_IMPORT_MAX_ROWS, `Import at most ${HOLIDAY_IMPORT_MAX_ROWS} holidays at a time`),
+});
 
 export const createHolidaySchema = z.object({
   holidayDate: dateOnly,
@@ -35,3 +56,4 @@ export const listHolidaysQuerySchema = z.object({
 export type CreateHolidayDto = z.infer<typeof createHolidaySchema>;
 export type UpdateHolidayDto = z.infer<typeof updateHolidaySchema>;
 export type ListHolidaysQueryDto = z.infer<typeof listHolidaysQuerySchema>;
+export type ImportHolidaysDto = z.infer<typeof importHolidaysSchema>;

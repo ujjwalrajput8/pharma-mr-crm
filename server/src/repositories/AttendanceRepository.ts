@@ -211,6 +211,30 @@ export class AttendanceRepository {
     };
   }
 
+  /** Status counts across many people in a window (Overview tiles). `undefined` = everyone. */
+  public async countByStatus(userIds: number[] | undefined, from: Date, to: Date) {
+    const rows = await this.prisma.attendance.groupBy({
+      by: ['status'],
+      where: {
+        deletedAt: null,
+        attDate: { gte: from, lte: to },
+        ...(userIds ? { userId: { in: userIds } } : {}),
+      },
+      _count: { _all: true },
+    });
+    return Object.fromEntries(rows.map((row) => [row.status, row._count._all])) as Partial<
+      Record<AttendanceStatus, number>
+    >;
+  }
+
+  /** Who has a register row on one day, and with what status. `undefined` = everyone. */
+  public listOnDate(userIds: number[] | undefined, attDate: Date) {
+    return this.prisma.attendance.findMany({
+      where: { deletedAt: null, attDate, ...(userIds ? { userId: { in: userIds } } : {}) },
+      select: { userId: true, status: true, flagReason: true },
+    });
+  }
+
   public update(id: number, data: Prisma.AttendanceUpdateInput) {
     return this.prisma.attendance.update({
       where: { id },
@@ -227,10 +251,13 @@ export class AttendanceRepository {
     status?: AttendanceStatus;
     from?: Date;
     to?: Date;
+    /** Only check-ins still carrying a flag (cleared once a manager reviews it). */
+    flaggedOnly?: boolean;
   }) {
     const where: Prisma.AttendanceWhereInput = {
       deletedAt: null,
       ...(params.status ? { status: params.status } : {}),
+      ...(params.flaggedOnly ? { flagReason: { not: null } } : {}),
       ...(params.userId ? { userId: params.userId } : {}),
       ...(params.userIds && params.userIds.length > 0
         ? { userId: { in: params.userIds } }

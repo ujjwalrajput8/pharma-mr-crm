@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   BriefcaseBusiness,
   ChevronRight,
+  GitBranch,
   IdCard,
   KeyRound,
   MapPin,
+  PencilLine,
   Stethoscope,
+  Table2,
   UserPlus,
 } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
@@ -22,8 +25,12 @@ import { DatePicker } from '@/components/ui/DatePicker';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Switch } from '@/components/ui/Switch';
+import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
-import { usersApi, type CreateMrPayload } from '@/services/users.service';
+import { EditEmployeeDialog } from '@/components/users/EditEmployeeDialog';
+import { HierarchyTree } from '@/components/users/HierarchyTree';
+import { usersApi, type CreateMrPayload, type MrUser } from '@/services/users.service';
 
 const emptyForm: CreateMrPayload = {
   fullName: '',
@@ -45,8 +52,11 @@ export function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateMrPayload>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
-  const [resetTarget, setResetTarget] = useState<{ id: number; name: string } | null>(null);
-  const [resetPassword, setResetPassword] = useState('');
+  const [deactivateTarget, setDeactivateTarget] = useState<{ id: number; name: string } | null>(null);
+  const [editing, setEditing] = useState<MrUser | null>(null);
+  const [view, setView] = useState<'table' | 'tree'>('table');
+  // `/users?edit=<id>` — the "Change" link on an employee profile opens their edit dialog.
+  const [params, setParams] = useSearchParams();
 
   const usersQuery = useQuery({ queryKey: ['users'], queryFn: () => usersApi.list() });
   const managersQuery = useQuery({
@@ -82,27 +92,32 @@ export function UsersPage() {
     onError: (err) => setError(getApiErrorMessage(err)),
   });
 
+  // Status and delete. The server keeps its rules (e.g. a manager with reports
+  // cannot be deactivated) — the toggle only asks; it never forces.
   const actionMutation = useMutation({
-    mutationFn: async (input: {
-      id: number;
-      action: 'activate' | 'deactivate' | 'remove' | 'reset';
-      password?: string;
-    }) => {
+    mutationFn: async (input: { id: number; action: 'activate' | 'deactivate' | 'remove' }) => {
       if (input.action === 'activate') return usersApi.activate(input.id);
       if (input.action === 'deactivate') return usersApi.deactivate(input.id);
-      if (input.action === 'remove') return usersApi.remove(input.id);
-      if (!input.password) throw new Error('Password required');
-      return usersApi.resetPassword(input.id, input.password);
+      return usersApi.remove(input.id);
     },
-    onSuccess: async () => {
+    onSuccess: async (_result, input) => {
       setError(null);
       setDeleteTarget(null);
-      setResetTarget(null);
-      setResetPassword('');
-      toast.success('Account updated');
+      setDeactivateTarget(null);
+      toast.success(
+        input.action === 'activate'
+          ? 'Account reactivated'
+          : input.action === 'deactivate'
+            ? 'Account deactivated'
+            : 'Account deleted',
+      );
       await queryClient.invalidateQueries({ queryKey: ['users'] });
     },
-    onError: (err) => setError(getApiErrorMessage(err)),
+    onError: (err) => {
+      setDeactivateTarget(null);
+      setError(getApiErrorMessage(err));
+      toast.error('Not changed', getApiErrorMessage(err));
+    },
   });
 
   function openForm(): void {
@@ -112,11 +127,6 @@ export function UsersPage() {
 
   function closeForm(): void {
     setOpen(false);
-    setError(null);
-  }
-
-  function closeReset(): void {
-    setResetTarget(null);
     setError(null);
   }
 
@@ -146,8 +156,35 @@ export function UsersPage() {
         }
       />
 
-      {error && !open && !resetTarget ? <Alert message={error} /> : null}
+      {error && !open ? <Alert message={error} /> : null}
 
+      <EditEmployeeDialog
+        user={
+          editing ??
+          (usersQuery.data ?? []).find((person) => String(person.id) === params.get('edit')) ??
+          null
+        }
+        people={usersQuery.data ?? []}
+        onClose={() => {
+          setEditing(null);
+          if (params.has('edit')) setParams({}, { replace: true });
+        }}
+      />
+
+      <Tabs
+        value={view}
+        onChange={setView}
+        items={[
+          { value: 'table', label: 'Accounts', icon: Table2 },
+          { value: 'tree', label: 'Reporting tree', icon: GitBranch },
+        ]}
+      />
+
+      {view === 'tree' ? (
+        <Card>
+          <HierarchyTree people={usersQuery.data ?? []} onEdit={setEditing} />
+        </Card>
+      ) : (
       <Card>
         <TableToolbar
           search={table.search}
@@ -186,7 +223,7 @@ export function UsersPage() {
               <Td className="font-mono text-xs">{user.employeeCode ?? '—'}</Td>
               <Td>
                 <div className="flex items-center gap-2.5">
-                  <Avatar name={user.fullName} size="sm" />
+                  <Avatar name={user.fullName} userId={user.id} size="sm" />
                   <div className="min-w-0">
                     <div className="truncate font-medium">{user.fullName}</div>
                     <div className="truncate text-[11px] text-[var(--color-muted)]">
@@ -201,7 +238,28 @@ export function UsersPage() {
               <Td className="text-xs">{user.managerName ?? '—'}</Td>
               <Td className="text-xs">{user.assignedArea ?? '—'}</Td>
               <Td>
-                <Badge tone={user.status === 'ACTIVE' ? 'success' : 'neutral'}>{user.status}</Badge>
+                {/* Turning it off asks first; turning it back on is immediate. */}
+                <label className="inline-flex items-center gap-2" data-testid="status-toggle">
+                  <Switch
+                    checked={user.status === 'ACTIVE'}
+                    label={`${user.fullName} is ${user.status === 'ACTIVE' ? 'active' : 'deactivated'}`}
+                    disabled={actionMutation.isPending}
+                    onChange={(next) =>
+                      next
+                        ? actionMutation.mutate({ id: user.id, action: 'activate' })
+                        : setDeactivateTarget({ id: user.id, name: user.fullName })
+                    }
+                  />
+                  <span
+                    className={
+                      user.status === 'ACTIVE'
+                        ? 'text-xs font-semibold text-[var(--color-success)]'
+                        : 'text-xs font-semibold text-[var(--color-muted)]'
+                    }
+                  >
+                    {user.status === 'ACTIVE' ? 'Active' : 'Deactivated'}
+                  </span>
+                </label>
               </Td>
               <Td>
                 <div className="flex flex-wrap gap-2">
@@ -211,33 +269,9 @@ export function UsersPage() {
                       <ChevronRight size={13} />
                     </Button>
                   </Link>
-                  {user.status === 'ACTIVE' ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => actionMutation.mutate({ id: user.id, action: 'deactivate' })}
-                    >
-                      Deactivate
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => actionMutation.mutate({ id: user.id, action: 'activate' })}
-                    >
-                      Activate
-                    </Button>
-                  )}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setError(null);
-                      setResetTarget({ id: user.id, name: user.fullName });
-                      setResetPassword('');
-                    }}
-                  >
-                    Reset password
+                  <Button variant="secondary" size="sm" onClick={() => setEditing(user)}>
+                    <PencilLine size={13} />
+                    Edit
                   </Button>
                   <Button
                     variant="danger"
@@ -263,6 +297,7 @@ export function UsersPage() {
           onPageSizeChange={table.setPageSize}
         />
       </Card>
+      )}
 
       <Modal
         open={open}
@@ -421,7 +456,7 @@ export function UsersPage() {
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         variant="delete"
-        description="This action cannot be undone. Accounts with direct reports must be reassigned first."
+        description="This action cannot be undone. Not allowed while the account still has direct reports, stock, open appointments, a current tour plan or pending requests."
         recordName={deleteTarget?.name}
         recordContext="Users & Hierarchy"
         loading={actionMutation.isPending}
@@ -431,48 +466,22 @@ export function UsersPage() {
         }
       />
 
-      <Modal
-        open={Boolean(resetTarget)}
-        onClose={closeReset}
-        title="Reset Password"
-        error={error}
-        description={`Set a new temporary password for ${resetTarget?.name}`}
-        footer={
-          <>
-            <Button variant="secondary" onClick={closeReset}>
-              Cancel
-            </Button>
-            <Button
-              loading={actionMutation.isPending}
-              disabled={actionMutation.isPending || resetPassword.length < 8}
-              onClick={() =>
-                resetTarget &&
-                actionMutation.mutate({
-                  id: resetTarget.id,
-                  action: 'reset',
-                  password: resetPassword,
-                })
-              }
-            >
-              {actionMutation.isPending ? 'Resetting…' : 'Reset Password'}
-            </Button>
-          </>
+      {/* Password resets live on the employee's profile (secure one-time link). */}
+      <ConfirmDialog
+        open={Boolean(deactivateTarget)}
+        variant="generic"
+        badge="Deactivate"
+        title="Deactivate this account?"
+        description="They are signed out and can no longer log in. Their records stay. Not allowed while they still hold stock, open appointments, a current tour plan, pending requests or people reporting to them — settle or reassign those first."
+        recordName={deactivateTarget?.name}
+        recordContext="Users & Hierarchy"
+        confirmLabel="Deactivate"
+        loading={actionMutation.isPending}
+        onClose={() => setDeactivateTarget(null)}
+        onConfirm={() =>
+          deactivateTarget && actionMutation.mutate({ id: deactivateTarget.id, action: 'deactivate' })
         }
-      >
-        <div className="space-y-4">
-          <Input
-            label="New Password"
-            type="password"
-            minLength={8}
-            placeholder="Minimum 8 characters"
-            value={resetPassword}
-            onChange={(e) => setResetPassword(e.target.value)}
-          />
-          <p className="text-xs text-[var(--color-muted)]">
-            The user will be able to log in with this new password immediately across all active devices.
-          </p>
-        </div>
-      </Modal>
+      />
     </div>
   );
 }

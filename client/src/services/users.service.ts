@@ -57,8 +57,11 @@ export const usersApi = {
     });
     return data.data;
   },
-  async managerOptions(): Promise<ManagerOption[]> {
-    const { data } = await api.get<ApiSuccess<ManagerOption[]>>('/users/manager-options');
+  /** Active Managers who can take reports. `forUserId` leaves out that person and their whole team. */
+  async managerOptions(forUserId?: number): Promise<ManagerOption[]> {
+    const { data } = await api.get<ApiSuccess<ManagerOption[]>>('/users/manager-options', {
+      params: forUserId ? { forUserId } : {},
+    });
     return data.data;
   },
   async create(payload: CreateMrPayload): Promise<MrUser> {

@@ -328,7 +328,7 @@ export function ProfilePage() {
                     </div>
                   ))}
                   <Link
-                    to="/leave"
+                    to="/attendance-leave?tab=leave"
                     className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--color-primary)] hover:underline"
                   >
                     Apply for leave

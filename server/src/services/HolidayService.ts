@@ -49,6 +49,10 @@ export class HolidayService {
     if (existing && !existing.deletedAt) {
       throw new ConflictError('This holiday already exists on that date');
     }
+    // Same date + name was deleted earlier: bring that row back (the pair is unique).
+    if (existing) {
+      return this.toPublic(await this.holidays.update(existing.id, this.restoreData(dto, actor.id)));
+    }
 
     const row = await this.holidays.create({
       holidayDate,
@@ -108,6 +112,34 @@ export class HolidayService {
     return new Set(
       rows.filter((row) => !row.isOptional).map((row) => formatDateOnly(row.holidayDate)),
     );
+  }
+
+  /** Non-working dates in a window with the holiday's name — "why this day is not counted". */
+  public async blockingNamesInRange(
+    from: Date,
+    to: Date,
+    territoryId?: number | null,
+  ): Promise<Map<string, string>> {
+    const rows = await this.holidays.list({ from, to, territoryId: territoryId ?? undefined });
+    return new Map(
+      rows.filter((row) => !row.isOptional).map((row) => [formatDateOnly(row.holidayDate), row.name]),
+    );
+  }
+
+  /** Fields that bring a soft-deleted holiday back to life with the new values. */
+  public restoreData(
+    dto: Pick<CreateHolidayDto, 'type' | 'isOptional' | 'description' | 'status' | 'territoryId'>,
+    actorId: number,
+  ) {
+    return {
+      deletedAt: null,
+      type: dto.type,
+      isOptional: dto.isOptional ?? false,
+      description: dto.description ?? null,
+      status: dto.status ?? 'ACTIVE',
+      territory: dto.territoryId ? { connect: { id: dto.territoryId } } : { disconnect: true },
+      updatedBy: actorId,
+    } as const;
   }
 
   /** Map of date → holiday for calendar rendering. */

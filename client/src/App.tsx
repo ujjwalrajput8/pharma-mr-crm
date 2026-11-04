@@ -20,18 +20,14 @@ import { DistributionsPage } from '@/pages/DistributionsPage';
 import { MedicineIssuesPage } from '@/pages/MedicineIssuesPage';
 import { ReportsPage } from '@/pages/ReportsPage';
 import { SalesPage } from '@/pages/SalesPage';
-import { AttendancePage } from '@/pages/AttendancePage';
+import { AttendanceLeavePage } from '@/pages/AttendanceLeavePage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { AuditLogsPage } from '@/pages/AuditLogsPage';
 import { MyDayPage } from '@/pages/MyDayPage';
-import { ApprovalsPage } from '@/pages/ApprovalsPage';
 import { TourPlanPage } from '@/pages/TourPlanPage';
 import { MyStockPage } from '@/pages/MyStockPage';
 import { LedgerPage } from '@/pages/LedgerPage';
 import { ManagerPermissionsPage } from '@/pages/ManagerPermissionsPage';
-import { LeavePage } from '@/pages/LeavePage';
-import { LeavePolicyPage } from '@/pages/LeavePolicyPage';
-import { HolidaysPage } from '@/pages/HolidaysPage';
 import { EmployeesPage } from '@/pages/EmployeesPage';
 import { TerritoriesPage } from '@/pages/TerritoriesPage';
 import { ExpensesPage } from '@/pages/ExpensesPage';
@@ -89,14 +85,23 @@ export default function App() {
                   }
                 />
 
+                {/* Attendance, leave, approvals, holidays and leave policy — one module, tabs in the URL. */}
                 <Route
-                  path="/approvals"
+                  path="/attendance-leave"
                   element={
-                    <RequirePermission permissions={['approvals:team']}>
-                      <ApprovalsPage />
+                    <RequirePermission
+                      permissions={['attendance:own', 'attendance:manage', 'leaves:own', 'leaves:manage']}
+                    >
+                      <AttendanceLeavePage />
                     </RequirePermission>
                   }
                 />
+                {/* Old addresses (bookmarks, saved notifications) keep working. */}
+                <Route path="/approvals" element={<Navigate to="/attendance-leave?tab=approvals" replace />} />
+                <Route path="/attendance" element={<Navigate to="/attendance-leave?tab=attendance" replace />} />
+                <Route path="/leave" element={<Navigate to="/attendance-leave?tab=leave" replace />} />
+                <Route path="/holidays" element={<Navigate to="/attendance-leave?tab=holidays" replace />} />
+                <Route path="/leave-policy" element={<Navigate to="/attendance-leave?tab=policy" replace />} />
 
                 <Route
                   path="/tour-plan"
@@ -126,15 +131,6 @@ export default function App() {
                 />
 
                 <Route
-                  path="/leave"
-                  element={
-                    <RequirePermission permissions={['leaves:own', 'leaves:manage']}>
-                      <LeavePage />
-                    </RequirePermission>
-                  }
-                />
-
-                <Route
                   path="/employees"
                   element={
                     <RequirePermission permissions={['employees:view']}>
@@ -148,24 +144,6 @@ export default function App() {
                   element={
                     <RequirePermission permissions={['employees:view', 'profile:own']}>
                       <EmployeeProfilePage />
-                    </RequirePermission>
-                  }
-                />
-
-                <Route
-                  path="/holidays"
-                  element={
-                    <RequirePermission permissions={['holidays:manage']}>
-                      <HolidaysPage />
-                    </RequirePermission>
-                  }
-                />
-
-                <Route
-                  path="/leave-policy"
-                  element={
-                    <RequirePermission permissions={['leave-types:manage']}>
-                      <LeavePolicyPage />
                     </RequirePermission>
                   }
                 />
@@ -293,14 +271,6 @@ export default function App() {
                   }
                 />
 
-                <Route
-                  path="/attendance"
-                  element={
-                    <RequirePermission permissions={['attendance:manage', 'attendance:own']}>
-                      <AttendancePage />
-                    </RequirePermission>
-                  }
-                />
 
                 <Route
                   path="/stock"

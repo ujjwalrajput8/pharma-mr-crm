@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -14,7 +14,6 @@ import {
   Ban,
   Gift,
   ScrollText,
-  Upload,
   User,
   Users,
   XCircle,
@@ -23,10 +22,10 @@ import { getApiErrorMessage } from '@/api/client';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { DataTable, TableToolbar, Td } from '@/components/ui/DataTable';
-import { DatePicker } from '@/components/ui/DatePicker';
-import { Input, Select, Textarea } from '@/components/ui/Field';
+import { Textarea } from '@/components/ui/Field';
 import { Meter } from '@/components/ui/Meter';
-import { Modal, FormSection } from '@/components/ui/Modal';
+import { Modal } from '@/components/ui/Modal';
+import { LeaveApplyDialog } from '@/components/attendance-leave/LeaveApplyDialog';
 import {
   Alert,
   Badge,
@@ -45,29 +44,15 @@ import {
   LEAVE_STATUS_TONE,
   leavesApi,
   type LeaveCalendarEntry,
-  type LeaveDayPart,
   type LeaveRequest,
   type LeaveStatus,
 } from '@/services/leaves.service';
-import { employeesApi } from '@/services/employees.service';
-import { filesApi, fileKeyFromValue, openStoredFile } from '@/services/files.service';
+import { fileKeyFromValue, openStoredFile } from '@/services/files.service';
 import { GrantCompOffDialog } from '@/components/leave/GrantCompOffDialog';
-import { formatDisplayDate, toIsoDate } from '@/utils/datetime';
+import { formatDisplayDate } from '@/utils/datetime';
 import { currentMonthKey, monthLabel, shiftMonth } from '@/utils/month';
 
 type TabValue = 'mine' | 'team' | 'calendar';
-
-const emptyForm = {
-  leaveTypeId: '',
-  fromDate: toIsoDate(new Date()),
-  toDate: toIsoDate(new Date()),
-  dayPart: 'FULL' as LeaveDayPart,
-  hours: '2',
-  reason: '',
-  contactPhone: '',
-  attachmentUrl: '',
-  userId: '',
-};
 
 /** Opens a `file:<key>` attachment as an authed blob, or a plain URL directly. */
 function openAttachment(value: string): void {
@@ -96,11 +81,7 @@ export function LeavePage() {
   const [tab, setTab] = useState<TabValue>(canApplyOwn ? 'mine' : 'team');
   const [applyOpen, setApplyOpen] = useState(false);
   const [compOffOpen, setCompOffOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
-  const [attachment, setAttachment] = useState<{ key: string; fileName: string } | null>(null);
-  const [uploadingProof, setUploadingProof] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(currentMonthKey());
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<LeaveRequest | null>(null);
   const [decision, setDecision] = useState<{
@@ -124,12 +105,6 @@ export function LeavePage() {
     queryKey: ['leaves', 'team'],
     queryFn: () => leavesApi.list(),
     enabled: canManage,
-  });
-  // Filing on behalf of a team member needs the roster.
-  const teamQuery = useQuery({
-    queryKey: ['employees', 'roster'],
-    queryFn: () => employeesApi.list(),
-    enabled: canManage && applyOpen,
   });
   const calendarQuery = useQuery({
     queryKey: ['leaves', 'calendar', calendarMonth],
@@ -177,11 +152,6 @@ export function LeavePage() {
   const hasPolicy = leaveTypes.length > 0;
   const canConfigurePolicy = can('leave-types:manage');
 
-  const selectedType = leaveTypes.find((t) => String(t.id) === form.leaveTypeId);
-  const selectedBalance = balancesQuery.data?.balances.find(
-    (b) => String(b.leaveTypeId) === form.leaveTypeId,
-  );
-
   async function invalidate(): Promise<void> {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['leaves'] }),
@@ -191,35 +161,6 @@ export function LeavePage() {
       // Without this the approved request lingers in the bell until the next poll.
       queryClient.invalidateQueries({ queryKey: ['notifications'] }),
     ]);
-  }
-
-  const applyMutation = useMutation({
-    mutationFn: leavesApi.apply,
-    onSuccess: async () => {
-      setApplyOpen(false);
-      setForm(emptyForm);
-      setAttachment(null);
-      setError(null);
-      toast.success('Leave request submitted');
-      await invalidate();
-    },
-    onError: (err) => setError(getApiErrorMessage(err)),
-  });
-
-  async function onPickProof(files: FileList | null): Promise<void> {
-    const file = files?.[0];
-    if (!file) return;
-    setUploadingProof(true);
-    try {
-      const info = await filesApi.upload(file, 'leave-proof');
-      setAttachment({ key: info.key, fileName: info.fileName });
-      setError(null);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Upload failed'));
-    } finally {
-      setUploadingProof(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
   }
 
   const decideMutation = useMutation({
@@ -249,26 +190,6 @@ export function LeavePage() {
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
-
-  function onApply(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
-    if (!form.leaveTypeId) {
-      setError('Pick a leave type');
-      return;
-    }
-    applyMutation.mutate({
-      leaveTypeId: Number(form.leaveTypeId),
-      fromDate: form.fromDate,
-      toDate: form.dayPart === 'FULL' ? form.toDate : form.fromDate,
-      dayPart: form.dayPart,
-      hours: form.dayPart === 'SHORT' ? Number(form.hours) : undefined,
-      reason: form.reason.trim(),
-      contactPhone: form.contactPhone.trim() || undefined,
-      attachmentUrl: form.attachmentUrl.trim() || undefined,
-      attachmentFileKey: attachment?.key,
-      userId: form.userId ? Number(form.userId) : undefined,
-    });
-  }
 
   const balances = balancesQuery.data?.balances ?? [];
   const paidBalances = balances.filter((b) => b.isPaid && !b.unlimited);
@@ -311,7 +232,7 @@ export function LeavePage() {
               : 'Ask an administrator to set up the leave types and quota for your company.'}
           </p>
           {canConfigurePolicy ? (
-            <Link to="/leave-policy" className="mt-4 inline-block">
+            <Link to="/attendance-leave?tab=policy" className="mt-4 inline-block">
               <Button size="sm">
                 <ScrollText size={14} />
                 Set up leave policy
@@ -572,6 +493,16 @@ export function LeavePage() {
                       {row.status}
                     </span>
                   </Badge>
+                  {/* Why it was approved / rejected — the employee should not have to open the request. */}
+                  {row.decisionRemark ? (
+                    <p
+                      className="mt-1 line-clamp-2 max-w-[200px] text-[11px] text-[var(--color-muted)]"
+                      title={row.decisionRemark}
+                      data-testid="decision-remark"
+                    >
+                      “{row.decisionRemark}”{row.approvedBy ? ` — ${row.approvedBy.fullName}` : ''}
+                    </p>
+                  ) : null}
                 </Td>
                 <Td className="text-right whitespace-nowrap">
                   <div className="flex items-center justify-end gap-1.5">
@@ -606,227 +537,8 @@ export function LeavePage() {
         )}
       </Card>
 
-      {/* ── Apply modal ──────────────────────────────────────────────────── */}
-      <Modal
-        open={applyOpen}
-        onClose={() => {
-          setApplyOpen(false);
-          setAttachment(null);
-          setError(null);
-        }}
-        title="Apply for leave"
-        description="Sundays and company holidays inside the range are not counted."
-        icon={CalendarPlus}
-        className="max-w-xl"
-      >
-        <form id="apply-leave-form" onSubmit={onApply} className="space-y-4">
-          {error ? <Alert message={error} /> : null}
-
-          <FormSection title="Leave details" icon={CalendarRange}>
-            <div className="grid gap-3.5 sm:grid-cols-2">
-              {canManage ? (
-                <Select
-                  label="Employee"
-                  value={form.userId}
-                  onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}
-                  hint="Leave blank to apply for yourself"
-                  className="sm:col-span-2"
-                >
-                  <option value="">Myself</option>
-                  {(teamQuery.data ?? [])
-                    .filter((member) => member.id !== user?.id)
-                    .map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.fullName} ({member.employeeCode ?? member.role})
-                      </option>
-                    ))}
-                </Select>
-              ) : null}
-
-              <Select
-                label="Leave type"
-                required
-                value={form.leaveTypeId}
-                onChange={(e) => setForm((f) => ({ ...f, leaveTypeId: e.target.value }))}
-              >
-                <option value="">Select…</option>
-                {leaveTypes.map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.code} — {type.name}
-                  </option>
-                ))}
-              </Select>
-
-              <Select
-                label="Duration"
-                value={form.dayPart}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, dayPart: e.target.value as LeaveDayPart }))
-                }
-                hint={
-                  form.dayPart === 'SHORT'
-                    ? 'Counts as hours ÷ 8 of a day'
-                    : selectedType && !selectedType.allowHalfDay
-                      ? `${selectedType.code} must be taken as full days`
-                      : undefined
-                }
-              >
-                <option value="FULL">Full day(s)</option>
-                <option value="FIRST_HALF" disabled={selectedType?.allowHalfDay === false}>
-                  First half
-                </option>
-                <option value="SECOND_HALF" disabled={selectedType?.allowHalfDay === false}>
-                  Second half
-                </option>
-                <option value="SHORT" disabled={selectedType?.allowShortLeave !== true}>
-                  Short leave (hours)
-                </option>
-              </Select>
-
-              {form.dayPart === 'SHORT' ? (
-                <Input
-                  label="Hours off"
-                  type="number"
-                  required
-                  min={0.5}
-                  max={4}
-                  step="0.5"
-                  value={form.hours}
-                  onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))}
-                  hint="Between 0.5 and 4 hours"
-                />
-              ) : null}
-
-              <DatePicker
-                label="From"
-                required
-                value={form.fromDate}
-                onChange={(value) =>
-                  setForm((f) => ({
-                    ...f,
-                    fromDate: value,
-                    toDate: f.toDate && f.toDate >= value ? f.toDate : value,
-                  }))
-                }
-              />
-              <DatePicker
-                label="To"
-                required
-                value={form.dayPart === 'FULL' ? form.toDate : form.fromDate}
-                disabled={form.dayPart !== 'FULL'}
-                onChange={(value) => setForm((f) => ({ ...f, toDate: value }))}
-              />
-            </div>
-
-            {selectedBalance && !selectedBalance.unlimited ? (
-              <div className="mt-3 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2">
-                <div className="flex items-center justify-between text-[11px] font-semibold">
-                  <span className="text-[var(--color-muted)]">
-                    {selectedBalance.code} balance
-                  </span>
-                  <span style={{ color: selectedBalance.colorHex }}>
-                    {selectedBalance.remaining - selectedBalance.pending} day(s) available
-                  </span>
-                </div>
-                <Meter
-                  className="mt-1.5"
-                  value={selectedBalance.used}
-                  total={selectedBalance.entitled}
-                  pending={selectedBalance.pending}
-                  color={selectedBalance.colorHex}
-                />
-              </div>
-            ) : null}
-          </FormSection>
-
-          <FormSection title="Reason & contact" icon={Paperclip}>
-            <div className="space-y-3.5">
-              <Textarea
-                label="Reason"
-                required
-                value={form.reason}
-                onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
-                placeholder="Family function in Kanpur, back on Monday…"
-              />
-              <div className="grid gap-3.5 sm:grid-cols-2">
-                <Input
-                  label="Contact number while away"
-                  optional
-                  value={form.contactPhone}
-                  onChange={(e) => setForm((f) => ({ ...f, contactPhone: e.target.value }))}
-                  placeholder="98765 43210"
-                />
-                <Input
-                  label="Document link"
-                  optional
-                  value={form.attachmentUrl}
-                  onChange={(e) => setForm((f) => ({ ...f, attachmentUrl: e.target.value }))}
-                  placeholder="https://…"
-                  hint="Or upload a file below"
-                />
-              </div>
-
-              {/* Uploaded proof (image / PDF, ≤5 MB) — stored on the server. */}
-              <div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,application/pdf"
-                  className="hidden"
-                  onChange={(e) => void onPickProof(e.target.files)}
-                />
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    loading={uploadingProof}
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload size={13} />
-                    {attachment ? 'Replace document' : 'Upload document'}
-                  </Button>
-                  {attachment ? (
-                    <span className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-primary)]">
-                      <Paperclip size={11} />
-                      <span className="truncate">{attachment.fileName}</span>
-                      <button
-                        type="button"
-                        aria-label="Remove attachment"
-                        className="cursor-pointer font-bold hover:opacity-70"
-                        onClick={() => setAttachment(null)}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-[var(--color-muted)]">
-                      {selectedType?.requiresProof
-                        ? `${selectedType.code} needs a supporting document (link or file)`
-                        : 'JPEG / PNG / WebP / PDF, up to 5 MB'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </FormSection>
-
-          <div className="flex flex-wrap justify-end gap-2 pt-1">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setApplyOpen(false);
-                setError(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" loading={applyMutation.isPending}>
-              Submit request
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      {/* ── Apply — the shared form with the live day count ───────────── */}
+      <LeaveApplyDialog open={applyOpen} onClose={() => setApplyOpen(false)} />
 
       {/* ── Approve / reject modal ───────────────────────────────────────── */}
       <Modal
@@ -856,6 +568,8 @@ export function LeavePage() {
             <Button
               variant={decision?.status === 'APPROVED' ? 'primary' : 'destructive'}
               loading={decideMutation.isPending}
+              // A rejection is always explained to the employee.
+              disabled={decision?.status === 'REJECTED' && decisionRemark.trim().length < 3}
               onClick={() =>
                 decision &&
                 decideMutation.mutate({
@@ -886,13 +600,24 @@ export function LeavePage() {
             <DetailRow label="Reason" value={decision.request.reason} />
           </dl>
         ) : null}
-        <Textarea
-          label="Remark"
-          optional
-          value={decisionRemark}
-          onChange={(e) => setDecisionRemark(e.target.value)}
-          placeholder="Approved — hand over your beat to Amit."
-        />
+        {decision?.status === 'REJECTED' ? (
+          <Textarea
+            label="Reason for rejection"
+            required
+            value={decisionRemark}
+            onChange={(e) => setDecisionRemark(e.target.value)}
+            placeholder="Month-end closing — please take it next week."
+            hint="The employee sees this on their request."
+          />
+        ) : (
+          <Textarea
+            label="Remark"
+            optional
+            value={decisionRemark}
+            onChange={(e) => setDecisionRemark(e.target.value)}
+            placeholder="Approved — hand over your beat to Amit."
+          />
+        )}
       </Modal>
 
       {/* ── Detail modal ─────────────────────────────────────────────────── */}

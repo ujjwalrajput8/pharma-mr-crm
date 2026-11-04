@@ -89,6 +89,16 @@ export interface ApplyLeavePayload {
   userId?: number;
 }
 
+/** GET /leaves/preview — the same rules the server applies on submit. */
+export interface LeavePreview {
+  days: number;
+  excluded: Array<{ date: string; reason: string }>;
+  sandwichRule: boolean;
+  requiresProof: boolean;
+  balance: { code: string; available: number; after: number } | null;
+  problems: Array<{ code: string; message: string }>;
+}
+
 export interface LeaveCalendarEntry {
   userId: number;
   fullName: string;
@@ -118,6 +128,12 @@ export const leavesApi = {
   },
   async apply(payload: ApplyLeavePayload): Promise<LeaveRequest> {
     const { data } = await api.post<ApiSuccess<LeaveRequest>>('/leaves', payload);
+    return data.data;
+  },
+  async preview(
+    params: Pick<ApplyLeavePayload, 'leaveTypeId' | 'fromDate' | 'toDate' | 'dayPart' | 'hours' | 'userId'>,
+  ): Promise<LeavePreview> {
+    const { data } = await api.get<ApiSuccess<LeavePreview>>('/leaves/preview', { params });
     return data.data;
   },
   async decide(

@@ -23,6 +23,18 @@ const profileSelect = {
 
 const managerSelect = { id: true, fullName: true, email: true, role: true } as const;
 
+/** Open work held by one user — see `UserRepository.pendingWork`. */
+export interface PendingWork {
+  /** Stock lines (medicine + batch) with quantity left in the user's bag. */
+  stockItems: number;
+  stockUnits: number;
+  appointments: number;
+  tourPlans: number;
+  leave: number;
+  regularization: number;
+  expense: number;
+}
+
 export type UserWithProfile = User & {
   mrProfile: {
     id: number;
@@ -220,6 +232,61 @@ export class UserRepository {
 
     collected.delete(managerId);
     return [...collected];
+  }
+
+  /**
+   * Every field account's reporting link, whatever its status — loop checks must see
+   * inactive people too, or A → (inactive B) → A slips through.
+   */
+  public listReportingLinks() {
+    return this.prisma.user.findMany({
+      where: { deletedAt: null, role: { in: ['MR', 'MANAGER'] } },
+      select: { id: true, managerId: true },
+    });
+  }
+
+  /**
+   * Work still open in a user's name — it has to be settled before the account is
+   * deactivated or deleted. Tour plans count from `monthStart` on: nothing moves an
+   * APPROVED plan out of that status, so past months are history, not open work.
+   */
+  public async pendingWork(userId: number, monthStart: Date): Promise<PendingWork> {
+    const [stock, appointments, tourPlans, leave, regularization, expense] = await Promise.all([
+      this.prisma.stockBalance.aggregate({
+        where: { holderType: 'USER', holderId: userId, qty: { gt: 0 } },
+        _count: { _all: true },
+        _sum: { qty: true },
+      }),
+      this.prisma.appointment.count({
+        where: {
+          mrId: userId,
+          deletedAt: null,
+          status: { in: ['REQUESTED', 'CONFIRMED', 'PENDING', 'RESCHEDULED'] },
+        },
+      }),
+      this.prisma.tourPlan.count({
+        where: {
+          userId,
+          deletedAt: null,
+          status: { in: ['DRAFT', 'SUBMITTED', 'APPROVED'] },
+          planMonth: { gte: monthStart },
+        },
+      }),
+      this.prisma.leaveRequest.count({ where: { userId, deletedAt: null, status: 'PENDING' } }),
+      this.prisma.attendanceRegularization.count({
+        where: { userId, deletedAt: null, status: 'PENDING' },
+      }),
+      this.prisma.expenseClaim.count({ where: { userId, deletedAt: null, status: 'PENDING' } }),
+    ]);
+    return {
+      stockItems: stock._count._all,
+      stockUnits: stock._sum.qty ?? 0,
+      appointments,
+      tourPlans,
+      leave,
+      regularization,
+      expense,
+    };
   }
 
   /** Active MRs / Managers visible to a manager (self + sub-tree) or everyone for Admin. */

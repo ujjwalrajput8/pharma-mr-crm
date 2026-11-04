@@ -4,7 +4,10 @@ import {
   AlertTriangle,
   CalendarClock,
   CalendarDays,
+  CalendarPlus,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   LogIn,
   LogOut,
@@ -50,7 +53,7 @@ import {
   type WorkType,
 } from '@/services/attendance.service';
 import { formatDisplayDate, toIsoDate } from '@/utils/datetime';
-import { currentMonthKey, monthAnchorDate } from '@/utils/month';
+import { currentMonthKey, monthAnchorDate, monthLabel, shiftMonth } from '@/utils/month';
 
 type TabValue = 'calendar' | 'register' | 'regularizations';
 
@@ -103,10 +106,23 @@ function clockTime(iso: string | null): string {
   });
 }
 
-export function AttendancePage() {
+/** First and last day of a `YYYY-MM` month. */
+function monthBounds(month: string): { from: string; to: string } {
+  const [year, mon] = month.split('-').map(Number);
+  const last = new Date(Date.UTC(year ?? 2000, mon ?? 1, 0)).getUTCDate();
+  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, '0')}` };
+}
+
+export function AttendancePage({
+  onApplyLeave,
+}: {
+  /** Inside Attendance & Leave: opens the shared leave form (optionally on a day). */
+  onApplyLeave?: (date?: string) => void;
+} = {}) {
   const { user, can } = useAuth();
   const canManage = can('attendance:manage');
   const canSelfMark = can('attendance:own');
+  const canApplyLeave = Boolean(onApplyLeave) && can('leaves:own');
   const isAdmin = user?.role === 'ADMIN';
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -155,9 +171,10 @@ export function AttendancePage() {
       attendanceApi.calendar({ userId: selectedUserId, month: monthAnchorDate(month) }),
     enabled: Boolean(selectedUserId) || canSelfMark,
   });
+  // The list follows the chosen month (it used to show only the latest 200 rows).
   const listQuery = useQuery({
-    queryKey: ['attendance', 'list', selectedUserId],
-    queryFn: () => attendanceApi.list({ userId: selectedUserId }),
+    queryKey: ['attendance', 'list', selectedUserId, month],
+    queryFn: () => attendanceApi.list({ userId: selectedUserId, ...monthBounds(month), limit: 400 }),
   });
   // Scoped by the API: own rows for an MR, whole team for a manager.
   const regularizationsQuery = useQuery({
@@ -202,11 +219,12 @@ export function AttendancePage() {
         return { date: day.date, label: 'Weekly off', color: 'var(--color-muted)', muted: true };
       }
       if (day.isFuture) {
-        return { date: day.date, muted: true, disabled: true };
+        // A future working day on your own register opens the leave form; nothing else to see there.
+        return { date: day.date, muted: true, disabled: !canApplyLeave || Boolean(selectedUserId) };
       }
       return { date: day.date, label: 'Not marked', color: null, muted: false };
     });
-  }, [calendarQuery.data]);
+  }, [calendarQuery.data, canApplyLeave, selectedUserId]);
 
   const summary = calendarQuery.data?.summary;
 
@@ -349,11 +367,21 @@ export function AttendancePage() {
         title="Attendance"
         description="GPS check-in, monthly register and manager corrections. Approved leave and holidays fill in automatically."
         actions={
-          canManage ? (
-            <Button variant="secondary" onClick={() => openManageFor()}>
-              <PencilLine size={15} />
-              Mark / correct
-            </Button>
+          canManage || canApplyLeave ? (
+            <>
+              {canManage ? (
+                <Button variant="secondary" onClick={() => openManageFor()}>
+                  <PencilLine size={15} />
+                  Mark / correct
+                </Button>
+              ) : null}
+              {canApplyLeave ? (
+                <Button onClick={() => onApplyLeave?.()}>
+                  <CalendarPlus size={15} />
+                  Apply leave
+                </Button>
+              ) : null}
+            </>
           ) : null
         }
       />
@@ -516,6 +544,27 @@ export function AttendancePage() {
                 : []),
             ]}
           />
+          {tab === 'register' ? (
+            <div className="flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-bg)] p-0.5">
+              <button
+                type="button"
+                aria-label="Previous month"
+                onClick={() => setMonth((m) => shiftMonth(m, -1))}
+                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-primary)]"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <span className="min-w-[7.5rem] text-center text-xs font-bold">{monthLabel(month)}</span>
+              <button
+                type="button"
+                aria-label="Next month"
+                onClick={() => setMonth((m) => shiftMonth(m, 1))}
+                className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-[var(--color-muted)] hover:bg-[var(--color-surface)] hover:text-[var(--color-primary)]"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          ) : null}
           {canManage && fieldUsers.length > 0 ? (
             <label className="flex items-center gap-2 text-xs font-semibold text-[var(--color-muted)]">
               <span className="whitespace-nowrap">Employee</span>
@@ -636,11 +685,11 @@ export function AttendancePage() {
                 month={month}
                 onMonthChange={setMonth}
                 cells={calendarCells}
-                onSelect={(cell) =>
-                  setDayDetail(
-                    calendarQuery.data?.days.find((day) => day.date === cell.date) ?? null,
-                  )
-                }
+                onSelect={(cell) => {
+                  const day = calendarQuery.data?.days.find((entry) => entry.date === cell.date) ?? null;
+                  if (day?.isFuture && canApplyLeave && !selectedUserId) onApplyLeave?.(day.date);
+                  else setDayDetail(day);
+                }}
                 legend={LEGEND}
                 loading={calendarQuery.isFetching}
               />
@@ -759,6 +808,24 @@ export function AttendancePage() {
               <Button onClick={() => openManageFor(dayDetail.date)}>
                 <PencilLine size={14} />
                 Correct this day
+              </Button>
+            ) : null}
+            {/* Own register only: a working day with no leave on it yet. */}
+            {canApplyLeave &&
+            dayDetail &&
+            !selectedUserId &&
+            !dayDetail.isSunday &&
+            !(dayDetail.holiday && !dayDetail.holiday.isOptional) &&
+            dayDetail.status !== 'LEAVE' ? (
+              <Button
+                onClick={() => {
+                  const date = dayDetail.date;
+                  setDayDetail(null);
+                  onApplyLeave?.(date);
+                }}
+              >
+                <CalendarPlus size={14} />
+                Apply leave
               </Button>
             ) : null}
           </>
@@ -974,6 +1041,8 @@ export function AttendancePage() {
             <Button
               variant={regDecision?.status === 'APPROVED' ? 'primary' : 'destructive'}
               loading={regDecideMutation.isPending}
+              // A rejection is always explained to the employee.
+              disabled={regDecision?.status === 'REJECTED' && regRemark.trim().length < 3}
               onClick={() =>
                 regDecision &&
                 regDecideMutation.mutate({
@@ -1007,8 +1076,9 @@ export function AttendancePage() {
           </dl>
         ) : null}
         <Textarea
-          label="Remark"
-          optional
+          label={regDecision?.status === 'REJECTED' ? 'Reason for rejection' : 'Remark'}
+          optional={regDecision?.status !== 'REJECTED'}
+          required={regDecision?.status === 'REJECTED'}
           value={regRemark}
           onChange={(e) => setRegRemark(e.target.value)}
           placeholder="Confirmed with the stockist — he was there till evening."

@@ -147,6 +147,7 @@ export function MonthCalendar({
             <button
               key={slot.key}
               type="button"
+              data-date={slot.date}
               disabled={!clickable}
               title={cell?.title}
               onClick={() => (cell ? onSelect?.(cell) : undefined)}

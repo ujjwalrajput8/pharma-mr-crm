@@ -76,7 +76,7 @@ const mrCards: Array<{ key: string; label: string; to: string; icon: typeof User
   { key: 'pendingFollowUps', label: 'Pending Follow-ups', to: '/visits', icon: ClipboardList },
   { key: 'assignedDoctors', label: 'Doctors Assigned', to: '/doctors', icon: Stethoscope },
   { key: 'samplesRemaining', label: 'Samples Remaining', to: '/distributions', icon: Package },
-  { key: 'attendanceToday', label: 'Attendance', to: '/attendance', icon: Users },
+  { key: 'attendanceToday', label: 'Attendance', to: '/attendance-leave?tab=overview', icon: Users },
   { key: 'monthlyPerformance', label: 'Monthly Performance', to: '/reports', icon: ClipboardList },
   { key: 'pendingAppointments', label: 'Pending Appointments', to: '/appointments', icon: CalendarDays },
 ];
@@ -247,7 +247,7 @@ export function DashboardPage() {
           <QuickAction onClick={() => setCalendarOpen(true)} icon={CalendarDays} label="View Calendar" />
           {can('myday:own') ? <QuickAction to="/my-day" icon={Sun} label="My Day" /> : null}
           {can('approvals:team') ? (
-            <QuickAction to="/approvals" icon={Inbox} label="Approvals" />
+            <QuickAction to="/attendance-leave?tab=approvals" icon={Inbox} label="Approvals" />
           ) : null}
           {canAny(['tour-plan:own', 'tour-plan:manage']) ? (
             <QuickAction to="/tour-plan" icon={MapIcon} label="Tour Plan" />
@@ -255,7 +255,7 @@ export function DashboardPage() {
           {can('mystock:own') ? <QuickAction to="/my-stock" icon={Package} label="My Stock" /> : null}
           {can('ledger:view') ? <QuickAction to="/ledger" icon={BookOpen} label="Ledger" /> : null}
           {can('leaves:own') ? (
-            <QuickAction to="/leave" icon={CalendarCheck2} label="Apply Leave" />
+            <QuickAction to="/attendance-leave?tab=leave" icon={CalendarCheck2} label="Apply Leave" />
           ) : null}
           {canAny(['expenses:own', 'expenses:manage']) ? (
             <QuickAction to="/expenses" icon={Wallet} label="New Expense" />

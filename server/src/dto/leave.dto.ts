@@ -1,21 +1,32 @@
 import { z } from 'zod';
 import { LeaveDayParts, LeaveStatuses, RecordStatuses } from '../constants';
-import { idSchema } from './common.dto';
+import { dateOnlySchema, idSchema } from './common.dto';
 
-const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
+/** A real calendar day — "2026-02-31" is rejected, not rolled over to March. */
+const dateOnly = dateOnlySchema;
 
 /** ── Leave requests ───────────────────────────────────────────────────────── */
 
+/** What decides how many days a request costs — shared by apply and the live preview. */
+const leaveRangeFields = {
+  leaveTypeId: idSchema,
+  fromDate: dateOnly,
+  toDate: dateOnly,
+  dayPart: z
+    .enum([LeaveDayParts.FULL, LeaveDayParts.FIRST_HALF, LeaveDayParts.SECOND_HALF, 'SHORT'])
+    .default(LeaveDayParts.FULL),
+  /** Hours off for a SHORT leave (0.5–4); ignored for other day parts. */
+  hours: z.coerce.number().min(0.5).max(4).optional(),
+  /** Admin / Manager may file on behalf of a team member. */
+  userId: idSchema.optional(),
+};
+
+/** GET /leaves/preview — the form's "N working days · balance after" box. */
+export const leavePreviewQuerySchema = z.object(leaveRangeFields);
+
 export const applyLeaveSchema = z
   .object({
-    leaveTypeId: idSchema,
-    fromDate: dateOnly,
-    toDate: dateOnly,
-    dayPart: z
-      .enum([LeaveDayParts.FULL, LeaveDayParts.FIRST_HALF, LeaveDayParts.SECOND_HALF, 'SHORT'])
-      .default(LeaveDayParts.FULL),
-    /** Hours off for a SHORT leave (0.5–4); ignored for other day parts. */
-    hours: z.coerce.number().min(0.5).max(4).optional(),
+    ...leaveRangeFields,
     reason: z.string().min(3, 'Tell your manager why').max(1000),
     contactPhone: z.string().min(7).max(20).optional(),
     attachmentUrl: z.string().url().max(500).optional(),
@@ -24,8 +35,6 @@ export const applyLeaveSchema = z
       .string()
       .regex(/^[0-9a-f]{32}(\.[a-z0-9]{1,10})?$/i, 'Invalid file key')
       .optional(),
-    /** Admin / Manager may file on behalf of a team member. */
-    userId: idSchema.optional(),
   })
   .refine((value) => value.fromDate <= value.toDate, {
     message: 'From date cannot be after to date',
@@ -63,10 +72,16 @@ export const listLeavesQuerySchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100).optional(),
 });
 
-export const decideLeaveSchema = z.object({
-  status: z.enum([LeaveStatuses.APPROVED, LeaveStatuses.REJECTED]),
-  decisionRemark: z.string().max(1000).optional(),
-});
+export const decideLeaveSchema = z
+  .object({
+    status: z.enum([LeaveStatuses.APPROVED, LeaveStatuses.REJECTED]),
+    decisionRemark: z.string().trim().max(1000).optional(),
+  })
+  // The employee is told why — a rejection without a reason is not accepted.
+  .refine((value) => value.status !== LeaveStatuses.REJECTED || (value.decisionRemark?.length ?? 0) >= 3, {
+    message: 'Give a reason for the rejection (at least 3 characters)',
+    path: ['decisionRemark'],
+  });
 
 export const cancelLeaveSchema = z.object({
   reason: z.string().max(500).optional(),
@@ -133,6 +148,7 @@ export const grantCompOffSchema = z.object({
 export type GrantCompOffDto = z.infer<typeof grantCompOffSchema>;
 export type LeaveCalendarQueryDto = z.infer<typeof leaveCalendarQuerySchema>;
 export type ApplyLeaveDto = z.infer<typeof applyLeaveSchema>;
+export type LeavePreviewQueryDto = z.infer<typeof leavePreviewQuerySchema>;
 export type ListLeavesQueryDto = z.infer<typeof listLeavesQuerySchema>;
 export type DecideLeaveDto = z.infer<typeof decideLeaveSchema>;
 export type CancelLeaveDto = z.infer<typeof cancelLeaveSchema>;

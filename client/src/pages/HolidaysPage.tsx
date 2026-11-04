@@ -5,11 +5,13 @@ import {
   CalendarPlus,
   ChevronLeft,
   ChevronRight,
+  FileSpreadsheet,
   PartyPopper,
   Table2,
   Trash2,
 } from 'lucide-react';
 import { getApiErrorMessage } from '@/api/client';
+import { HolidayImportDialog } from '@/components/attendance-leave/HolidayImportDialog';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DataTable, TableToolbar, Td } from '@/components/ui/DataTable';
@@ -62,6 +64,7 @@ export function HolidaysPage() {
   const [editing, setEditing] = useState<Holiday | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<Holiday | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const holidaysQuery = useQuery({
@@ -71,19 +74,29 @@ export function HolidaysPage() {
 
   const holidays = useMemo(() => holidaysQuery.data ?? [], [holidaysQuery.data]);
 
-  const cells: MonthCalendarCell[] = useMemo(
-    () =>
-      holidays
-        .filter((holiday) => holiday.holidayDate.startsWith(month))
-        .map((holiday) => ({
-          date: holiday.holidayDate,
-          label: holiday.name,
-          meta: holiday.isOptional ? 'Optional' : HOLIDAY_TYPE_LABEL[holiday.type],
-          color: TYPE_COLORS[holiday.type],
-          title: holiday.description ?? undefined,
-        })),
-    [holidays, month],
-  );
+  const cells: MonthCalendarCell[] = useMemo(() => {
+    const holidayCells: MonthCalendarCell[] = holidays
+      .filter((holiday) => holiday.holidayDate.startsWith(month))
+      .map((holiday) => ({
+        date: holiday.holidayDate,
+        label: holiday.name,
+        meta: holiday.isOptional ? 'Optional' : HOLIDAY_TYPE_LABEL[holiday.type],
+        color: TYPE_COLORS[holiday.type],
+        title: holiday.description ?? undefined,
+      }));
+    // Sunday is the company weekly off — shown on every Sunday that has no holiday of its own.
+    const taken = new Set(holidayCells.map((cell) => cell.date));
+    const [y, m] = month.split('-').map(Number);
+    const daysInMonth = new Date(Date.UTC(y ?? 2000, m ?? 1, 0)).getUTCDate();
+    const sundays: MonthCalendarCell[] = [];
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = `${month}-${String(day).padStart(2, '0')}`;
+      if (new Date(`${date}T00:00:00Z`).getUTCDay() === 0 && !taken.has(date)) {
+        sundays.push({ date, label: 'Weekly off', meta: 'Sunday', color: TYPE_COLORS.WEEKLY_OFF, muted: true });
+      }
+    }
+    return [...holidayCells, ...sundays];
+  }, [holidays, month]);
 
   const table = useClientTable({
     data: holidays,
@@ -176,13 +189,21 @@ export function HolidaysPage() {
         description="Company and regional holidays. Days listed here are skipped when counting leave and are marked on the attendance register."
         actions={
           canManage ? (
-            <Button onClick={() => openCreate()}>
-              <CalendarPlus size={15} />
-              Add holiday
-            </Button>
+            <>
+              <Button variant="secondary" onClick={() => setImportOpen(true)}>
+                <FileSpreadsheet size={15} />
+                Import
+              </Button>
+              <Button onClick={() => openCreate()}>
+                <CalendarPlus size={15} />
+                Add holiday
+              </Button>
+            </>
           ) : null
         }
       />
+
+      {canManage ? <HolidayImportDialog open={importOpen} onClose={() => setImportOpen(false)} /> : null}
 
       {error && !formOpen ? <Alert message={error} /> : null}
 

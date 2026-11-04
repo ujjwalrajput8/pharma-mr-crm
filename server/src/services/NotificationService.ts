@@ -22,7 +22,9 @@ export type NotificationKind =
   | 'REGULARIZATION_DECIDED'
   | 'EXPENSE_PENDING'
   | 'EXPENSE_DECIDED'
-  | 'EXPENSE_PAID';
+  | 'EXPENSE_PAID'
+  /** Someone was moved into a manager's reporting line. */
+  | 'TEAM_CHANGED';
 
 export type NotificationTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
 
@@ -189,7 +191,7 @@ export class NotificationService {
       kind: 'LEAVE_PENDING' as const,
       title: `${row.user.fullName} applied for leave`,
       message: `${row.leaveType.code} · ${Number(row.days)} day(s) from ${formatDateOnly(row.fromDate)} — needs your approval`,
-      href: '/approvals',
+      href: '/attendance-leave?tab=approvals',
       tone: 'warning' as const,
       at: row.createdAt.toISOString(),
     }));
@@ -215,7 +217,7 @@ export class NotificationService {
       kind: 'ATTENDANCE_FLAGGED' as const,
       title: `Flagged check-in — ${row.user.fullName}`,
       message: `${formatDateOnly(row.attDate)} · ${row.flagReason ?? 'Needs review'}`,
-      href: '/approvals',
+      href: '/attendance-leave?tab=approvals&type=flagged',
       tone: 'warning' as const,
       at: row.attDate.toISOString(),
     }));
@@ -260,7 +262,7 @@ export class NotificationService {
           .slice(0, 4)
           .map((m) => m.fullName)
           .join(', ') + (missing.length > 4 ? ` +${missing.length - 4} more` : ''),
-        href: '/attendance',
+        href: '/attendance-leave?tab=overview',
         tone: 'danger',
         at: new Date().toISOString(),
         count: missing.length,
@@ -296,7 +298,7 @@ export class NotificationService {
       ]
         .filter(Boolean)
         .join(' · '),
-      href: '/leave',
+      href: '/attendance-leave?tab=leave',
       tone: row.status === LeaveStatuses.APPROVED ? ('success' as const) : ('danger' as const),
       at: row.actedAt?.toISOString() ?? row.updatedAt.toISOString(),
     }));

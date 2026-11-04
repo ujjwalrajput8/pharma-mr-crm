@@ -140,7 +140,7 @@ export function MyDayPage() {
                   )}
                 </div>
               </div>
-              <Link to="/attendance">
+              <Link to="/attendance-leave?tab=attendance">
                 <Button size="sm" variant={attendance?.checkInAt ? 'secondary' : 'primary'}>
                   <Clock3 size={13} />
                   {attendance?.checkInAt ? 'Attendance' : 'Check in'}
@@ -349,7 +349,7 @@ export function MyDayPage() {
                 New appointment
               </Button>
             </Link>
-            <Link to="/leave" className="block">
+            <Link to="/attendance-leave?tab=leave" className="block">
               <Button variant="secondary" fullWidth size="lg">
                 <Plane size={15} />
                 Apply leave

@@ -7,6 +7,7 @@ import {
   grantCompOffSchema,
   leaveBalanceQuerySchema,
   leaveCalendarQuerySchema,
+  leavePreviewQuerySchema,
   listLeavesQuerySchema,
   setLeaveBalanceSchema,
   updateLeaveTypeSchema,
@@ -68,6 +69,14 @@ router.post(
 );
 
 router.get('/pending-count', requirePermission('leaves:manage'), asyncHandler(controller.pendingCount));
+
+/** Live "N working days · balance after" check for the apply form — before /:id. */
+router.get(
+  '/preview',
+  canUseLeave,
+  validateRequest(leavePreviewQuerySchema, 'query'),
+  asyncHandler(controller.preview),
+);
 
 /** Team calendar — before /:id so "calendar" is not read as an id. */
 router.get(

@@ -1,10 +1,12 @@
 import type { Request, Response } from 'express';
 import type {
   CreateHolidayDto,
+  ImportHolidaysDto,
   ListHolidaysQueryDto,
   UpdateHolidayDto,
 } from '../dto/holiday.dto';
 import { UnauthorizedError } from '../errors/AppError';
+import { HolidayImportService } from '../services/HolidayImportService';
 import { HolidayService } from '../services/HolidayService';
 import { ApiResponse } from '../utils/ApiResponse';
 import { HttpStatus } from '../constants';
@@ -22,6 +24,13 @@ export class HolidayController {
     const query = (req.validatedQuery ?? req.query) as ListHolidaysQueryDto;
     const rows = await this.holidays.list(query);
     ApiResponse.success(res, rows, 'Holidays');
+  };
+
+  /** Excel / CSV import — `dryRun` answers with the preview, otherwise saves. */
+  public import = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const result = await HolidayImportService.getInstance().import(req.body as ImportHolidaysDto, req.user);
+    ApiResponse.success(res, result, result.dryRun ? 'Import preview' : 'Holidays imported');
   };
 
   public create = async (req: Request, res: Response): Promise<void> => {

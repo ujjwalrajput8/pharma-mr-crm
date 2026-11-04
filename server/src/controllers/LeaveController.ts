@@ -6,6 +6,7 @@ import type {
   GrantCompOffDto,
   LeaveBalanceQueryDto,
   LeaveCalendarQueryDto,
+  LeavePreviewQueryDto,
   ListLeavesQueryDto,
   SetLeaveBalanceDto,
   UpdateLeaveTypeDto,
@@ -64,6 +65,13 @@ export class LeaveController {
   };
 
   /** GET /leaves/calendar?month=YYYY-MM — team month view. */
+  public preview = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user) throw new UnauthorizedError('Authentication required');
+    const query = (req.validatedQuery ?? req.query) as LeavePreviewQueryDto;
+    const result = await this.leaves.preview(query, req.user);
+    ApiResponse.success(res, result, 'Leave preview');
+  };
+
   public calendar = async (req: Request, res: Response): Promise<void> => {
     if (!req.user) throw new UnauthorizedError('Authentication required');
     const query = (req.validatedQuery ?? req.query) as LeaveCalendarQueryDto;

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AttendanceController } from '../controllers/AttendanceController';
 import {
   attendanceCalendarQuerySchema,
+  attendanceOverviewQuerySchema,
   attendanceSummaryQuerySchema,
   checkInSchema,
   checkOutSchema,
@@ -44,6 +45,13 @@ router.get(
   canUseAttendance,
   validateRequest(attendanceSummaryQuerySchema, 'query'),
   asyncHandler(controller.summary),
+);
+/** Attendance & Leave landing tab — own / team / company, by role. */
+router.get(
+  '/overview',
+  requirePermission('attendance:own', 'attendance:manage', 'leaves:own', 'leaves:manage'),
+  validateRequest(attendanceOverviewQuerySchema, 'query'),
+  asyncHandler(controller.overview),
 );
 router.get(
   '/field-users',

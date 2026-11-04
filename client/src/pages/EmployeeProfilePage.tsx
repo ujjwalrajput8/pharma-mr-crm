@@ -356,7 +356,7 @@ export function EmployeeProfilePage() {
                   }}
                 >
                   <KeyRound size={15} />
-                  Reset link
+                  Reset password
                 </Button>
                 <Button onClick={openEdit}>
                   <PencilLine size={15} />
@@ -423,9 +423,19 @@ export function EmployeeProfilePage() {
                     <MapPin size={13} /> {profile.employment.assignedArea}
                   </span>
                 ) : null}
-                {profile.manager ? (
+                {profile.manager || (canEdit && profile.id !== user?.id) ? (
                   <span className="inline-flex items-center gap-1.5">
-                    <BriefcaseBusiness size={13} /> Reports to {profile.manager.fullName}
+                    <BriefcaseBusiness size={13} />
+                    {profile.manager ? `Reports to ${profile.manager.fullName}` : 'Reports to Admin'}
+                    {/* The reporting line is edited in one place — Users & Hierarchy. */}
+                    {canEdit && profile.id !== user?.id ? (
+                      <Link
+                        to={`/users?edit=${profile.id}`}
+                        className="font-semibold text-[var(--color-primary)] hover:underline"
+                      >
+                        Change
+                      </Link>
+                    ) : null}
                   </span>
                 ) : null}
               </div>
@@ -976,8 +986,8 @@ export function EmployeeProfilePage() {
       <Modal
         open={resetOpen}
         onClose={() => setResetOpen(false)}
-        title={`Reset link — ${profile.fullName}`}
-        description="Generates a single-use link valid for 60 minutes. Hand it to the employee over a trusted channel — it is shown only once."
+        title={`Reset password — ${profile.fullName}?`}
+        description="Creates a single-use link valid for 60 minutes. Hand it to the employee over a trusted channel — it is shown only once."
         icon={KeyRound}
         className="max-w-lg"
         footer={
@@ -1019,7 +1029,7 @@ export function EmployeeProfilePage() {
               onClick={() => resetLinkMutation.mutate()}
             >
               <KeyRound size={14} />
-              Generate reset link
+              Yes, create reset link
             </Button>
           </div>
         )}

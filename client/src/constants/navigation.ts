@@ -14,16 +14,12 @@ import {
   Settings,
   ScrollText,
   IndianRupee,
-  Clock3,
   Sun,
-  Inbox,
   BookOpen,
   Map,
   Shield,
   CalendarCheck2,
-  PartyPopper,
   IdCard,
-  FileSliders,
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
@@ -34,6 +30,8 @@ export interface NavItem {
   icon: LucideIcon;
   permissions: Permission[];
   section?: string;
+  /** Phone bottom bar, where the full label does not fit. */
+  shortLabel?: string;
 }
 
 /**
@@ -63,13 +61,6 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'Field',
   },
   {
-    label: 'Approvals',
-    path: '/approvals',
-    icon: Inbox,
-    permissions: ['approvals:team'],
-    section: 'Field',
-  },
-  {
     label: 'Tour Plan',
     path: '/tour-plan',
     icon: Map,
@@ -77,17 +68,12 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'Field',
   },
   {
-    label: 'Attendance',
-    path: '/attendance',
-    icon: Clock3,
-    permissions: ['attendance:manage', 'attendance:own'],
-    section: 'Field',
-  },
-  {
-    label: 'Leave',
-    path: '/leave',
+    // Attendance, leave, approvals, holiday calendar and leave policy — one module with tabs.
+    label: 'Attendance & Leave',
+    shortLabel: 'Attendance',
+    path: '/attendance-leave',
     icon: CalendarCheck2,
-    permissions: ['leaves:own', 'leaves:manage'],
+    permissions: ['attendance:own', 'attendance:manage', 'leaves:own', 'leaves:manage'],
     section: 'Field',
   },
   {
@@ -116,20 +102,6 @@ export const NAV_ITEMS: NavItem[] = [
     path: '/employees',
     icon: IdCard,
     permissions: ['employees:view'],
-    section: 'People',
-  },
-  {
-    label: 'Holiday Calendar',
-    path: '/holidays',
-    icon: PartyPopper,
-    permissions: ['holidays:manage'],
-    section: 'People',
-  },
-  {
-    label: 'Leave Policy',
-    path: '/leave-policy',
-    icon: FileSliders,
-    permissions: ['leave-types:manage'],
     section: 'People',
   },
   {

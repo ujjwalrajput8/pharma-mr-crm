@@ -15,7 +15,8 @@ export type NotificationKind =
   | 'REGULARIZATION_DECIDED'
   | 'EXPENSE_PENDING'
   | 'EXPENSE_DECIDED'
-  | 'EXPENSE_PAID';
+  | 'EXPENSE_PAID'
+  | 'TEAM_CHANGED';
 
 export interface AppNotification {
   id: string;

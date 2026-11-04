@@ -1,8 +1,13 @@
 import { z } from 'zod';
 import { AttendanceStatuses, WorkTypes } from '../constants';
-import { idSchema } from './common.dto';
+import { dateOnlySchema, idSchema } from './common.dto';
 
-const dateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD');
+/** A real calendar day — "2026-02-31" is rejected, not rolled over to March. */
+const dateOnly = dateOnlySchema;
+
+/** A rejection is explained to the employee — at least a few characters, not blank. */
+const hasReason = (value: string | undefined) => (value?.trim().length ?? 0) >= 3;
+const REASON_MESSAGE = 'Give a reason for the rejection (at least 3 characters)';
 
 const workTypeSchema = z.enum([
   WorkTypes.FIELD,
@@ -48,6 +53,8 @@ export const listAttendanceQuerySchema = z.object({
     .optional(),
   from: dateOnly.optional(),
   to: dateOnly.optional(),
+  /** `true` = only check-ins with an unreviewed flag (the Approvals inbox). */
+  flagged: z.preprocess((value) => value === 'true' || value === true, z.boolean()).optional(),
 });
 
 export const manageAttendanceSchema = z.object({
@@ -85,10 +92,20 @@ export const attendanceSummaryQuerySchema = z.object({
  * Clears a flagged check-in after a manager has looked at it. Keeps the flag
  * text in remarks so the history survives, and stamps who reviewed it.
  */
-export const reviewFlagSchema = z.object({
-  /** ACCEPT keeps the day as-is; REJECT marks it absent. */
-  outcome: z.enum(['ACCEPT', 'REJECT']).default('ACCEPT'),
-  remarks: z.string().max(500).optional(),
+export const reviewFlagSchema = z
+  .object({
+    /** ACCEPT keeps the day as-is; REJECT marks it absent. */
+    outcome: z.enum(['ACCEPT', 'REJECT']).default('ACCEPT'),
+    remarks: z.string().max(500).optional(),
+  })
+  .refine((value) => value.outcome !== 'REJECT' || hasReason(value.remarks), {
+    message: REASON_MESSAGE,
+    path: ['remarks'],
+  });
+
+/** GET /attendance/overview — the Attendance & Leave landing tab (defaults to today). */
+export const attendanceOverviewQuerySchema = z.object({
+  date: dateOnly.optional(),
 });
 
 /** ── Regularization (missed check-in / check-out) ─────────────────────────── */
@@ -123,16 +140,22 @@ export const listRegularizationsQuerySchema = z.object({
   userId: idSchema.optional(),
 });
 
-export const decideRegularizationSchema = z.object({
-  status: z.enum(['APPROVED', 'REJECTED']),
-  remark: z.string().max(500).optional(),
-});
+export const decideRegularizationSchema = z
+  .object({
+    status: z.enum(['APPROVED', 'REJECTED']),
+    remark: z.string().max(500).optional(),
+  })
+  .refine((value) => value.status !== 'REJECTED' || hasReason(value.remark), {
+    message: REASON_MESSAGE,
+    path: ['remark'],
+  });
 
 export type CreateRegularizationDto = z.infer<typeof createRegularizationSchema>;
 export type ListRegularizationsQueryDto = z.infer<typeof listRegularizationsQuerySchema>;
 export type DecideRegularizationDto = z.infer<typeof decideRegularizationSchema>;
 
 export type ReviewFlagDto = z.infer<typeof reviewFlagSchema>;
+export type AttendanceOverviewQueryDto = z.infer<typeof attendanceOverviewQuerySchema>;
 export type CheckInDto = z.infer<typeof checkInSchema>;
 export type CheckOutDto = z.infer<typeof checkOutSchema>;
 export type ListAttendanceQueryDto = z.infer<typeof listAttendanceQuerySchema>;

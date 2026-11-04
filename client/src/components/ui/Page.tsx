@@ -1,6 +1,17 @@
-import type { ComponentType, ReactNode } from 'react';
+import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { cn } from '@/utils/cn';
+
+/**
+ * True when a page is shown as a tab inside a module page (e.g. Attendance &
+ * Leave). The module already has the title, so the page header keeps only its
+ * actions — no page has to know where it is mounted.
+ */
+const EmbeddedPageContext = createContext(false);
+
+export function EmbeddedPage({ children }: { children: ReactNode }) {
+  return <EmbeddedPageContext.Provider value>{children}</EmbeddedPageContext.Provider>;
+}
 
 export function PageHeader({
   title,
@@ -11,6 +22,10 @@ export function PageHeader({
   description?: string;
   actions?: ReactNode;
 }) {
+  const embedded = useContext(EmbeddedPageContext);
+  if (embedded) {
+    return actions ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div> : null;
+  }
   return (
     <div className="mb-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

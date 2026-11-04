@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { HolidayController } from '../controllers/HolidayController';
 import {
   createHolidaySchema,
+  importHolidaysSchema,
   listHolidaysQuerySchema,
   updateHolidaySchema,
 } from '../dto/holiday.dto';
@@ -25,6 +26,12 @@ router.post(
   requirePermission('holidays:manage'),
   validateRequest(createHolidaySchema),
   asyncHandler(controller.create),
+);
+router.post(
+  '/import',
+  requirePermission('holidays:manage'),
+  validateRequest(importHolidaysSchema),
+  asyncHandler(controller.import),
 );
 router.patch(
   '/:id',

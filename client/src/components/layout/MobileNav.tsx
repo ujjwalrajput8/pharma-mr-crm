@@ -7,8 +7,8 @@ import { cn } from '@/utils/cn';
 /**
  * Fixed bottom tab bar for phones (`lg:hidden`). Up to five slots picked by
  * permission priority: My Day (or Dashboard), Appointments (or Tour Plan),
- * Attendance, Leave, Approvals — all derived from NAV_ITEMS so labels, icons
- * and permissions stay in one place.
+ * Attendance & Leave, Visits, Doctors — all derived from NAV_ITEMS so labels,
+ * icons and permissions stay in one place.
  */
 export function MobileNav() {
   const { canAny } = useAuth();
@@ -23,9 +23,9 @@ export function MobileNav() {
     const picked = [
       permitted('/my-day') ?? permitted('/dashboard'),
       permitted('/appointments') ?? permitted('/tour-plan'),
-      permitted('/attendance'),
-      permitted('/leave'),
-      permitted('/approvals'),
+      permitted('/attendance-leave'),
+      permitted('/visits'),
+      permitted('/doctors'),
     ].filter((item): item is NavItem => item !== null);
 
     // De-dupe (defensive) and cap at five slots.
@@ -68,7 +68,7 @@ export function MobileNav() {
                     isActive ? 'font-bold' : 'font-medium',
                   )}
                 >
-                  {item.label}
+                  {item.shortLabel ?? item.label}
                 </span>
               </>
             )}
