@@ -87,8 +87,10 @@ try {
   await waitPort(5174, 'web app', web);
 
   run('seed (realistic data via the API)', 'node seed.mjs', ROOT);
-  run('API regression', 'node api.mjs', ROOT);
-  run('browser workflows (Edge)', 'node browser.mjs', ROOT);
+  run('API regression (P0 baseline)', 'node api.mjs', ROOT);
+  run('API — P1 attendance & leave + hierarchy', 'node api-p1.mjs', ROOT);
+  run('browser workflows (P0 baseline, Edge)', 'node browser.mjs', ROOT);
+  run('browser workflows — P1 (Edge)', 'node browser-p1.mjs', ROOT);
   console.log('\n✔ run complete — results in tests/results/' + (process.env.TEST_PHASE ?? 'P0'));
 } catch (err) {
   console.error('\n✖', err.message);

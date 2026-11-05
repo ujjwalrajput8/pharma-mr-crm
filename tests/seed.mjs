@@ -183,13 +183,29 @@ console.log('  samples issued: 4 products × 30 to each MR');
 
 // ── Leave policy + holidays ──────────────────────────────────────────────
 const leaveTypes = {};
-for (const [code, name, annualQuota, isPaid] of [['CL', 'Casual Leave', 12, true], ['SL', 'Sick Leave', 8, true], ['EL', 'Earned Leave', 15, true], ['LWP', 'Leave Without Pay', 0, false]]) {
-  leaveTypes[code] = must(await call(admin, 'POST', '/leaves/types', { code, name, annualQuota, isPaid }), `leave type ${code}`);
+for (const [code, name, annualQuota, isPaid, sandwichRule] of [['CL', 'Casual Leave', 12, true, false], ['SL', 'Sick Leave', 8, true, false], ['EL', 'Earned Leave', 15, true, false], ['LWP', 'Leave Without Pay', 0, false, false], ['SPL', 'Special Leave', 5, true, true]]) {
+  leaveTypes[code] = must(await call(admin, 'POST', '/leaves/types', { code, name, annualQuota, isPaid, sandwichRule }), `leave type ${code}`);
 }
-for (const [offset, name, type] of [[4, 'Chhath Puja', 'FESTIVAL'], [11, 'Guru Nanak Jayanti', 'NATIONAL'], [21, 'Company Foundation Day', 'COMPANY'], [-9, 'Bhai Dooj', 'FESTIVAL']]) {
+const HOLIDAYS = [[4, 'Chhath Puja', 'FESTIVAL'], [11, 'Guru Nanak Jayanti', 'NATIONAL'], [21, 'Company Foundation Day', 'COMPANY'], [-9, 'Bhai Dooj', 'FESTIVAL']];
+for (const [offset, name, type] of HOLIDAYS) {
   soft(await call(admin, 'POST', '/holidays', { holidayDate: istDay(offset), name, type }), `holiday ${name}`);
 }
-console.log('  leave types: CL SL EL LWP · 4 holidays');
+// A holiday on a Tuesday (so a Mon–Wed leave skips exactly one day) and one deleted
+// holiday (the import must restore it, not duplicate it). Sat–Wed around the Tuesday
+// stays clear of the other holidays, whatever today's date is.
+const founderDay = (() => {
+  const taken = new Set(HOLIDAYS.map(([offset]) => offset));
+  for (let k = 8; k < 60; k += 1) {
+    if (new Date(`${istDay(k)}T00:00:00Z`).getUTCDay() !== 2) continue;
+    if (![k - 3, k - 2, k - 1, k + 1].some((n) => taken.has(n))) return istDay(k);
+  }
+  throw new Error('unreachable');
+})();
+must(await call(admin, 'POST', '/holidays', { holidayDate: founderDay, name: "Founder's Day", type: 'COMPANY' }), 'founder day');
+const oldDay = istDay(33);
+const oldHoliday = must(await call(admin, 'POST', '/holidays', { holidayDate: oldDay, name: 'Old Company Day', type: 'COMPANY' }), 'old day');
+must(await call(admin, 'DELETE', `/holidays/${oldHoliday.id}`), 'delete old day');
+console.log("  leave types: CL SL EL LWP SPL(sandwich) · 6 holidays (+1 deleted)");
 
 // ── Logins for the field team ────────────────────────────────────────────
 const t = { admin };
@@ -204,7 +220,20 @@ for (const day of [pastWorkday(3), pastWorkday(2), pastWorkday(1)]) {
 }
 soft(await call(t.rahul, 'POST', '/attendance/check-in', { latitude: 25.6122, longitude: 85.1101, accuracyM: 18, workType: 'FIELD' }), 'rahul check-in');
 soft(await call(t.neha, 'POST', '/attendance/check-in', { latitude: 25.5941, longitude: 85.1652, accuracyM: 25, workType: 'FIELD' }), 'neha check-in');
-console.log('  attendance: 3 past days + Rahul / Neha checked in today (Sanjay, Pooja not yet)');
+// No GPS → the check-in is flagged for the manager (Pooja reports to the RSM).
+soft(await call(t.pooja, 'POST', '/attendance/check-in', { workType: 'FIELD' }), 'pooja check-in (flagged)');
+// Sanjay forgot to punch yesterday — a pending regularization for the ASM.
+const regDay = pastWorkday(1);
+soft(
+  await call(t.sanjay, 'POST', '/attendance/regularizations', {
+    attDate: regDay,
+    requestedInAt: new Date(`${regDay}T09:40:00+05:30`).toISOString(),
+    requestedOutAt: new Date(`${regDay}T18:10:00+05:30`).toISOString(),
+    reason: 'Phone battery died, could not punch',
+  }),
+  'sanjay regularization',
+);
+console.log('  attendance: 3 past days + Rahul / Neha in today · Pooja flagged (no GPS) · Sanjay not in + regularization');
 
 // ── Leave requests ───────────────────────────────────────────────────────
 const nehaSl = soft(await call(t.neha, 'POST', '/leaves', { leaveTypeId: leaveTypes.SL.id, fromDate: pastWorkday(1), toDate: pastWorkday(1), reason: 'Fever, doctor advised rest' }), 'neha SL');
@@ -265,5 +294,5 @@ soft(await call(admin, 'POST', '/invoices', { medicalStoreId: stores[1].id, mrId
 soft(await call(t.rahul, 'PUT', `/doctors/${doctors.rahul[1].id}/favorite`), 'favourite');
 soft(await call(t.rahul, 'PUT', `/doctors/${doctors.rahul[2].id}/favorite`), 'favourite');
 
-saveTokens({ ...t, ids, doctors: Object.fromEntries(Object.entries(doctors).map(([k, v]) => [k, v.map((d) => ({ id: d.id, fullName: d.fullName, area: d.area }))])), stores: stores.map((s) => ({ id: s.id, name: s.name })), meds: meds.map((m) => ({ id: m.id, name: m.name })), leaveTypes: Object.fromEntries(Object.entries(leaveTypes).map(([k, v]) => [k, v.id])) });
+saveTokens({ ...t, ids, doctors: Object.fromEntries(Object.entries(doctors).map(([k, v]) => [k, v.map((d) => ({ id: d.id, fullName: d.fullName, area: d.area }))])), stores: stores.map((s) => ({ id: s.id, name: s.name })), meds: meds.map((m) => ({ id: m.id, name: m.name })), leaveTypes: Object.fromEntries(Object.entries(leaveTypes).map(([k, v]) => [k, v.id])), founderDay, oldDay, regDay });
 console.log('SEED DONE');

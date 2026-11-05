@@ -2,76 +2,12 @@
 // desktop + phone widths. Screenshots go to results/<phase>/screens/.
 import fs from 'node:fs';
 import path from 'node:path';
-import { chromium } from 'playwright-core';
-import { ADMIN, PASSWORD, PEOPLE, RESULTS, Results, WEB, istDay, loadTokens } from './lib.mjs';
+import { ADMIN, PEOPLE, RESULTS, WEB, istDay, loadTokens } from './lib.mjs';
+import { DESKTOP, PHONE, createSession } from './browser-lib.mjs';
 import { tableCounts } from './api.mjs';
 
 const seed = loadTokens();
-const r = new Results('browser.json');
-const SHOTS = path.join(RESULTS, 'screens');
-fs.mkdirSync(SHOTS, { recursive: true });
-const DESKTOP = { width: 1366, height: 768 };
-const PHONE = { width: 390, height: 844 };
-
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
-const context = await browser.newContext({
-  viewport: DESKTOP,
-  geolocation: { latitude: 25.6122, longitude: 85.1101 },
-  permissions: ['geolocation'],
-  locale: 'en-IN',
-  timezoneId: 'Asia/Kolkata',
-});
-const page = await context.newPage();
-const consoleErrors = [];
-page.on('pageerror', (err) => consoleErrors.push(String(err)));
-
-let shotNo = 0;
-async function shot(name) {
-  shotNo += 1;
-  const file = `${String(shotNo).padStart(2, '0')}-${name}.png`;
-  await page.screenshot({ path: path.join(SHOTS, file), fullPage: false });
-  return file;
-}
-async function settle() {
-  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-  await page.waitForTimeout(350);
-}
-/** One user-visible step: runs, screenshots, records PASS / FAIL (or KNOWN for a later phase). */
-async function step(group, name, fn, known) {
-  try {
-    const detail = await fn();
-    const file = await shot(`${group}-${name}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60));
-    r.check(group, name, true);
-    return { ok: true, file, detail };
-  } catch (err) {
-    const file = await shot(`FAIL-${group}-${name}`.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60)).catch(() => null);
-    r.check(group, name, false, { error: String(err?.message ?? err).split('\n')[0], screenshot: file }, known);
-    return { ok: false, file };
-  }
-}
-async function goto(route) {
-  await page.goto(WEB + route);
-  await settle();
-}
-async function uiLogin(email, password = PASSWORD) {
-  await goto('/login');
-  await page.locator('input[type="email"]').fill(email);
-  await page.locator('input[autocomplete="current-password"]').fill(password);
-  await page.locator('button[type="submit"]').click();
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 20_000 });
-  await settle();
-}
-async function uiLogout(fullName) {
-  await page.getByRole('button', { name: new RegExp(fullName) }).first().click();
-  await page.getByText('Logout', { exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: /log ?out/i }).last().click();
-  await page.waitForURL(/\/login/, { timeout: 15_000 });
-}
-const dialog = () => page.getByRole('dialog').last();
-async function noHorizontalScroll() {
-  const extra = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  if (extra > 2) throw new Error(`page scrolls sideways by ${extra}px at ${page.viewportSize()?.width}px`);
-}
+const { r, page, settle, step, goto, uiLogin, uiLogout, dialog, noHorizontalScroll, close } = await createSession('browser.json');
 
 const countsBefore = await tableCounts();
 
@@ -220,7 +156,6 @@ await step('Manager', 'Logout', () => uiLogout(PEOPLE.asm.fullName));
 const countsAfter = await tableCounts();
 const lost = Object.keys(countsBefore).filter((k) => countsAfter[k] < countsBefore[k]);
 r.check('Data safety', 'No table lost rows during the browser run', lost.length === 0, { countsBefore, countsAfter });
-r.check('Console', 'No uncaught page errors', consoleErrors.length === 0, consoleErrors.slice(0, 5));
 fs.writeFileSync(path.join(RESULTS, 'counts.json'), JSON.stringify({ countsBefore, countsAfter }, null, 2));
+await close();
 r.save();
-await browser.close();

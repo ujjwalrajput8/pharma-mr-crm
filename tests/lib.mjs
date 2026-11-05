@@ -43,8 +43,22 @@ export async function call(token, method, urlPath, body) {
 
 export const items = (r) => (Array.isArray(r.data) ? r.data : (r.data?.items ?? r.data?.rows ?? []));
 
+/**
+ * Script logins come from their own address (the server trusts one proxy hop), so the
+ * per-IP login limiter (20 / 15 min) is left for the browser tests' real sign-ins.
+ */
+export async function loginAttempt(email, password = PASSWORD) {
+  const res = await fetch(`${API}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forwarded-for': '10.99.0.1' },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = await res.json().catch(() => null);
+  return { status: res.status, body, data: body?.data ?? body };
+}
+
 export async function login(email, password = PASSWORD) {
-  const r = await call(null, 'POST', '/auth/login', { email, password });
+  const r = await loginAttempt(email, password);
   if (!r.data?.accessToken) throw new Error(`login failed for ${email}: ${r.status} ${JSON.stringify(r.body)}`);
   return { token: r.data.accessToken, user: r.data.user };
 }

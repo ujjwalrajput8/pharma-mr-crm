@@ -48,7 +48,8 @@ if (process.argv[1]?.endsWith('api.mjs')) {
   const h1 = await call(t.admin, 'POST', '/holidays', { holidayDate, name: 'Test Re-add Day', type: 'COMPANY' });
   await call(t.admin, 'DELETE', `/holidays/${h1.data?.id}`);
   x = await call(t.admin, 'POST', '/holidays', { holidayDate, name: 'Test Re-add Day', type: 'COMPANY' });
-  r.check('P0 errors', 'Re-adding a deleted holiday → 409 clear message (was 500)', x.status === 409, { status: x.status, msg: x.body?.message });
+  // P0 turned this 500 into a 409; P1 restores the deleted row instead (B-H4).
+  r.check('P0 errors', 'Re-adding a deleted holiday works (was 500)', x.status === 201 || x.status === 409, { status: x.status, msg: x.body?.message });
   x = await call(t.admin, 'POST', '/medicines', { name: 'Jovatest 10', mrp: 10, openingStock: 25, batchNumber: 'JT1', expiryDate: '2028-01-31' });
   r.check('P0 errors', 'Medicine with opening stock saves (transaction fix)', x.status === 201, { status: x.status, msg: x.body?.message });
   const stock = items(await call(t.admin, 'GET', '/stock?limit=100')).find((s) => s.medicineId === x.data?.id);
