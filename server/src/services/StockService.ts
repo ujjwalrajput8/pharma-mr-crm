@@ -123,12 +123,12 @@ export class StockService {
    * The signed-in user's own bag: USER-holder balances (qty > 0) with
    * medicine + batch + expiry, plus their last 30 ledger movements.
    */
-  public async myStock(actor: AuthUser) {
+  public async myStock(actor: AuthUser, holderId: number = actor.id) {
     const prisma = this.stockTxns.getPrisma();
     const balances = await prisma.stockBalance.findMany({
       where: {
         holderType: HolderTypes.USER,
-        holderId: actor.id,
+        holderId,
         qty: { gt: 0 },
         medicine: { deletedAt: null },
       },
@@ -143,7 +143,7 @@ export class StockService {
       page: 1,
       limit: 30,
       holderType: HolderTypes.USER,
-      holderId: actor.id,
+      holderId,
     });
 
     return {

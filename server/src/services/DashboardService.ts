@@ -11,6 +11,7 @@ import { SettingRepository } from '../repositories/SettingRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import { TeamScopeService } from './TeamScopeService';
 import type { AuthUser } from '../types/auth.types';
+import { todayDateOnly } from '../utils/datetime';
 
 const DEFAULT_WAREHOUSE_SETTING = 'stock.default_warehouse_id';
 
@@ -42,8 +43,9 @@ export class DashboardService {
   private async resolveMrScope(actor: AuthUser): Promise<{ mrId?: number } | { mrId: { in: number[] } } | Record<string, never>> {
     if (actor.role === AppRoles.MR) return { mrId: actor.id };
     if (actor.role === AppRoles.MANAGER) {
-      const teamIds = await this.users.listReportIds(actor.id);
-      return { mrId: { in: [actor.id, ...teamIds] } };
+      // Whole reporting line (B-V6), deactivated MRs' history included.
+      const teamIds = (await this.teamScope.visibleUserIds(actor, { includeInactive: true })) ?? [actor.id];
+      return { mrId: { in: teamIds } };
     }
     return {};
   }
@@ -53,21 +55,20 @@ export class DashboardService {
       return { fromHolderType: HolderTypes.USER, fromHolderId: actor.id };
     }
     if (actor.role === AppRoles.MANAGER) {
-      const teamIds = await this.users.listReportIds(actor.id);
+      const teamIds = (await this.teamScope.visibleUserIds(actor, { includeInactive: true })) ?? [actor.id];
       return {
         fromHolderType: HolderTypes.USER,
-        fromHolderId: { in: [actor.id, ...teamIds] },
+        fromHolderId: { in: teamIds },
       };
     }
     return {};
   }
 
   public async getSummary(actor: AuthUser) {
-    const todayStart = new Date();
-    todayStart.setUTCHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setUTCHours(23, 59, 59, 999);
-    const todayDate = new Date(`${todayStart.toISOString().slice(0, 10)}T00:00:00.000Z`);
+    // "Today" is the business day (IST) — before 05:30 IST the UTC day is still yesterday.
+    const todayDate = todayDateOnly();
+    const todayStart = todayDate;
+    const todayEnd = new Date(todayDate.getTime() + 86_400_000 - 1);
     const monthStart = new Date(Date.UTC(todayDate.getUTCFullYear(), todayDate.getUTCMonth(), 1));
     const yearStart = new Date(Date.UTC(todayDate.getUTCFullYear(), 0, 1));
     const mrScope = await this.resolveMrScope(actor);
@@ -205,7 +206,7 @@ export class DashboardService {
           totalDoctors,
           totalMrs:
             actor.role === AppRoles.MANAGER
-              ? (await this.users.listReportIds(actor.id)).length
+              ? ((await this.teamScope.visibleUserIds(actor)) ?? []).filter((id) => id !== actor.id).length
               : totalMrs,
           todaysAppointments,
           todaysVisits,

@@ -57,6 +57,11 @@ export const stockApi = {
     return data.data;
   },
 
+  /** A team MR's bag (Manager / Admin logging a visit on their behalf). */
+  async holdings(mrId: number): Promise<MyStockResult> {
+    const { data } = await api.get<ApiSuccess<MyStockResult>>('/stock/holdings', { params: { mrId } });
+    return data.data;
+  },
   async my(): Promise<MyStockResult> {
     const { data } = await api.get<ApiSuccess<MyStockResult>>('/stock/my');
     return data.data;

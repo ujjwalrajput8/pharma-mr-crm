@@ -28,7 +28,8 @@ export function LoginPage() {
     try {
       await login(email.trim(), password);
       toast.success('Login successful', 'Welcome back.');
-      navigate('/dashboard', { replace: true });
+      // '/' picks the home by role: Today for an MR, the Dashboard for others.
+      navigate('/', { replace: true });
     } catch (err) {
       const message = getApiErrorMessage(err, 'Login failed');
       setError(message);

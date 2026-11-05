@@ -28,7 +28,7 @@ import {
   AppointmentRescheduleDialog,
   type ReschedulePayload,
 } from '@/components/appointments/AppointmentRescheduleDialog';
-import { VisitCompleteDialog } from '@/components/appointments/VisitCompleteDialog';
+import { LogVisitDialog } from '@/components/visits/LogVisitDialog';
 import { VisitDetailsDialog } from '@/components/appointments/VisitDetailsDialog';
 import {
   DashboardCalendar,
@@ -49,10 +49,9 @@ import { cn } from '@/utils/cn';
 import { useToast } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/api/client';
 import { useAuth } from '@/store/AuthContext';
-import { appointmentsApi, type Appointment, type CompleteAppointmentPayload } from '@/services/appointments.service';
+import { appointmentsApi, type Appointment } from '@/services/appointments.service';
 import { dashboardApi } from '@/services/dashboard.service';
 import { doctorsApi } from '@/services/doctors.service';
-import { medicinesApi } from '@/services/medicines.service';
 import { visitsApi, type Visit } from '@/services/visits.service';
 
 const adminCards: Array<{ key: string; label: string; to: string; icon: typeof Users }> = [
@@ -112,7 +111,7 @@ export function DashboardPage() {
   });
   const visitsQuery = useQuery({
     queryKey: ['visits', 'calendar'],
-    queryFn: () => visitsApi.list(),
+    queryFn: () => visitsApi.list({ limit: 100 }).then((page) => page.items),
     enabled: calendarOpen,
   });
   const doctorsQuery = useQuery({
@@ -124,11 +123,6 @@ export function DashboardPage() {
     queryKey: ['appointments', 'assignable-mrs'],
     queryFn: () => appointmentsApi.listAssignableMrs(),
     enabled: createOpen && canAssignMr,
-  });
-  const medicinesQuery = useQuery({
-    queryKey: ['medicines'],
-    queryFn: () => medicinesApi.list(),
-    enabled: Boolean(completeFor),
   });
 
   const createMutation = useMutation({
@@ -175,22 +169,6 @@ export function DashboardPage() {
       await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (err) => toast.error('Cancel failed', getApiErrorMessage(err)),
-  });
-
-  const completeMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: CompleteAppointmentPayload }) =>
-      appointmentsApi.complete(id, payload),
-    onSuccess: async () => {
-      setCompleteFor(null);
-      setSelectedAppointment(null);
-      toast.success('Visit logged', 'Stock updated for any samples distributed');
-      await queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      await queryClient.invalidateQueries({ queryKey: ['visits'] });
-      await queryClient.invalidateQueries({ queryKey: ['medicines'] });
-      await queryClient.invalidateQueries({ queryKey: ['stock'] });
-      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-    },
-    onError: (err) => toast.error('Visit save failed', getApiErrorMessage(err)),
   });
 
   const cards = user?.role === 'ADMIN' || user?.role === 'MANAGER' ? adminCards : mrCards;
@@ -481,15 +459,10 @@ export function DashboardPage() {
         onClose={() => setSelectedVisit(null)}
       />
 
-      <VisitCompleteDialog
-        open={Boolean(completeFor)}
-        appointment={completeFor}
-        medicines={medicinesQuery.data ?? []}
-        submitting={completeMutation.isPending}
+      <LogVisitDialog
+        mode={completeFor ? { kind: 'appointment', appointment: completeFor } : null}
         onClose={() => setCompleteFor(null)}
-        onSubmit={(payload) =>
-          completeFor && completeMutation.mutate({ id: completeFor.id, payload })
-        }
+        onSaved={() => setSelectedAppointment(null)}
       />
     </div>
   );

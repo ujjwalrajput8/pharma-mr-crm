@@ -1,7 +1,19 @@
 import { api } from '@/api/client';
 import type { ApiSuccess } from '@/types';
 
-export type AppointmentStatus = 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'RESCHEDULED';
+export type AppointmentStatus =
+  | 'PENDING'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'RESCHEDULED'
+  | 'NO_SHOW'
+  | 'REQUESTED'
+  | 'CONFIRMED'
+  | 'VISITED';
+
+/** Server-side views: Today · Upcoming · Overdue (date passed, still open) · Completed · Cancelled / No-show. */
+export type AppointmentView = 'today' | 'upcoming' | 'overdue' | 'completed' | 'closed';
+export type AppointmentViewCounts = Record<AppointmentView, number>;
 
 export interface AppointmentActor {
   id: number;
@@ -19,8 +31,10 @@ export interface Appointment {
   time: string;
   purpose: string | null;
   status: AppointmentStatus;
+  /** The visit recorded for it, once completed. */
+  visitId: number | null;
   remarks: string | null;
-  doctor: { id: number; fullName: string } | null;
+  doctor: { id: number; fullName: string; mslNo?: string; area?: string | null; address?: string | null; specialization?: string | null } | null;
   mr: { id: number; fullName: string; email: string } | null;
   createdBy: AppointmentActor | null;
   assignedBy: AppointmentActor | null;
@@ -56,6 +70,8 @@ export interface UpdateAppointmentPayload {
 export interface CompleteAppointmentPayload {
   visitDate: string;
   visitTime: string;
+  purpose?: string;
+  clientUuid?: string;
   checkInTime?: string;
   checkOutTime?: string;
   meetingDurationMin?: number;
@@ -65,10 +81,11 @@ export interface CompleteAppointmentPayload {
   nextFollowUp?: string;
   remarks?: string;
   medicineIds?: number[];
-  products?: Array<{ medicineId: number; notes?: string }>;
+  products?: Array<{ medicineId: number; notes?: string; interestLevel?: 'LOW' | 'MEDIUM' | 'HIGH'; prescriptionExpected?: boolean }>;
   distributions?: Array<{
     medicineId: number;
     quantity: number;
+    batchId?: number;
     batchNumber?: string;
     unit?: string;
     remarks?: string;
@@ -88,6 +105,23 @@ export const appointmentsApi = {
         mrId: params?.mrId,
       },
     });
+    return data.data;
+  },
+
+  /** Paged list for the Appointments tab, with per-view counts. */
+  async page(params: {
+    page?: number;
+    limit?: number;
+    view?: AppointmentView;
+    mrId?: number;
+    doctorId?: number;
+  }): Promise<{ items: Appointment[]; meta: { total: number; totalPages: number; page: number; counts: AppointmentViewCounts } }> {
+    const { data } = await api.get<ApiSuccess<Appointment[]>>('/appointments', { params: { limit: 20, ...params } });
+    return { items: data.data, meta: data.meta as { total: number; totalPages: number; page: number; counts: AppointmentViewCounts } };
+  },
+
+  async noShow(id: number, remark?: string): Promise<Appointment> {
+    const { data } = await api.post<ApiSuccess<Appointment>>(`/appointments/${id}/no-show`, { remark });
     return data.data;
   },
 

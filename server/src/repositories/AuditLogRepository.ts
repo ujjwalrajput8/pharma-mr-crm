@@ -7,9 +7,15 @@ export interface CreateAuditLogInput {
   entity: string;
   entityId?: string | null;
   metadata?: Prisma.InputJsonValue;
+  /** Values before / after a change, and why — used for corrections. */
+  before?: Prisma.InputJsonValue;
+  after?: Prisma.InputJsonValue;
+  reason?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
 }
+
+type AuditClient = Pick<Prisma.TransactionClient, 'auditLog'>;
 
 /**
  * AuditLogRepository — append-only security/change history.
@@ -27,14 +33,18 @@ export class AuditLogRepository {
     return AuditLogRepository.instance;
   }
 
-  public create(data: CreateAuditLogInput) {
-    return this.prisma.auditLog.create({
+  /** Pass the transaction client when the entry must commit (or roll back) with the change. */
+  public create(data: CreateAuditLogInput, client: AuditClient = this.prisma) {
+    return client.auditLog.create({
       data: {
         userId: data.userId ?? undefined,
         action: data.action,
         entity: data.entity,
         entityId: data.entityId ?? undefined,
         metadata: data.metadata,
+        before: data.before,
+        after: data.after,
+        reason: data.reason ?? undefined,
         ipAddress: data.ipAddress ?? undefined,
         userAgent: data.userAgent ?? undefined,
       },

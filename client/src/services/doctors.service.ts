@@ -96,7 +96,8 @@ export interface DoctorDetails {
   }>;
   visits: Array<{
     id: number;
-    appointmentId: number;
+    /** Null for a visit logged without an appointment. */
+    appointmentId: number | null;
     visitDate: string;
     visitTime: string | null;
     meetingDurationMin: number | null;
@@ -150,7 +151,51 @@ export interface DoctorDetails {
   };
 }
 
+/** One MR in the assignment picker. */
+export interface MrOption {
+  id: number;
+  fullName: string;
+  employeeCode: string | null;
+  photoUrl: string | null;
+  area: string | null;
+  /** Reporting line above the MR, e.g. "Amit Kumar (Area Sales Manager) → Vikram Singh". */
+  team: string;
+  doctorCount: number;
+}
+
+/** What the server reports when a doctor would change MR (409 CONFIRM_MOVE). */
+export interface AssignmentMove {
+  doctorId: number;
+  doctorName: string;
+  from: { id: number; fullName: string; employeeCode: string | null; team: string };
+  to: { id: number; fullName: string; employeeCode: string | null; team: string } | null;
+  pendingAppointments: number;
+  planCalls: number;
+  visits: number;
+}
+
+export interface AssignmentHistory {
+  assignments: Array<{ mrId: number; mrName: string; active: boolean; from: string; to: string | null }>;
+  changes: Array<{
+    action: 'DOCTOR_ASSIGNED' | 'DOCTOR_REASSIGNED' | 'DOCTOR_UNASSIGNED';
+    at: string;
+    by: { id: number; fullName: string } | null;
+    before: { mrName?: string | null; team?: string } | null;
+    after: { mrName?: string | null; team?: string } | null;
+    note: string | null;
+    source: string | null;
+  }>;
+}
+
 export const doctorsApi = {
+  async mrOptions(q?: string): Promise<MrOption[]> {
+    const { data } = await api.get<ApiSuccess<MrOption[]>>('/doctors/mr-options', { params: q ? { q } : {} });
+    return data.data;
+  },
+  async assignmentHistory(id: number): Promise<AssignmentHistory> {
+    const { data } = await api.get<ApiSuccess<AssignmentHistory>>(`/doctors/${id}/assignment-history`);
+    return data.data;
+  },
   async list(search?: string): Promise<Doctor[]> {
     // Screens filter and page client-side, so fetch the whole list, not the API's first 20.
     const { data } = await api.get<ApiSuccess<Doctor[]>>('/doctors', {
@@ -172,7 +217,7 @@ export const doctorsApi = {
   /** `mrId: null` takes the doctor off their MR; leave it out to keep the MR. */
   async update(
     id: number,
-    payload: Partial<Omit<CreateDoctorPayload, 'mrId'>> & { mrId?: number | null },
+    payload: Partial<Omit<CreateDoctorPayload, 'mrId'>> & { mrId?: number | null; confirmMove?: boolean; note?: string },
   ): Promise<Doctor> {
     const { data } = await api.patch<ApiSuccess<Doctor>>(`/doctors/${id}`, payload);
     return data.data;
@@ -194,10 +239,11 @@ export const doctorsApi = {
   async assignMr(
     doctorIds: number[],
     mrId: number | null,
+    options: { confirmMove?: boolean; note?: string } = {},
   ): Promise<{ doctors: number; mr: { id: number; fullName: string } | null }> {
     const { data } = await api.post<
       ApiSuccess<{ doctors: number; mr: { id: number; fullName: string } | null }>
-    >('/doctors/assign-mr', { doctorIds, mrId });
+    >('/doctors/assign-mr', { doctorIds, mrId, ...options });
     return data.data;
   },
 

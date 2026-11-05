@@ -32,9 +32,16 @@ export const createDoctorSchema = z.object({
   mrId: idSchema.optional(),
 });
 
+/** Moving a doctor that already has an MR needs confirmMove: true (the server asks first). */
+const moveConfirmation = {
+  confirmMove: z.boolean().optional(),
+  note: z.string().trim().max(500).optional(),
+};
+
 export const updateDoctorSchema = createDoctorSchema.partial().extend({
   /** An MR's id assigns the doctor to them; null takes the doctor off their MR. */
   mrId: idSchema.nullable().optional(),
+  ...moveConfirmation,
 });
 
 export const listDoctorsQuerySchema = z.object({
@@ -46,12 +53,14 @@ export const listDoctorsQuerySchema = z.object({
 
 export const assignMrSchema = z.object({
   mrId: idSchema,
+  ...moveConfirmation,
 });
 
 /** Many doctors to one MR at once — e.g. right after an Excel import. null = unassign them. */
 export const bulkAssignMrSchema = z.object({
   doctorIds: z.array(idSchema).min(1, 'Pick at least one doctor').max(5000),
   mrId: idSchema.nullable(),
+  ...moveConfirmation,
 });
 
 export const DOCTOR_IMPORT_MAX_ROWS = 2000;

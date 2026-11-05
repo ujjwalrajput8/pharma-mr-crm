@@ -57,7 +57,7 @@ export function AttendanceLeavePage() {
         title="Attendance & Leave"
         description="Attendance, leave, approvals and the holiday calendar in one place."
       />
-      <Tabs items={tabs} value={tab} onChange={go} />
+      <Tabs variant="page" ariaLabel="Attendance & Leave" items={tabs} value={tab} onChange={go} />
 
       <EmbeddedPage>
         {tab === 'overview' ? <OverviewTab onNavigate={go} onApplyLeave={() => openApply()} /> : null}

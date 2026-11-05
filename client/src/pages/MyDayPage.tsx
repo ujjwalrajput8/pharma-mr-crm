@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   CalendarCheck2,
@@ -15,11 +16,18 @@ import {
   Sun,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/components/ui/Toast';
+import { AppointmentRescheduleDialog } from '@/components/appointments/AppointmentRescheduleDialog';
+import { BulkVisitDialog } from '@/components/visits/BulkVisitDialog';
+import { LogVisitDialog, type LogVisitMode } from '@/components/visits/LogVisitDialog';
+import { getApiErrorMessage } from '@/api/client';
+import { appointmentsApi, type Appointment } from '@/services/appointments.service';
 import { Badge, Card, CardHeader, EmptyState, StatTile } from '@/components/ui/Page';
 import { BrandLoader } from '@/components/ui/BrandLoader';
 import { useAuth } from '@/store/AuthContext';
 import { ATTENDANCE_STATUS_META, WORK_TYPE_LABEL, type AttendanceMarkStatus, type WorkType } from '@/services/attendance.service';
-import { myDayApi } from '@/services/myday.service';
+import { myDayApi, type MyDaySnapshot } from '@/services/myday.service';
 import { formatDisplayDate, formatTime12 } from '@/utils/datetime';
 
 const APPOINTMENT_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral' | 'primary'> = {
@@ -44,10 +52,47 @@ function clock(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
+/** The Today row as the appointment dialogs expect it. */
+function asAppointment(row: MyDaySnapshot['appointments'][number], day: MyDaySnapshot, mrId: number): Appointment {
+  return {
+    id: row.id,
+    doctorId: row.doctor?.id ?? 0,
+    mrId,
+    assignedById: null,
+    date: day.date,
+    time: row.time,
+    purpose: row.purpose,
+    status: row.status as Appointment['status'],
+    visitId: row.visitId,
+    remarks: null,
+    doctor: row.doctor,
+    mr: null,
+    createdBy: null,
+    assignedBy: null,
+  };
+}
+
 export function MyDayPage() {
   const { user } = useAuth();
+  const toast = useToast();
+  const queryClient = useQueryClient();
   const snapshotQuery = useQuery({ queryKey: ['my-day'], queryFn: () => myDayApi.get() });
   const day = snapshotQuery.data;
+  const [logMode, setLogMode] = useState<LogVisitMode | null>(null);
+  const [bulkIds, setBulkIds] = useState<number[] | null>(null);
+  const [rescheduleFor, setRescheduleFor] = useState<Appointment | null>(null);
+  const [noShowFor, setNoShowFor] = useState<Appointment | null>(null);
+  const refresh = () => Promise.all(['my-day', 'appointments', 'visits'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
+  const reschedule = useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: { date: string; time: string; remarks?: string } }) => appointmentsApi.reschedule(id, payload),
+    onSuccess: async () => { setRescheduleFor(null); toast.success('Appointment rescheduled'); await refresh(); },
+    onError: (err) => toast.error('Reschedule failed', getApiErrorMessage(err)),
+  });
+  const noShow = useMutation({
+    mutationFn: (id: number) => appointmentsApi.noShow(id),
+    onSuccess: async () => { setNoShowFor(null); toast.success('Marked as no-show'); await refresh(); },
+    onError: (err) => toast.error('Not changed', getApiErrorMessage(err)),
+  });
 
   const firstName = user?.fullName.split(' ')[0] ?? '';
   const attendance = day?.attendance ?? null;
@@ -56,6 +101,9 @@ export function MyDayPage() {
     : null;
   const plan = day?.tourPlanDay ?? null;
   const doneCalls = plan?.calls.filter((c) => c.done).length ?? 0;
+  const pendingDoctorIds = (plan?.calls ?? []).filter((c) => c.doctor && !c.done).map((c) => c.doctor!.id);
+  const logFor = (doctor: { id: number; fullName: string; area?: string | null; specialization?: string | null; mslNo?: string | null; mslClass?: string | null; address?: string | null } | null | undefined) =>
+    doctor ? setLogMode({ kind: 'direct', doctor: { ...doctor } }) : undefined;
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -66,12 +114,22 @@ export function MyDayPage() {
             {greeting()}, {firstName}
           </h2>
           <p className="mt-0.5 text-xs text-[var(--color-muted)] sm:text-sm">
-            {day ? formatDisplayDate(day.date) : formatDisplayDate(new Date().toISOString().slice(0, 10))}
+            Today · {day ? formatDisplayDate(day.date) : formatDisplayDate(new Date().toISOString().slice(0, 10))}
           </p>
         </div>
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-warning-soft)] text-[var(--color-warning)]">
           <Sun size={20} />
         </span>
+      </div>
+      <div className="flex flex-wrap gap-2" data-testid="today-actions">
+        <Button onClick={() => setLogMode({ kind: 'direct' })}>
+          <ClipboardList size={14} /> Unplanned visit
+        </Button>
+        {pendingDoctorIds.length > 0 ? (
+          <Button variant="secondary" onClick={() => setBulkIds(pendingDoctorIds)}>
+            <CheckCircle2 size={14} /> Log planned calls ({pendingDoctorIds.length})
+          </Button>
+        ) : null}
       </div>
 
       {snapshotQuery.isLoading ? (
@@ -150,7 +208,13 @@ export function MyDayPage() {
           </Card>
 
           {/* ── Stat tiles ─────────────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="today-counts">
+            <StatTile
+              label="Calls done"
+              value={`${day?.counts.callsDone ?? 0}/${day?.counts.callsPlanned ?? 0}`}
+              icon={CheckCircle2}
+              tone="success"
+            />
             <StatTile
               label="Appointments today"
               value={day?.counts.appointmentsToday ?? 0}
@@ -158,10 +222,16 @@ export function MyDayPage() {
               tone="primary"
             />
             <StatTile
-              label="Visits this month"
-              value={day?.counts.visitsThisMonth ?? 0}
+              label="Samples given today"
+              value={day?.counts.samplesToday ?? 0}
               icon={ClipboardList}
-              tone="success"
+              tone="primary"
+            />
+            <StatTile
+              label={day?.counts.lowStock ? `In bag · ${day.counts.lowStock} low` : 'In bag'}
+              value={day?.counts.bagUnits ?? 0}
+              icon={Store}
+              tone={day?.counts.lowStock ? 'warning' : 'success'}
             />
           </div>
 
@@ -243,7 +313,13 @@ export function MyDayPage() {
                               {phone}
                             </a>
                           ) : null}
-                          {call.done ? <Badge tone="success">Done</Badge> : null}
+                          {call.done ? (
+                            <Badge tone="success">{call.visit ? `Done ${formatTime12(call.visit.time)}` : 'Done'}</Badge>
+                          ) : call.doctor ? (
+                            <Button size="sm" variant="soft" onClick={() => logFor(call.doctor)}>
+                              Log visit
+                            </Button>
+                          ) : null}
                         </li>
                       );
                     })}
@@ -267,7 +343,7 @@ export function MyDayPage() {
             <CardHeader
               title="Today's appointments"
               actions={
-                <Link to="/appointments">
+                <Link to="/visits?tab=appointments">
                   <Button size="sm" variant="ghost">
                     <CalendarCheck2 size={13} />
                     All appointments
@@ -292,9 +368,23 @@ export function MyDayPage() {
                         </p>
                       ) : null}
                     </div>
-                    <Badge tone={APPOINTMENT_TONE[appointment.status] ?? 'neutral'}>
-                      {appointment.status}
-                    </Badge>
+                    {appointment.open && user ? (
+                      <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                        <Button size="sm" onClick={() => setLogMode({ kind: 'appointment', appointment: asAppointment(appointment, day!, user.id) })}>
+                          Complete
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setRescheduleFor(asAppointment(appointment, day!, user.id))}>
+                          Reschedule
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setNoShowFor(asAppointment(appointment, day!, user.id))}>
+                          No-show
+                        </Button>
+                      </span>
+                    ) : (
+                      <Badge tone={APPOINTMENT_TONE[appointment.status] ?? 'neutral'}>
+                        {appointment.status.replace('_', '-')}
+                      </Badge>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -335,6 +425,32 @@ export function MyDayPage() {
                     <span className="text-xs font-bold text-[var(--color-danger)]">
                       due {formatDisplayDate(followUp.nextFollowUp)}
                     </span>
+                    <Button size="sm" variant="soft" onClick={() => logFor(followUp.doctor)}>
+                      Log visit
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+
+          {/* ── Visit due (class target this month) ───────────────────────── */}
+          {(day?.visitDue.length ?? 0) > 0 ? (
+            <Card>
+              <CardHeader title="Visit due this month" description="Doctors still short of their class target (A 3 · B 2 · C 1)" />
+              <ul className="divide-y divide-[var(--color-border)]/70 px-4" data-testid="visit-due">
+                {day!.visitDue.map((row) => (
+                  <li key={row.doctor.id} className="flex items-center gap-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-[var(--color-ink)]">{row.doctor.fullName}</p>
+                      <p className="text-[11px] text-[var(--color-muted)]">
+                        {[row.doctor.mslClass ? `Class ${row.doctor.mslClass}` : null, row.doctor.area].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold tabular-nums text-[var(--color-ink)]">{row.done}/{row.target}</span>
+                    <Button size="sm" variant="soft" onClick={() => logFor(row.doctor)}>
+                      Log visit
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -343,7 +459,7 @@ export function MyDayPage() {
 
           {/* ── Quick actions ──────────────────────────────────────────────── */}
           <div className="grid grid-cols-2 gap-3 pb-2">
-            <Link to="/appointments" className="block">
+            <Link to="/visits?tab=appointments" className="block">
               <Button variant="soft" fullWidth size="lg">
                 <CalendarPlus size={15} />
                 New appointment
@@ -358,6 +474,28 @@ export function MyDayPage() {
           </div>
         </>
       )}
+      <LogVisitDialog mode={logMode} onClose={() => setLogMode(null)} />
+      <BulkVisitDialog doctorIds={bulkIds} onClose={() => setBulkIds(null)} />
+      <AppointmentRescheduleDialog
+        open={Boolean(rescheduleFor)}
+        appointment={rescheduleFor}
+        submitting={reschedule.isPending}
+        onClose={() => setRescheduleFor(null)}
+        onSubmit={(payload) => rescheduleFor && reschedule.mutate({ id: rescheduleFor.id, payload })}
+      />
+      <ConfirmDialog
+        open={Boolean(noShowFor)}
+        variant="generic"
+        badge="No-show"
+        title="Mark as no-show?"
+        description="The doctor was not met. The appointment closes; no visit is recorded."
+        recordName={noShowFor?.doctor?.fullName ?? 'Appointment'}
+        confirmLabel="Mark no-show"
+        cancelLabel="Keep"
+        loading={noShow.isPending}
+        onClose={() => setNoShowFor(null)}
+        onConfirm={() => noShowFor && noShow.mutate(noShowFor.id)}
+      />
     </div>
   );
 }

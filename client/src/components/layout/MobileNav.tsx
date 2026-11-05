@@ -22,7 +22,7 @@ export function MobileNav() {
 
     const picked = [
       permitted('/my-day') ?? permitted('/dashboard'),
-      permitted('/appointments') ?? permitted('/tour-plan'),
+      permitted('/tour-plan'),
       permitted('/attendance-leave'),
       permitted('/visits'),
       permitted('/doctors'),

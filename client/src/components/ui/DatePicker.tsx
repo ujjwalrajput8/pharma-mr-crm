@@ -17,6 +17,9 @@ interface DatePickerProps {
   placeholder?: string;
   /** Birthdays / anniversaries: month + year dropdowns over past years, no Today/Tomorrow presets. */
   pastDates?: boolean;
+  /** Earliest / latest selectable day (YYYY-MM-DD). Days outside are disabled. */
+  min?: string;
+  max?: string;
 }
 
 const PAST_START_MONTH = new Date(1940, 0, 1);
@@ -30,7 +33,13 @@ export function DatePicker({
   className,
   placeholder = 'Select date',
   pastDates = false,
+  min,
+  max,
 }: DatePickerProps) {
+  const inRange = (iso: string) => (!min || iso >= min) && (!max || iso <= max);
+  const minDate = min ? parseIsoDate(min) : undefined;
+  const maxDate = max ? parseIsoDate(max) : undefined;
+  const outOfRange = [...(minDate ? [{ before: minDate }] : []), ...(maxDate ? [{ after: maxDate }] : [])];
   const id = useId();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState(value);
@@ -55,16 +64,17 @@ export function DatePicker({
       onChange('');
       return;
     }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(iso) && parseIsoDate(iso)) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(iso) && parseIsoDate(iso) && inRange(iso)) {
       onChange(iso);
       return;
     }
     setTyped(value);
   }
 
+  const presetIso = (offsetDays: number) => toIsoDate(addDays(new Date(), offsetDays));
   function handleSelectPreset(offsetDays: number) {
-    const targetDate = addDays(new Date(), offsetDays);
-    const iso = toIsoDate(targetDate);
+    const iso = presetIso(offsetDays);
+    if (!inRange(iso)) return;
     onChange(iso);
     setTyped(iso);
     setOpen(false);
@@ -132,32 +142,40 @@ export function DatePicker({
               pastDates && 'hidden',
             )}
           >
-            <button
-              type="button"
-              className="rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-primary)] transition hover:bg-[var(--color-primary)] hover:text-white"
-              onClick={() => handleSelectPreset(0)}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              className="rounded-full bg-[var(--color-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-ink)] border border-[var(--color-border)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-              onClick={() => handleSelectPreset(1)}
-            >
-              Tomorrow
-            </button>
-            <button
-              type="button"
-              className="rounded-full bg-[var(--color-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-ink)] border border-[var(--color-border)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
-              onClick={() => handleSelectPreset(7)}
-            >
-              +1 Week
-            </button>
+            {inRange(presetIso(0)) ? (
+              <button
+                type="button"
+                className="rounded-full bg-[var(--color-primary-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-primary)] transition hover:bg-[var(--color-primary)] hover:text-white"
+                onClick={() => handleSelectPreset(0)}
+              >
+                Today
+              </button>
+            ) : null}
+            {inRange(presetIso(1)) ? (
+              <button
+                type="button"
+                className="rounded-full bg-[var(--color-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-ink)] border border-[var(--color-border)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+                onClick={() => handleSelectPreset(1)}
+              >
+                Tomorrow
+              </button>
+            ) : null}
+            {inRange(presetIso(7)) ? (
+              <button
+                type="button"
+                className="rounded-full bg-[var(--color-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-ink)] border border-[var(--color-border)] transition hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+                onClick={() => handleSelectPreset(7)}
+              >
+                +1 Week
+              </button>
+            ) : null}
           </div>
 
           <DayPicker
             mode="single"
             selected={selected}
+            disabled={outOfRange}
+            {...(maxDate && !pastDates ? { endMonth: maxDate } : {})}
             {...(pastDates
               ? {
                   captionLayout: 'dropdown' as const,

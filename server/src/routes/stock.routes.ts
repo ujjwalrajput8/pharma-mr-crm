@@ -22,6 +22,11 @@ router.get(
 );
 
 router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MANAGER));
+router.get(
+  '/holdings',
+  requirePermission('visits:manage', 'stock:manage'),
+  asyncHandler(controller.holdings),
+);
 
 router.get(
   '/',

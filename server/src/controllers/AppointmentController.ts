@@ -3,6 +3,7 @@ import { AppointmentService } from '../services/AppointmentService';
 import { ApiResponse } from '../utils/ApiResponse';
 import type {
   CompleteAppointmentDto,
+  NoShowAppointmentDto,
   CreateAppointmentDto,
   ListAppointmentsQueryDto,
   RescheduleAppointmentDto,
@@ -70,6 +71,16 @@ export class AppointmentController {
       actor,
     );
     ApiResponse.success(res, result, 'Appointment completed and visit logged');
+  };
+
+  public noShow = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const appointment = await this.appointments.noShow(
+      Number(req.params.id),
+      req.body as NoShowAppointmentDto,
+      actor,
+    );
+    ApiResponse.success(res, appointment, 'Marked as no-show');
   };
 
   public remove = async (req: Request, res: Response): Promise<void> => {

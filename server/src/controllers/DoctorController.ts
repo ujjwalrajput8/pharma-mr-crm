@@ -1,6 +1,8 @@
 import type { Request, Response } from 'express';
 import { DoctorImportService } from '../services/DoctorImportService';
 import { DoctorService } from '../services/DoctorService';
+import { VisitService } from '../services/VisitService';
+import type { LookupDoctorsQueryDto } from '../dto/visit.dto';
 import { ApiResponse } from '../utils/ApiResponse';
 import type {
   AssignMrDto,
@@ -19,6 +21,7 @@ export class DoctorController {
   private constructor(
     private readonly doctors = DoctorService.getInstance(),
     private readonly importer = DoctorImportService.getInstance(),
+    private readonly visits = VisitService.getInstance(),
   ) {}
 
   public static getInstance(): DoctorController {
@@ -45,6 +48,26 @@ export class DoctorController {
     const actor = this.requireUser(req);
     const details = await this.doctors.getDetails(Number(req.params.id), actor);
     ApiResponse.success(res, details, 'Doctor details retrieved');
+  };
+
+  /** "Search all doctors" for the visit form (unlisted doctors included). */
+  public lookup = async (req: Request, res: Response): Promise<void> => {
+    this.requireUser(req);
+    const query = (req.validatedQuery ?? req.query) as LookupDoctorsQueryDto;
+    ApiResponse.success(res, await this.visits.lookupDoctors(query), 'Doctors found');
+  };
+
+  /** MR picker: name, code, photo, team line, area, doctor count. */
+  public mrOptions = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const search = typeof req.query.q === 'string' ? req.query.q : undefined;
+    ApiResponse.success(res, await this.doctors.mrOptions(actor, search), 'MR options');
+  };
+
+  public assignmentHistory = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const history = await this.doctors.assignmentHistory(Number(req.params.id), actor);
+    ApiResponse.success(res, history, 'Assignment history');
   };
 
   public create = async (req: Request, res: Response): Promise<void> => {

@@ -46,13 +46,6 @@ export class VisitRepository {
     return { ...visit, distributions: samples };
   }
 
-  public softDelete(id: number, updatedBy?: number) {
-    return this.prisma.visit.update({
-      where: { id },
-      data: { deletedAt: new Date(), ...(updatedBy ? { updatedBy } : {}) },
-    });
-  }
-
   public async list(params: {
     page: number;
     limit: number;

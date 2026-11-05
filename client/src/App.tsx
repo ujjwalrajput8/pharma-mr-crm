@@ -13,8 +13,8 @@ import { DoctorDetailPage } from '@/pages/DoctorDetailPage';
 import { StoresPage } from '@/pages/StoresPage';
 import { MedicinesPage } from '@/pages/MedicinesPage';
 import { MedicineDetailPage } from '@/pages/MedicineDetailPage';
-import { AppointmentsPage } from '@/pages/AppointmentsPage';
 import { VisitsPage } from '@/pages/VisitsPage';
+import { useAuth } from '@/store/AuthContext';
 import { StockPage } from '@/pages/StockPage';
 import { DistributionsPage } from '@/pages/DistributionsPage';
 import { MedicineIssuesPage } from '@/pages/MedicineIssuesPage';
@@ -43,6 +43,12 @@ const queryClient = new QueryClient({
   },
 });
 
+/** MR home is Today (decision #7); everyone else lands on the Dashboard. */
+function HomeRedirect() {
+  const { role, can } = useAuth();
+  return <Navigate to={role === 'MR' && can('myday:own') ? '/my-day' : '/dashboard'} replace />;
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -56,7 +62,7 @@ export default function App() {
 
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
-                <Route index element={<Navigate to="/dashboard" replace />} />
+                <Route index element={<HomeRedirect />} />
 
                 <Route
                   path="/dashboard"
@@ -226,19 +232,13 @@ export default function App() {
                   }
                 />
 
-                <Route
-                  path="/appointments"
-                  element={
-                    <RequirePermission permissions={['appointments:manage', 'appointments:own']}>
-                      <AppointmentsPage />
-                    </RequirePermission>
-                  }
-                />
+                {/* Old address — Appointments is a tab of Visits & Appointments now. */}
+                <Route path="/appointments" element={<Navigate to="/visits?tab=appointments" replace />} />
 
                 <Route
                   path="/visits"
                   element={
-                    <RequirePermission permissions={['visits:manage', 'visits:own']}>
+                    <RequirePermission permissions={['visits:manage', 'visits:own', 'appointments:manage', 'appointments:own']}>
                       <VisitsPage />
                     </RequirePermission>
                   }

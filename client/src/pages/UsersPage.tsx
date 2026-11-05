@@ -172,6 +172,8 @@ export function UsersPage() {
       />
 
       <Tabs
+        variant="page"
+        ariaLabel="Users & Hierarchy"
         value={view}
         onChange={setView}
         items={[

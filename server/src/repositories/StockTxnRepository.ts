@@ -120,21 +120,21 @@ export class StockTxnRepository {
     },
     client: StockTxnClient,
   ): Promise<void> {
-    const balance = await this.findHolderBalance(params, client);
-    if (!balance || balance.qty < params.qty) {
-      throw new Error('INSUFFICIENT_STOCK');
-    }
-    await client.stockBalance.update({
+    // One conditional UPDATE — the row lock makes check + decrement atomic, so two
+    // requests racing for the same bag can never take it below zero.
+    const { count } = await client.stockBalance.updateMany({
       where: {
-        holderType_holderId_medicineId_batchId: {
-          holderType: params.holderType,
-          holderId: params.holderId,
-          medicineId: params.medicineId,
-          batchId: params.batchId,
-        },
+        holderType: params.holderType,
+        holderId: params.holderId,
+        medicineId: params.medicineId,
+        batchId: params.batchId,
+        qty: { gte: params.qty },
       },
       data: { qty: { decrement: params.qty } },
     });
+    if (count === 0) {
+      throw new Error('INSUFFICIENT_STOCK');
+    }
   }
 
   public async incrementBalance(

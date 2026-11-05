@@ -25,11 +25,17 @@ export class TeamScopeService {
     return TeamScopeService.instance;
   }
 
-  /** `undefined` means company-wide. */
-  public async visibleUserIds(actor: AuthUser): Promise<number[] | undefined> {
+  /**
+   * `undefined` means company-wide. `includeInactive` is for reading history —
+   * a deactivated MR's visits still belong to the manager's team.
+   */
+  public async visibleUserIds(
+    actor: AuthUser,
+    options: { includeInactive?: boolean } = {},
+  ): Promise<number[] | undefined> {
     if (actor.role === AppRoles.ADMIN) return undefined;
     if (actor.role === AppRoles.MR) return [actor.id];
-    const descendants = await this.users.listDescendantIds(actor.id);
+    const descendants = await this.users.listDescendantIds(actor.id, 6, options.includeInactive);
     return [...new Set([actor.id, ...descendants])];
   }
 

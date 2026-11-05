@@ -168,6 +168,7 @@ export class StockLedgerService {
     txnDate: Date;
     note?: string;
     createdBy: number;
+    clientUuid?: string;
     client?: StockTxnClient;
   }): Promise<StockTxn> {
     return this.postTxn(
@@ -181,6 +182,46 @@ export class StockLedgerService {
         fromHolderId: params.mrId,
         toHolderType: HolderTypes.DOCTOR,
         toHolderId: params.doctorId,
+        refType: 'VISIT',
+        refId: params.visitId,
+        note: params.note,
+        createdBy: params.createdBy,
+        clientUuid: params.clientUuid,
+      },
+      params.client,
+    );
+  }
+
+  /**
+   * Sample correction — part of a visit's samples was never handed over. RETURN puts
+   * it back in the MR's bag; LOST writes it off (neither bag nor doctor has it).
+   * Always a new row: the original SAMPLE_GIVEN is never touched.
+   */
+  public async correctSample(params: {
+    kind: 'RETURN' | 'LOST';
+    mrId: number;
+    doctorId: number;
+    medicineId: number;
+    batchId: number;
+    qty: number;
+    visitId: number;
+    txnDate: Date;
+    note: string;
+    createdBy: number;
+    client: StockTxnClient;
+  }): Promise<StockTxn> {
+    return this.postTxn(
+      {
+        txnType: params.kind === 'RETURN' ? StockTxnTypes.RETURN : StockTxnTypes.LOST,
+        txnDate: params.txnDate,
+        medicineId: params.medicineId,
+        batchId: params.batchId,
+        qty: params.qty,
+        fromHolderType: HolderTypes.DOCTOR,
+        fromHolderId: params.doctorId,
+        ...(params.kind === 'RETURN'
+          ? { toHolderType: HolderTypes.USER, toHolderId: params.mrId }
+          : {}),
         refType: 'VISIT',
         refId: params.visitId,
         note: params.note,
@@ -249,7 +290,13 @@ export class StockLedgerService {
     client: StockTxnClient,
     input: PostTxnInput,
   ): Promise<StockTxn> {
-    if (input.fromHolderType != null && input.fromHolderId != null) {
+    // Only warehouse / MR bags carry balances. A doctor holder has none, so a
+    // sample coming back from a doctor (RETURN / LOST) must not look one up.
+    if (
+      input.fromHolderType != null &&
+      input.fromHolderId != null &&
+      this.isBalanceTrackedHolder(input.fromHolderType)
+    ) {
       await this.stockTxns.decrementBalance(
         {
           holderType: input.fromHolderType,

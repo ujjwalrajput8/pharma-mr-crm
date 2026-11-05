@@ -8,9 +8,11 @@ import {
   listDoctorsQuerySchema,
   updateDoctorSchema,
 } from '../dto/doctor.dto';
+import { lookupDoctorsQuerySchema } from '../dto/visit.dto';
 import { AppRoles } from '../constants';
 import { authenticate } from '../middlewares/authenticate.middleware';
 import { authorize } from '../middlewares/authorize.middleware';
+import { requirePermission } from '../middlewares/requirePermission.middleware';
 import { validateRequest } from '../middlewares/validate.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 
@@ -20,6 +22,19 @@ const controller = DoctorController.getInstance();
 router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR));
 
 router.get('/', validateRequest(listDoctorsQuerySchema, 'query'), asyncHandler(controller.list));
+// Fixed paths before '/:id'.
+router.get(
+  '/lookup',
+  requirePermission('visits:own', 'visits:manage'),
+  validateRequest(lookupDoctorsQuerySchema, 'query'),
+  asyncHandler(controller.lookup),
+);
+router.get(
+  '/mr-options',
+  authorize(AppRoles.ADMIN, AppRoles.MANAGER),
+  asyncHandler(controller.mrOptions),
+);
+router.get('/:id/assignment-history', asyncHandler(controller.assignmentHistory));
 router.get('/:id/details', asyncHandler(controller.getDetails));
 router.get('/:id', asyncHandler(controller.getById));
 

@@ -94,7 +94,7 @@ export function VisitDetailsDialog({ open, visit, onClose }: VisitDetailsDialogP
           ) : (
             <ul className="space-y-1">
               {visit.distributions.map((d) => (
-                <li key={d.id} className="flex items-center justify-between rounded-xl bg-[var(--color-bg)] px-3 py-2 text-sm">
+                <li key={`${d.medicineId}-${d.batchId}`} className="flex items-center justify-between rounded-xl bg-[var(--color-bg)] px-3 py-2 text-sm">
                   <span>
                     {d.medicineName}
                     {d.batchNumber ? (

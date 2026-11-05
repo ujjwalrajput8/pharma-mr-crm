@@ -60,6 +60,12 @@ enum AppointmentStatus {
   RESCHEDULED
 }
 
+/// How a visit was recorded. Bulk is only a UI action — each doctor gets its own DIRECT visit.
+enum VisitSource {
+  APPOINTMENT
+  DIRECT
+}
+
 enum AttendanceStatus {
   PRESENT
   LATE
@@ -241,6 +247,7 @@ model User {
   appointmentsAsMr   Appointment[]      @relation("MrAppointments")
   appointmentsAssigned Appointment[]    @relation("AppointmentAssigner")
   visitsAsMr         Visit[]            @relation("MrVisits")
+  visitsReviewed     Visit[]            @relation("VisitReviewer")
   attendances        Attendance[]       @relation("UserAttendance")
   approvedAttendances Attendance[]      @relation("AttendanceApprover")
   tourPlans          TourPlan[]         @relation("MrTourPlans")
@@ -838,6 +845,17 @@ model Visit {
   clientUuid          String?   @unique
   lockedAt            DateTime?
   approvedById        Int?
+  /// How the visit was recorded. Every visit before P3 came from an appointment.
+  source              VisitSource @default(APPOINTMENT)
+  purpose             String?
+  /// Doctor was not assigned to this MR when the visit was logged ("Unlisted").
+  offList             Boolean   @default(false)
+  offListReviewedAt   DateTime?
+  offListReviewedById Int?
+  /// ASSIGNED | REVIEWED
+  offListReviewAction String?
+  offListReviewNote   String?
+  lastCorrectedAt     DateTime?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -848,12 +866,15 @@ model Visit {
   appointment Appointment?   @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   doctor      Doctor?        @relation(fields: [doctorId], references: [id], onDelete: SetNull)
   mr          User           @relation("MrVisits", fields: [mrId], references: [id], onDelete: Cascade)
+  offListReviewedBy User?    @relation("VisitReviewer", fields: [offListReviewedById], references: [id], onDelete: SetNull)
   products    VisitProduct[]
 
   @@index([doctorId])
   @@index([mrId])
   @@index([visitDate])
   @@index([deletedAt])
+  @@index([mrId, visitDate])
+  @@index([offList, offListReviewedAt])
   @@map("visits")
 }
 

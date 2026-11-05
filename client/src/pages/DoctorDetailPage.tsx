@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, Star } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ClipboardPlus, Star, UserRoundCog } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
+import { LogVisitDialog, type LogVisitMode } from '@/components/visits/LogVisitDialog';
+import { useAuth } from '@/store/AuthContext';
 import { BrandLoader } from '@/components/ui/BrandLoader';
 import { useToast } from '@/components/ui/Toast';
 import { DataTable, Td } from '@/components/ui/DataTable';
@@ -36,6 +38,14 @@ const TABS: Array<{ key: TabKey; label: string }> = [
 export function DoctorDetailPage() {
   const { id = '' } = useParams();
   const [tab, setTab] = useState<TabKey>('overview');
+  const { can } = useAuth();
+  const canLog = can('visits:own') || can('visits:manage');
+  const [logMode, setLogMode] = useState<LogVisitMode | null>(null);
+  const historyQuery = useQuery({
+    queryKey: ['doctors', id, 'assignment-history'],
+    queryFn: () => doctorsApi.assignmentHistory(Number(id)),
+    enabled: Boolean(id) && tab === 'overview',
+  });
 
   const detailsQuery = useQuery({
     queryKey: ['doctors', id, 'details'],
@@ -105,6 +115,12 @@ export function DoctorDetailPage() {
           .join(' · ')}
         actions={
           <>
+            {canLog ? (
+              <Button onClick={() => setLogMode({ kind: 'direct', doctor: { ...profile, assignedMr: data?.profile.assignedMrs?.[0] ?? null } })}>
+                <ClipboardPlus size={15} />
+                Log visit
+              </Button>
+            ) : null}
             <Button
               variant={profile.isFavorite ? 'warning' : 'secondary'}
               aria-pressed={profile.isFavorite}
@@ -218,6 +234,44 @@ export function DoctorDetailPage() {
               </ul>
             )}
           </Card>
+
+          <Card className="p-5">
+            <h3 className="mb-3 flex items-center gap-2 font-semibold text-[var(--color-ink)]">
+              <UserRoundCog size={16} className="text-[var(--color-muted)]" /> Assignment history
+            </h3>
+            {(historyQuery.data?.changes.length ?? 0) === 0 && (historyQuery.data?.assignments.length ?? 0) === 0 ? (
+              <EmptyState title="Never assigned" description="When the doctor is given to an MR, it shows here — with who did it and why." />
+            ) : (
+              <ol className="relative space-y-3 border-l border-[var(--color-border)] pl-4" data-testid="assignment-history">
+                {(historyQuery.data?.changes ?? []).map((change, index) => (
+                  <li key={index} className="text-sm">
+                    <span className="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full bg-[var(--color-primary)]" />
+                    <p className="font-semibold text-[var(--color-ink)]">
+                      {change.action === 'DOCTOR_REASSIGNED'
+                        ? `${change.before?.mrName ?? '—'} → ${change.after?.mrName ?? '—'}`
+                        : change.action === 'DOCTOR_ASSIGNED'
+                          ? `Assigned to ${change.after?.mrName ?? '—'}`
+                          : `Taken off ${change.before?.mrName ?? '—'}`}
+                    </p>
+                    <p className="text-xs text-[var(--color-muted)]">
+                      {new Date(change.at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })} · {change.by?.fullName ?? 'System'}
+                      {change.after?.team ? ` · ${change.after.team}` : ''}
+                    </p>
+                    {change.note ? <p className="text-xs text-[var(--color-ink)]/80">“{change.note}”</p> : null}
+                  </li>
+                ))}
+                {(historyQuery.data?.changes.length ?? 0) === 0
+                  ? historyQuery.data?.assignments.map((row) => (
+                      <li key={`${row.mrId}-${row.from}`} className="text-sm">
+                        <span className="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full bg-[var(--color-border-strong)]" />
+                        <p className="font-semibold text-[var(--color-ink)]">{row.mrName}</p>
+                        <p className="text-xs text-[var(--color-muted)]">{row.from} – {row.to ?? 'now'}</p>
+                      </li>
+                    ))
+                  : null}
+              </ol>
+            )}
+          </Card>
         </div>
       ) : null}
 
@@ -235,7 +289,7 @@ export function DoctorDetailPage() {
               <tr key={item.id} className="border-b border-[var(--color-border)] last:border-0">
                 <Td>{item.date}</Td>
                 <Td>{item.time}</Td>
-                <Td>{item.mr.fullName}</Td>
+                <Td>{item.mr?.fullName ?? '—'}</Td>
                 <Td>{item.purpose ?? '—'}</Td>
                 <Td>
                   <Badge
@@ -270,7 +324,7 @@ export function DoctorDetailPage() {
               <tr key={item.id} className="border-b border-[var(--color-border)] last:border-0">
                 <Td>{item.visitDate}</Td>
                 <Td>{item.visitTime ?? '—'}</Td>
-                <Td>{item.mr.fullName}</Td>
+                <Td>{item.mr?.fullName ?? '—'}</Td>
                 <Td>{item.meetingDurationMin ? `${item.meetingDurationMin} min` : '—'}</Td>
                 <Td>{item.nextFollowUp ?? '—'}</Td>
                 <Td>{item.products.map((p) => p.name).join(', ') || '—'}</Td>
@@ -319,7 +373,7 @@ export function DoctorDetailPage() {
                 <Td>{item.medicineName}</Td>
                 <Td>{item.quantity}</Td>
                 <Td>{item.batchNumber ?? '—'}</Td>
-                <Td>{item.mr.fullName}</Td>
+                <Td>{item.mr?.fullName ?? '—'}</Td>
                 <Td className="font-mono text-xs">#{item.visitId}</Td>
               </tr>
             ))}
@@ -363,6 +417,7 @@ export function DoctorDetailPage() {
           </Card>
         </div>
       ) : null}
+      <LogVisitDialog mode={logMode} onClose={() => setLogMode(null)} />
     </div>
   );
 }

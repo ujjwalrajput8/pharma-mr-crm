@@ -4,19 +4,25 @@ import {
   completeAppointmentSchema,
   createAppointmentSchema,
   listAppointmentsQuerySchema,
+  noShowAppointmentSchema,
   rescheduleAppointmentSchema,
   updateAppointmentSchema,
 } from '../dto/appointment.dto';
 import { AppRoles } from '../constants';
 import { authenticate } from '../middlewares/authenticate.middleware';
 import { authorize } from '../middlewares/authorize.middleware';
+import { requirePermission } from '../middlewares/requirePermission.middleware';
 import { validateRequest } from '../middlewares/validate.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 const controller = AppointmentController.getInstance();
 
-router.use(authenticate, authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR));
+router.use(
+  authenticate,
+  authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR),
+  requirePermission('appointments:own', 'appointments:manage'),
+);
 
 router.get(
   '/',
@@ -35,6 +41,11 @@ router.post(
   '/:id/complete',
   validateRequest(completeAppointmentSchema),
   asyncHandler(controller.complete),
+);
+router.post(
+  '/:id/no-show',
+  validateRequest(noShowAppointmentSchema),
+  asyncHandler(controller.noShow),
 );
 router.delete('/:id', authorize(AppRoles.ADMIN), asyncHandler(controller.remove));
 

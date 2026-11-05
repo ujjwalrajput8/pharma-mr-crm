@@ -89,3 +89,13 @@ export function getApiErrorMessage(error: unknown, fallback = 'Something went wr
   if (error instanceof Error) return error.message;
   return fallback;
 }
+
+/** The details of a failed request (e.g. what a doctor move would change). */
+export function getApiErrorDetails<T = unknown>(error: unknown): T | undefined {
+  if (axios.isAxiosError<ApiError>(error)) return error.response?.data?.details as T | undefined;
+  return undefined;
+}
+
+export function getApiStatus(error: unknown): number | undefined {
+  return axios.isAxiosError(error) ? error.response?.status : undefined;
+}

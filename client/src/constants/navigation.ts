@@ -6,7 +6,6 @@ import {
   Stethoscope,
   Store,
   Pill,
-  CalendarDays,
   ClipboardList,
   Package,
   Truck,
@@ -54,7 +53,7 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'Overview',
   },
   {
-    label: 'My Day',
+    label: 'Today',
     path: '/my-day',
     icon: Sun,
     permissions: ['myday:own'],
@@ -84,17 +83,11 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'Field',
   },
   {
-    label: 'Appointments',
-    path: '/appointments',
-    icon: CalendarDays,
-    permissions: ['appointments:manage', 'appointments:own'],
-    section: 'Field',
-  },
-  {
-    label: 'Visits / DCR',
+    label: 'Visits & Appointments',
+    shortLabel: 'Visits',
     path: '/visits',
     icon: ClipboardList,
-    permissions: ['visits:manage', 'visits:own'],
+    permissions: ['visits:manage', 'visits:own', 'appointments:manage', 'appointments:own'],
     section: 'Field',
   },
   {

@@ -12,6 +12,7 @@ import { DoctorRepository } from '../repositories/DoctorRepository';
 import { UserRepository } from '../repositories/UserRepository';
 import type { AuthUser } from '../types/auth.types';
 import { formatDateOnly, parseDateOnly } from '../utils/datetime';
+import { DoctorAssignmentService } from './DoctorAssignmentService';
 
 type DoctorWithAssignments = Doctor & {
   assignments?: Array<{
@@ -28,6 +29,7 @@ export class DoctorService {
   private constructor(
     private readonly doctors = DoctorRepository.getInstance(),
     private readonly users = UserRepository.getInstance(),
+    private readonly assignments = DoctorAssignmentService.getInstance(),
   ) {}
 
   public static getInstance(): DoctorService {
@@ -249,7 +251,7 @@ export class DoctorService {
     });
 
     if (mrId) {
-      await this.doctors.assignMr(doctor.id, mrId, actor.id);
+      await this.assignments.assign({ doctorIds: [doctor.id], mrId, actor, source: 'DOCTOR_EDIT' });
     }
 
     return this.getById(doctor.id, actor);
@@ -267,20 +269,18 @@ export class DoctorService {
     }
     if (dto.mrId) await this.requireMr(dto.mrId);
 
-    const { mrId, birthday, anniversary, ...rest } = dto;
+    const { mrId, birthday, anniversary, confirmMove, note, ...rest } = dto;
+    // undefined = leave the MR as is; null = unassign; an id = (re)assign. Runs first:
+    // a move that still needs confirmation (409) must not save half the edit.
+    if (mrId !== undefined) {
+      await this.assignments.assign({ doctorIds: [id], mrId, actor, confirmMove, note, source: 'DOCTOR_EDIT' });
+    }
     await this.doctors.update(id, {
       ...rest,
       ...this.normalizeMslClass(rest.mslClass),
       ...this.toDateColumns({ birthday, anniversary }),
       updatedBy: actor.id,
     });
-
-    // undefined = leave the MR as is; null = unassign; an id = (re)assign.
-    if (mrId === null) {
-      await this.doctors.unassignMany([id], actor.id);
-    } else if (mrId) {
-      await this.doctors.assignMr(id, mrId, actor.id);
-    }
 
     return this.getById(id, actor);
   }
@@ -290,13 +290,27 @@ export class DoctorService {
     this.assertAdmin(actor);
     const mr = dto.mrId ? await this.requireMr(dto.mrId) : null;
     const ids = await this.doctors.existingIds([...new Set(dto.doctorIds)]);
+    if (ids.length === 0) throw new NotFoundError('Doctor not found');
 
-    if (mr) {
-      await this.doctors.assignMrToMany(ids, mr.id, actor.id);
-    } else {
-      await this.doctors.unassignMany(ids, actor.id);
-    }
-    return { doctors: ids.length, mr: mr ? { id: mr.id, fullName: mr.fullName } : null };
+    const { changed } = await this.assignments.assign({
+      doctorIds: ids,
+      mrId: mr?.id ?? null,
+      actor,
+      confirmMove: dto.confirmMove,
+      note: dto.note,
+      source: 'BULK_ASSIGN',
+    });
+    return { doctors: ids.length, changed, mr: mr ? { id: mr.id, fullName: mr.fullName } : null };
+  }
+
+  /** "Search all doctors" in the visit form and MR picker data — see DoctorAssignmentService. */
+  public mrOptions(actor: AuthUser, search?: string) {
+    return this.assignments.mrOptions(actor, search);
+  }
+
+  public async assignmentHistory(id: number, actor: AuthUser) {
+    await this.requireAccessible(id, actor);
+    return this.assignments.history(id);
   }
 
   public async remove(id: number, actor: AuthUser) {
@@ -310,7 +324,14 @@ export class DoctorService {
     await this.requireAccessible(id, actor);
     await this.requireMr(dto.mrId);
 
-    await this.doctors.assignMr(id, dto.mrId, actor.id);
+    await this.assignments.assign({
+      doctorIds: [id],
+      mrId: dto.mrId,
+      actor,
+      confirmMove: dto.confirmMove,
+      note: dto.note,
+      source: 'DOCTOR_EDIT',
+    });
     return this.getById(id, actor);
   }
 

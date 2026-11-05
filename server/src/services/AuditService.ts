@@ -20,8 +20,11 @@ export class AuditService {
     return AuditService.instance;
   }
 
-  public async log(input: CreateAuditLogInput): Promise<void> {
-    await this.audits.create(input);
+  public async log(
+    input: CreateAuditLogInput,
+    client?: Parameters<AuditLogRepository['create']>[1],
+  ): Promise<void> {
+    await this.audits.create(input, client);
   }
 
   public async list(query: ListAuditLogsQueryDto) {

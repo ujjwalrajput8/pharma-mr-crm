@@ -5,7 +5,7 @@ import { NotificationRepository } from '../repositories/NotificationRepository';
 import { Logger } from '../utils/logger';
 import { OccasionService, type OccasionKind } from './OccasionService';
 import { TeamScopeService } from './TeamScopeService';
-import { addDays, formatDateOnly, todayDateOnly } from '../utils/datetime';
+import { addDays, formatDateOnly, localMinutesOfDay, todayDateOnly } from '../utils/datetime';
 import type { AuthUser } from '../types/auth.types';
 
 export type NotificationKind =
@@ -24,7 +24,11 @@ export type NotificationKind =
   | 'EXPENSE_DECIDED'
   | 'EXPENSE_PAID'
   /** Someone was moved into a manager's reporting line. */
-  | 'TEAM_CHANGED';
+  | 'TEAM_CHANGED'
+  /** An MR logged a visit to a doctor not in their list — the manager reviews it. */
+  | 'VISIT_UNLISTED'
+  /** Evening nudge: planned doctor calls of today's approved plan not logged yet. */
+  | 'PLANNED_CALLS_PENDING';
 
 export type NotificationTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
 
@@ -147,6 +151,7 @@ export class NotificationService {
         ? this.todaysAppointments(actor, today)
         : [],
       can('visits:own') || can('visits:manage') ? this.followUpsDue(actor, today) : [],
+      can('myday:own') ? this.plannedCallsPending(actor, today) : [],
       can('mystock:own') || can('stock:manage') ? this.expiringStock(actor, today) : [],
       this.occasions(actor),
     ]);
@@ -317,7 +322,7 @@ export class NotificationService {
       where: {
         deletedAt: null,
         date: today,
-        status: { in: ['PENDING', 'CONFIRMED', 'REQUESTED'] },
+        status: { in: ['PENDING', 'CONFIRMED', 'REQUESTED', 'RESCHEDULED'] },
         ...mrFilter,
       },
     });
@@ -333,6 +338,38 @@ export class NotificationService {
         tone: 'primary',
         at: today.toISOString(),
         count,
+      },
+    ];
+  }
+
+  /** After 5 pm: doctor calls in today's approved plan that have no visit yet. */
+  private async plannedCallsPending(actor: AuthUser, today: Date): Promise<AppNotification[]> {
+    if (localMinutesOfDay() < 17 * 60) return [];
+    const calls = await this.prisma.tourPlanCall.findMany({
+      where: {
+        doctorId: { not: null },
+        tourPlanDay: { planDate: today, tourPlan: { userId: actor.id, status: 'APPROVED', deletedAt: null } },
+      },
+      select: { doctorId: true },
+    });
+    const planned = [...new Set(calls.map((c) => c.doctorId).filter((id): id is number => id != null))];
+    if (planned.length === 0) return [];
+    const visited = await this.prisma.visit.findMany({
+      where: { mrId: actor.id, visitDate: today, deletedAt: null, doctorId: { in: planned } },
+      select: { doctorId: true },
+    });
+    const missing = planned.length - new Set(visited.map((v) => v.doctorId)).size;
+    if (missing <= 0) return [];
+    return [
+      {
+        id: `planned-calls-${formatDateOnly(today)}`,
+        kind: 'PLANNED_CALLS_PENDING',
+        title: `${missing} planned call${missing > 1 ? 's' : ''} not logged`,
+        message: 'Open Today and log them before you close the day.',
+        href: '/my-day',
+        tone: 'warning',
+        at: new Date().toISOString(),
+        count: missing,
       },
     ];
   }

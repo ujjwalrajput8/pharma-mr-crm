@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express';
 import type { AdjustStockDto, ListStockQueryDto } from '../dto/stock.dto';
-import { UnauthorizedError } from '../errors/AppError';
+import { BadRequestError, UnauthorizedError } from '../errors/AppError';
 import { StockService } from '../services/StockService';
+import { TeamScopeService } from '../services/TeamScopeService';
 import { ApiResponse } from '../utils/ApiResponse';
 import { HttpStatus } from '../constants';
 
@@ -12,7 +13,10 @@ import { HttpStatus } from '../constants';
 export class StockController {
   private static instance: StockController | null = null;
 
-  private constructor(private readonly stocks = StockService.getInstance()) {}
+  private constructor(
+    private readonly stocks = StockService.getInstance(),
+    private readonly scope = TeamScopeService.getInstance(),
+  ) {}
 
   public static getInstance(): StockController {
     if (!StockController.instance) {
@@ -37,5 +41,14 @@ export class StockController {
     if (!req.user?.id) throw new UnauthorizedError('Authentication required');
     const result = await this.stocks.myStock(req.user);
     ApiResponse.success(res, result, 'My stock retrieved');
+  };
+
+  /** A team MR's bag — for a manager logging a visit (and its samples) on their behalf. */
+  public holdings = async (req: Request, res: Response): Promise<void> => {
+    if (!req.user?.id) throw new UnauthorizedError('Authentication required');
+    const mrId = Number(req.query.mrId);
+    if (!Number.isInteger(mrId) || mrId <= 0) throw new BadRequestError('mrId is required');
+    await this.scope.assertCanSee(req.user, mrId);
+    ApiResponse.success(res, await this.stocks.myStock(req.user, mrId), 'Stock retrieved');
   };
 }

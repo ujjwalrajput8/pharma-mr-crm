@@ -217,13 +217,22 @@ export class UserRepository {
    * Whole reporting sub-tree below a user (RSM → ASM → MR), excluding the root.
    * Breadth-first with a depth cap so a bad `managerId` cycle can never spin forever.
    */
-  public async listDescendantIds(managerId: number, maxDepth = 6): Promise<number[]> {
+  /** `includeInactive` keeps deactivated reports — their history stays readable. */
+  public async listDescendantIds(
+    managerId: number,
+    maxDepth = 6,
+    includeInactive = false,
+  ): Promise<number[]> {
     const collected = new Set<number>();
     let frontier = [managerId];
 
     for (let depth = 0; depth < maxDepth && frontier.length > 0; depth += 1) {
       const rows = await this.prisma.user.findMany({
-        where: { managerId: { in: frontier }, deletedAt: null, status: 'ACTIVE' },
+        where: {
+          managerId: { in: frontier },
+          deletedAt: null,
+          ...(includeInactive ? {} : { status: 'ACTIVE' }),
+        },
         select: { id: true },
       });
       frontier = rows.map((row) => row.id).filter((id) => !collected.has(id));

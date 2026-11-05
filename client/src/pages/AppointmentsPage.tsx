@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { CalendarClock, CalendarDays, CalendarX2, CheckCircle2, History, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { getApiErrorMessage } from '@/api/client';
 import { AppointmentDetailsDialog } from '@/components/appointments/AppointmentDetailsDialog';
@@ -8,7 +8,8 @@ import {
   AppointmentRescheduleDialog,
   type ReschedulePayload,
 } from '@/components/appointments/AppointmentRescheduleDialog';
-import { VisitCompleteDialog } from '@/components/appointments/VisitCompleteDialog';
+import { LogVisitDialog } from '@/components/visits/LogVisitDialog';
+import { Tabs } from '@/components/ui/Tabs';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
@@ -20,19 +21,24 @@ import {
   appointmentsApi,
   type Appointment,
   type AppointmentStatus,
-  type CompleteAppointmentPayload,
+  type AppointmentView,
   type CreateAppointmentPayload,
 } from '@/services/appointments.service';
 import { doctorsApi } from '@/services/doctors.service';
-import { medicinesApi } from '@/services/medicines.service';
-import { formatDisplayDate, formatTime12 } from '@/utils/datetime';
+import { formatDisplayDate, formatTime12, toIsoDate } from '@/utils/datetime';
 
-const statusTone: Record<AppointmentStatus, 'primary' | 'success' | 'danger' | 'warning'> = {
+const statusTone: Record<AppointmentStatus, 'primary' | 'success' | 'danger' | 'warning' | 'neutral'> = {
   PENDING: 'primary',
+  REQUESTED: 'primary',
+  CONFIRMED: 'primary',
   COMPLETED: 'success',
+  VISITED: 'success',
   CANCELLED: 'danger',
+  NO_SHOW: 'neutral',
   RESCHEDULED: 'warning',
 };
+const OPEN: AppointmentStatus[] = ['PENDING', 'RESCHEDULED', 'REQUESTED', 'CONFIRMED'];
+const PAGE_SIZE = 20;
 
 export function AppointmentsPage() {
   const { can, user, role } = useAuth();
@@ -42,21 +48,23 @@ export function AppointmentsPage() {
   const queryClient = useQueryClient();
 
   const [open, setOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<AppointmentStatus | ''>('');
+  const [view, setView] = useState<AppointmentView>('today');
+  const [page, setPage] = useState(1);
+  const [noShowFor, setNoShowFor] = useState<Appointment | null>(null);
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [completeFor, setCompleteFor] = useState<Appointment | null>(null);
   const [rescheduleFor, setRescheduleFor] = useState<Appointment | null>(null);
   const [cancelId, setCancelId] = useState<number | null>(null);
 
+  // Server-side views + paging — nothing old is ever cut off (B-V7).
   const appointmentsQuery = useQuery({
-    queryKey: ['appointments', statusFilter],
-    queryFn: () =>
-      appointmentsApi.list({
-        limit: 100,
-        status: statusFilter || undefined,
-      }),
+    queryKey: ['appointments', 'page', view, page],
+    queryFn: () => appointmentsApi.page({ view, page, limit: PAGE_SIZE }),
   });
-  const cancelAppointment = appointmentsQuery.data?.find((item) => item.id === cancelId);
+  const today = toIsoDate(new Date());
+  const pageItems = appointmentsQuery.data?.items ?? [];
+  const counts = appointmentsQuery.data?.meta.counts;
+  const cancelAppointment = pageItems.find((item) => item.id === cancelId);
   const doctorsQuery = useQuery({
     queryKey: ['doctors'],
     queryFn: () => doctorsApi.list(),
@@ -67,14 +75,8 @@ export function AppointmentsPage() {
     queryFn: () => appointmentsApi.listAssignableMrs(),
     enabled: open && canAssignMr,
   });
-  const medicinesQuery = useQuery({
-    queryKey: ['medicines'],
-    queryFn: () => medicinesApi.list(),
-    enabled: Boolean(completeFor),
-  });
-
   const table = useClientTable({
-    data: appointmentsQuery.data ?? [],
+    data: pageItems,
     getSearchText: (item) =>
       [
         formatDisplayDate(item.date),
@@ -139,20 +141,15 @@ export function AppointmentsPage() {
     onError: (err) => toast.error('Reschedule failed', getApiErrorMessage(err)),
   });
 
-  const completeMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: CompleteAppointmentPayload }) =>
-      appointmentsApi.complete(id, payload),
+  const noShowMutation = useMutation({
+    mutationFn: (id: number) => appointmentsApi.noShow(id),
     onSuccess: async () => {
-      setCompleteFor(null);
-      setSelected(null);
-      toast.success('Visit logged', 'Samples reduced stock automatically');
+      setNoShowFor(null);
+      toast.success('Marked as no-show');
       await queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      await queryClient.invalidateQueries({ queryKey: ['visits'] });
-      await queryClient.invalidateQueries({ queryKey: ['medicines'] });
-      await queryClient.invalidateQueries({ queryKey: ['stock'] });
-      await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      await queryClient.invalidateQueries({ queryKey: ['my-day'] });
     },
-    onError: (err) => toast.error('Complete failed', getApiErrorMessage(err)),
+    onError: (err) => toast.error('Not changed', getApiErrorMessage(err)),
   });
 
   const title = useMemo(() => {
@@ -206,23 +203,27 @@ export function AppointmentsPage() {
       />
 
       <Card>
+        <div className="border-b border-[var(--color-border)] px-4 py-3">
+          <Tabs
+            ariaLabel="Appointment views"
+            value={view}
+            onChange={(v) => {
+              setView(v);
+              setPage(1);
+            }}
+            items={[
+              { value: 'today', label: 'Today', icon: CalendarDays, count: counts?.today },
+              { value: 'upcoming', label: 'Upcoming', icon: CalendarClock, count: counts?.upcoming },
+              { value: 'overdue', label: 'Overdue', icon: History, count: counts?.overdue },
+              { value: 'completed', label: 'Completed', icon: CheckCircle2 },
+              { value: 'closed', label: 'Cancelled / No-show', icon: CalendarX2 },
+            ]}
+          />
+        </div>
         <TableToolbar
           search={table.search}
           onSearchChange={table.setSearch}
-          placeholder="Search appointments…"
-          actions={
-            <select
-              className="h-9 w-full sm:w-44 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-xs font-semibold text-[var(--color-ink)] outline-none shadow-xs transition focus:border-[var(--color-primary)] cursor-pointer"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as AppointmentStatus | '')}
-            >
-              <option value="">All statuses</option>
-              <option value="PENDING">Pending</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="CANCELLED">Cancelled</option>
-              <option value="RESCHEDULED">Rescheduled</option>
-            </select>
-          }
+          placeholder="Search this page…"
         />
         <DataTable
           columns={columns}
@@ -254,7 +255,10 @@ export function AppointmentsPage() {
                   {canManage ? <Td>{item.mr?.fullName ?? '—'}</Td> : null}
                   <Td>{item.purpose ?? '—'}</Td>
                   <Td>
-                    <Badge tone={statusTone[item.status]}>{item.status}</Badge>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge tone={statusTone[item.status] ?? 'neutral'}>{item.status.replace('_', '-')}</Badge>
+                      {OPEN.includes(item.status) && item.date < today ? <Badge tone="warning">Overdue</Badge> : null}
+                    </div>
                   </Td>
                   {canManage ? (
                     <>
@@ -283,7 +287,7 @@ export function AppointmentsPage() {
                       >
                         View
                       </Button>
-                      {item.status === 'PENDING' || item.status === 'RESCHEDULED' ? (
+                      {OPEN.includes(item.status) ? (
                         <>
                           <Button
                             variant="soft"
@@ -302,6 +306,13 @@ export function AppointmentsPage() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => setNoShowFor(item)}
+                          >
+                            No-show
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setCancelId(item.id)}
                           >
                             Cancel
@@ -315,15 +326,15 @@ export function AppointmentsPage() {
             })}
         </DataTable>
         <TablePagination
-          page={table.page}
-          totalPages={table.totalPages}
-          from={table.from}
-          to={table.to}
-          total={table.filteredTotal}
-          pageSize={table.pageSize}
-          pageSizeOptions={table.pageSizeOptions}
-          onPageChange={table.setPage}
-          onPageSizeChange={table.setPageSize}
+          page={page}
+          totalPages={appointmentsQuery.data?.meta.totalPages ?? 1}
+          from={(appointmentsQuery.data?.meta.total ?? 0) === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}
+          to={Math.min(page * PAGE_SIZE, appointmentsQuery.data?.meta.total ?? 0)}
+          total={appointmentsQuery.data?.meta.total ?? 0}
+          pageSize={PAGE_SIZE}
+          pageSizeOptions={[PAGE_SIZE]}
+          onPageChange={setPage}
+          onPageSizeChange={() => undefined}
         />
       </Card>
 
@@ -342,13 +353,21 @@ export function AppointmentsPage() {
         open={Boolean(selected)}
         appointment={selected}
         onClose={() => setSelected(null)}
-        onCancel={() => selected && setCancelId(selected.id)}
+        onCancel={() => {
+          if (!selected) return;
+          setCancelId(selected.id);
+          setSelected(null);
+        }}
         onReschedule={() => {
           if (!selected) return;
           setRescheduleFor(selected);
           setSelected(null);
         }}
-        onComplete={() => selected && setCompleteFor(selected)}
+        onComplete={() => {
+          if (!selected) return;
+          setCompleteFor(selected);
+          setSelected(null);
+        }}
       />
 
       <AppointmentRescheduleDialog
@@ -361,15 +380,24 @@ export function AppointmentsPage() {
         }
       />
 
-      <VisitCompleteDialog
-        open={Boolean(completeFor)}
-        appointment={completeFor}
-        medicines={medicinesQuery.data ?? []}
-        submitting={completeMutation.isPending}
+      <LogVisitDialog
+        mode={completeFor ? { kind: 'appointment', appointment: completeFor } : null}
         onClose={() => setCompleteFor(null)}
-        onSubmit={(payload) =>
-          completeFor && completeMutation.mutate({ id: completeFor.id, payload })
-        }
+      />
+
+      <ConfirmDialog
+        open={Boolean(noShowFor)}
+        variant="generic"
+        badge="No-show"
+        title="Mark as no-show?"
+        description="The doctor was not met. The appointment closes; no visit is recorded."
+        recordName={noShowFor?.doctor?.fullName ?? 'Appointment'}
+        recordContext={noShowFor ? `Appointment · ${formatDisplayDate(noShowFor.date)}` : 'Appointments'}
+        confirmLabel="Mark no-show"
+        cancelLabel="Keep"
+        onClose={() => setNoShowFor(null)}
+        loading={noShowMutation.isPending}
+        onConfirm={() => noShowFor && noShowMutation.mutate(noShowFor.id)}
       />
 
       <ConfirmDialog

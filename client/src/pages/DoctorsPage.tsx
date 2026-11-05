@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, FileSpreadsheet, Pencil, Plus, Star, Trash2 } from 'lucide-react';
+import { ClipboardPlus, Eye, FileSpreadsheet, Pencil, Plus, Star, Trash2, UserRoundCog } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
@@ -7,6 +7,13 @@ import { Button } from '@/components/ui/Button';
 import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { DoctorImportDialog } from '@/components/doctors/DoctorImportDialog';
+import { AssignDoctorsDialog } from '@/components/assignment/AssignDoctorsDialog';
+import { MoveConfirmDialog } from '@/components/assignment/MoveConfirmDialog';
+import { movesFromError } from '@/components/assignment/moves';
+import { MrPicker } from '@/components/assignment/MrPicker';
+import { BulkVisitDialog } from '@/components/visits/BulkVisitDialog';
+import { LogVisitDialog, type LogVisitMode } from '@/components/visits/LogVisitDialog';
+import type { AssignmentMove } from '@/services/doctors.service';
 import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
@@ -94,6 +101,13 @@ const TOOLBAR_SELECT =
 export function DoctorsPage() {
   const { can } = useAuth();
   const isAdmin = can('doctors:manage');
+  // Anyone who logs visits can pick doctors and log straight away — no appointment needed.
+  const canLog = can('visits:own') || can('visits:manage');
+  const canSelect = isAdmin || canLog;
+  const [logMode, setLogMode] = useState<LogVisitMode | null>(null);
+  const [bulkIds, setBulkIds] = useState<number[] | null>(null);
+  const [assignIds, setAssignIds] = useState<number[] | null>(null);
+  const [pendingMove, setPendingMove] = useState<{ moves: AssignmentMove[]; id: number; payload: Parameters<typeof doctorsApi.update>[1] } | null>(null);
   const toast = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -108,7 +122,6 @@ export function DoctorsPage() {
   const [mrFilter, setMrFilter] = useState('all');
   /** Doctors ticked for a bulk MR assignment. */
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkMrId, setBulkMrId] = useState('');
 
   const doctorsQuery = useQuery({
     queryKey: ['doctors'],
@@ -140,20 +153,6 @@ export function DoctorsPage() {
     enabled: isAdmin,
   });
 
-  const bulkAssignMutation = useMutation({
-    mutationFn: (mrId: number | null) => doctorsApi.assignMr([...selected], mrId),
-    onSuccess: async (result) => {
-      toast.success(
-        result.mr
-          ? `${result.doctors} doctor${result.doctors === 1 ? '' : 's'} assigned to ${result.mr.fullName}`
-          : `${result.doctors} doctor${result.doctors === 1 ? '' : 's'} unassigned`,
-      );
-      setSelected(new Set());
-      setBulkMrId('');
-      await queryClient.invalidateQueries({ queryKey: ['doctors'] });
-    },
-    onError: (err) => toast.error('Could not assign', getApiErrorMessage(err)),
-  });
 
   function toggleSelected(id: number): void {
     setSelected((prev) => {
@@ -191,7 +190,15 @@ export function DoctorsPage() {
       await queryClient.invalidateQueries({ queryKey: ['doctors'] });
       await queryClient.invalidateQueries({ queryKey: ['occasions'] });
     },
-    onError: (err) => setError(getApiErrorMessage(err)),
+    onError: (err, vars) => {
+      // A move to another MR needs a yes first (D15) — show what changes.
+      const moves = movesFromError(err);
+      if (moves) {
+        setPendingMove({ moves, id: vars.id, payload: vars.payload });
+        return;
+      }
+      setError(getApiErrorMessage(err));
+    },
   });
 
   /** Flips the star at once; rolls back if the server says no. */
@@ -316,7 +323,7 @@ export function DoctorsPage() {
             ) : null
           }
         />
-        {isAdmin && table.allRows.length > 0 ? (
+        {canSelect && table.allRows.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-[var(--color-border)] bg-[var(--color-bg)]/50 px-4 py-2.5">
             <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-[var(--color-ink)]">
               <input
@@ -331,49 +338,43 @@ export function DoctorsPage() {
             </label>
             {selected.size > 0 ? (
               <>
-                <select
-                  aria-label="MR to assign"
-                  value={bulkMrId}
-                  onChange={(e) => setBulkMrId(e.target.value)}
-                  className={TOOLBAR_SELECT}
-                >
-                  <option value="">Choose MR…</option>
-                  {mrsQuery.data?.map((mr) => (
-                    <option key={mr.id} value={String(mr.id)}>
-                      {mr.fullName}
-                    </option>
-                  ))}
-                </select>
-                <Button
-                  size="sm"
-                  disabled={!bulkMrId}
-                  loading={bulkAssignMutation.isPending}
-                  onClick={() => bulkAssignMutation.mutate(Number(bulkMrId))}
-                >
-                  Assign
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={bulkAssignMutation.isPending}
-                  onClick={() => bulkAssignMutation.mutate(null)}
-                >
-                  Unassign
-                </Button>
+                {canLog ? (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const ids = [...selected];
+                      if (ids.length === 1) {
+                        const doctor = table.allRows.find((row) => row.id === ids[0]);
+                        if (doctor) setLogMode({ kind: 'direct', doctor: { ...doctor, assignedMr: doctor.assignedMrs[0] ?? null } });
+                      } else {
+                        setBulkIds(ids);
+                      }
+                    }}
+                  >
+                    <ClipboardPlus size={13} />
+                    {selected.size === 1 ? 'Log visit' : `Log visits (${selected.size})`}
+                  </Button>
+                ) : null}
+                {isAdmin ? (
+                  <Button size="sm" variant="secondary" onClick={() => setAssignIds([...selected])}>
+                    <UserRoundCog size={13} />
+                    Assign MR
+                  </Button>
+                ) : null}
                 <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
                   Clear
                 </Button>
               </>
             ) : (
               <span className="text-xs text-[var(--color-muted)]">
-                Tick doctors to give them to an MR in one go.
+                {isAdmin ? 'Tick doctors to log visits or give them to an MR.' : 'Tick doctors to log visits — one or many at once.'}
               </span>
             )}
           </div>
         ) : null}
         <DataTable
           columns={[
-            ...(isAdmin ? [{ key: 'select', label: '', className: 'w-px' }] : []),
+            ...(canSelect ? [{ key: 'select', label: '', className: 'w-px' }] : []),
             { key: 'favorite', label: 'Fav', className: 'w-px text-center' },
             // Same headings, same order, as the company MSL sheet.
             { key: 'mslNo', label: 'MYMSL NO', sortable: true },
@@ -411,7 +412,7 @@ export function DoctorsPage() {
               key={doctor.id}
               className="border-b border-[var(--color-border)] transition-colors last:border-0 hover:bg-[var(--color-bg)]/60"
             >
-              {isAdmin ? (
+              {canSelect ? (
                 <Td className="w-px">
                   <input
                     type="checkbox"
@@ -490,6 +491,17 @@ export function DoctorsPage() {
                   >
                     <Eye size={14} />
                   </Button>
+                  {canLog ? (
+                    <Button
+                      size="icon-sm"
+                      variant="soft"
+                      aria-label={`Log visit for ${doctor.fullName}`}
+                      title="Log visit"
+                      onClick={() => setLogMode({ kind: 'direct', doctor: { ...doctor, assignedMr: doctor.assignedMrs[0] ?? null } })}
+                    >
+                      <ClipboardPlus size={14} />
+                    </Button>
+                  ) : null}
                   {isAdmin ? (
                     <>
                       <Button
@@ -672,23 +684,16 @@ export function DoctorsPage() {
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
               MR Assignment
             </h4>
-            <Select
-              label="Assign Field Representative (MR)"
-              value={form.mrId ?? ''}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  mrId: e.target.value ? Number(e.target.value) : undefined,
-                }))
-              }
-            >
-              <option value="">Unassigned (Open Pool)</option>
-              {mrsQuery.data?.map((mr) => (
-                <option key={mr.id} value={mr.id}>
-                  {mr.fullName} ({mr.email})
-                </option>
-              ))}
-            </Select>
+            <MrPicker
+              label="Field Representative (MR)"
+              value={form.mrId ?? null}
+              current={editing ? (editing.assignedMrs[0] ?? null) : undefined}
+              allowUnassign
+              onChange={(id) => setForm((prev) => ({ ...prev, mrId: id ?? undefined }))}
+            />
+            {editing && (form.mrId ?? null) !== (editing.assignedMrs[0]?.id ?? null) && editing.assignedMrs[0] ? (
+              <p className="text-[11px] text-[var(--color-muted)]">Saving asks you to confirm the move — history stays with {editing.assignedMrs[0].fullName}.</p>
+            ) : null}
           </div>
         </form>
       </Modal>
@@ -703,6 +708,19 @@ export function DoctorsPage() {
         loading={deleteMutation.isPending}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+      />
+      <LogVisitDialog mode={logMode} onClose={() => setLogMode(null)} onSaved={() => setSelected(new Set())} />
+      <BulkVisitDialog doctorIds={bulkIds} onClose={() => { setBulkIds(null); setSelected(new Set()); }} />
+      <AssignDoctorsDialog doctorIds={assignIds} onClose={() => setAssignIds(null)} onDone={() => { setAssignIds(null); setSelected(new Set()); }} />
+      <MoveConfirmDialog
+        moves={pendingMove?.moves ?? null}
+        loading={updateMutation.isPending}
+        onCancel={() => setPendingMove(null)}
+        onConfirm={(note) => {
+          if (!pendingMove) return;
+          updateMutation.mutate({ id: pendingMove.id, payload: { ...pendingMove.payload, confirmMove: true, ...(note ? { note } : {}) } });
+          setPendingMove(null);
+        }}
       />
     </div>
   );
