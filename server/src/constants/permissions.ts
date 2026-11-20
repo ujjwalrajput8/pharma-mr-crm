@@ -5,6 +5,7 @@
 
 export const PERMISSION_CATALOG = [
   { key: 'dashboard:view', label: 'Dashboard', group: 'Overview' },
+  { key: 'occasions:view', label: 'Birthdays & anniversaries', group: 'Overview' },
   { key: 'myday:own', label: 'My Day (field)', group: 'Field' },
   { key: 'approvals:team', label: 'Approvals inbox', group: 'Field' },
   { key: 'attendance:own', label: 'Own attendance check-in', group: 'Field' },
@@ -18,6 +19,7 @@ export const PERMISSION_CATALOG = [
   { key: 'leaves:own', label: 'Apply / view own leave', group: 'People' },
   { key: 'leaves:manage', label: 'Approve team leave', group: 'People' },
   { key: 'employees:view', label: 'Employee directory & profiles', group: 'People' },
+  { key: 'holidays:view', label: 'Holiday calendar (view)', group: 'People' },
   { key: 'holidays:manage', label: 'Holiday calendar', group: 'People' },
   { key: 'leave-types:manage', label: 'Leave policy (types & quota)', group: 'People' },
   { key: 'expenses:own', label: 'Own expense claims (TA/DA)', group: 'Field' },
@@ -51,6 +53,8 @@ export type PermissionKey = (typeof PERMISSION_CATALOG)[number]['key'];
 /** Default Manager permissions (Admin can customize per manager). */
 export const DEFAULT_MANAGER_PERMISSIONS: readonly PermissionKey[] = [
   'dashboard:view',
+  'occasions:view',
+  'holidays:view',
   'myday:own',
   'approvals:team',
   'doctors:manage',
@@ -83,6 +87,8 @@ export const DEFAULT_MANAGER_PERMISSIONS: readonly PermissionKey[] = [
 
 export const DEFAULT_MR_PERMISSIONS: readonly PermissionKey[] = [
   'dashboard:view',
+  'occasions:view',
+  'holidays:view',
   'myday:own',
   'doctors:own',
   'appointments:own',
@@ -110,3 +116,25 @@ export const DEFAULT_ADMIN_PERMISSIONS: readonly PermissionKey[] = PERMISSION_CA
     k !== 'leaves:own' &&
     k !== 'expenses:own',
 );
+
+/**
+ * The MR menu switches Admin turns on / off for every MR (Manager & MR Access → MRs),
+ * grouped like the MR menu. Each switch is the permission behind that menu item;
+ * MR permissions outside this list always follow the role defaults.
+ */
+export const MR_ACCESS_ITEMS = [
+  { key: 'myday:own', label: 'Today', section: 'Dashboard' },
+  { key: 'occasions:view', label: 'Birthdays & Anniversaries', section: 'Dashboard' },
+  { key: 'tour-plan:own', label: 'Monthly Tour Program', section: 'Submit' },
+  { key: 'visits:own', label: 'DCR · Doctor visit', section: 'Submit' },
+  { key: 'appointments:own', label: 'Appointments', section: 'Submit' },
+  { key: 'expenses:own', label: 'Expense', section: 'Submit' },
+  { key: 'leaves:own', label: 'Leave & leave balance', section: 'Submit' },
+  { key: 'attendance:own', label: 'Attendance', section: 'Submit' },
+  { key: 'sales:own', label: 'Sales', section: 'View' },
+  { key: 'doctors:own', label: 'MSL List', section: 'View' },
+  { key: 'reports:own', label: 'DCR Report', section: 'View' },
+  { key: 'holidays:view', label: 'Holiday', section: 'View' },
+  { key: 'mystock:own', label: 'My Stock', section: 'Stock' },
+  { key: 'distributions:own', label: 'Sample Given', section: 'Stock' },
+] as const satisfies readonly { key: PermissionKey; label: string; section: string }[];

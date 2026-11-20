@@ -1,24 +1,24 @@
 import { useMemo } from 'react';
-import { NavLink } from 'react-router-dom';
-import { NAV_ITEMS, type NavItem } from '@/constants/navigation';
+import { Link, useLocation } from 'react-router-dom';
+import { activeNavItem, navItemsFor, type NavItem } from '@/constants/navigation';
 import { useAuth } from '@/store/AuthContext';
 import { cn } from '@/utils/cn';
 
 /**
  * Fixed bottom tab bar for phones (`lg:hidden`). Up to five slots picked by
- * permission priority: My Day (or Dashboard), Appointments (or Tour Plan),
- * Attendance & Leave, Visits, Doctors — all derived from NAV_ITEMS so labels,
- * icons and permissions stay in one place.
+ * permission priority: My Day (or Dashboard), Tour Plan, Attendance & Leave,
+ * Visits, Doctors — taken from the role's menu so labels, icons and permissions
+ * stay in one place.
  */
 export function MobileNav() {
-  const { canAny } = useAuth();
+  const { canAny, role } = useAuth();
+  const location = useLocation();
 
   const items = useMemo(() => {
-    const byPath = new Map(NAV_ITEMS.map((item) => [item.path, item]));
-    const permitted = (path: string): NavItem | null => {
-      const item = byPath.get(path);
-      return item && canAny(item.permissions) ? item : null;
-    };
+    const menu = navItemsFor(role);
+    // First permitted menu link to that page (form links skipped), e.g. MR "Attendance".
+    const permitted = (path: string): NavItem | null =>
+      menu.find((item) => !item.action && item.path.split('?')[0] === path && canAny(item.permissions)) ?? null;
 
     const picked = [
       permitted('/my-day') ?? permitted('/dashboard'),
@@ -34,7 +34,8 @@ export function MobileNav() {
       if (!unique.some((existing) => existing.path === item.path)) unique.push(item);
     }
     return unique.slice(0, 5);
-  }, [canAny]);
+  }, [canAny, role]);
+  const active = activeNavItem(navItemsFor(role), location.pathname, location.search);
 
   if (items.length === 0) return null;
 
@@ -46,33 +47,30 @@ export function MobileNav() {
     >
       {items.map((item) => {
         const Icon = item.icon;
+        // The slot lights up for its page, e.g. "Attendance" on any Attendance & Leave tab.
+        const isActive = active?.path.split('?')[0] === item.path.split('?')[0];
         return (
-          <NavLink
+          <Link
             key={item.path}
             to={item.path}
-            className={({ isActive }) =>
-              cn(
-                'flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 pt-2 pb-1.5 transition-colors',
-                isActive
-                  ? 'text-[var(--color-primary)]'
-                  : 'text-[var(--color-muted)] hover:text-[var(--color-ink)]',
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon size={18} strokeWidth={isActive ? 2.2 : 1.8} />
-                <span
-                  className={cn(
-                    'max-w-full truncate text-[10px] leading-tight',
-                    isActive ? 'font-bold' : 'font-medium',
-                  )}
-                >
-                  {item.shortLabel ?? item.label}
-                </span>
-              </>
+            aria-current={isActive ? 'page' : undefined}
+            className={cn(
+              'flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 pt-2 pb-1.5 transition-colors',
+              isActive
+                ? 'text-[var(--color-primary)]'
+                : 'text-[var(--color-muted)] hover:text-[var(--color-ink)]',
             )}
-          </NavLink>
+          >
+            <Icon size={18} strokeWidth={isActive ? 2.2 : 1.8} />
+            <span
+              className={cn(
+                'max-w-full truncate text-[10px] leading-tight',
+                isActive ? 'font-bold' : 'font-medium',
+              )}
+            >
+              {item.shortLabel ?? item.label}
+            </span>
+          </Link>
         );
       })}
     </nav>

@@ -28,7 +28,8 @@ export function GuestRoute() {
   const { isAuthenticated, isBootstrapping } = useAuth();
 
   if (isBootstrapping) return <BootstrappingScreen />;
-  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  // "/" picks the home by role (MR → Today), so signing in lands there too.
+  if (isAuthenticated) return <Navigate to="/" replace />;
   return <Outlet />;
 }
 

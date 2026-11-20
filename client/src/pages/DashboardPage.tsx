@@ -214,7 +214,7 @@ export function DashboardPage() {
 
       <NeedsAttention />
 
-      <UpcomingOccasions />
+      {can('occasions:view') ? <UpcomingOccasions /> : null}
 
       {/* Quick actions — icon tiles, permission-gated */}
       <section aria-label="Quick actions">

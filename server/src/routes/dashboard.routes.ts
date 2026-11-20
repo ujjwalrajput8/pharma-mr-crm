@@ -4,6 +4,7 @@ import { DashboardController } from '../controllers/DashboardController';
 import { AppRoles } from '../constants';
 import { authenticate } from '../middlewares/authenticate.middleware';
 import { authorize } from '../middlewares/authorize.middleware';
+import { requirePermission } from '../middlewares/requirePermission.middleware';
 import { validateRequest } from '../middlewares/validate.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 
@@ -26,6 +27,7 @@ router.get('/summary', asyncHandler(controller.summary));
 router.get('/trends', validateRequest(trendsQuerySchema, 'query'), asyncHandler(controller.trends));
 router.get(
   '/occasions',
+  requirePermission('occasions:view'),
   validateRequest(occasionsQuerySchema, 'query'),
   asyncHandler(controller.occasions),
 );

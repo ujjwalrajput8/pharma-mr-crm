@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card, PageHeader } from '@/components/ui/Page';
 import { DataTable, Td } from '@/components/ui/DataTable';
@@ -40,7 +41,10 @@ export function ReportsPage() {
   const { can } = useAuth();
   const isAdmin = can('reports:all');
   const options = isAdmin ? adminReports : mrReports;
-  const [type, setType] = useState<ReportType>(options[0]?.value ?? 'daily');
+  // MR menu "DCR Report" opens `?type=doctor-visits`; an unknown type falls back to the first.
+  const [params] = useSearchParams();
+  const linked = options.find((option) => option.value === params.get('type'))?.value;
+  const [type, setType] = useState<ReportType>(linked ?? options[0]?.value ?? 'daily');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [mrId, setMrId] = useState('');

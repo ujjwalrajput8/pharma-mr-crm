@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CornerDownLeft, IdCard, Loader2, Pill, Search, Stethoscope } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { NAV_ITEMS } from '@/constants/navigation';
+import { navItemsFor } from '@/constants/navigation';
 import { doctorsApi } from '@/services/doctors.service';
 import { employeesApi } from '@/services/employees.service';
 import { medicinesApi } from '@/services/medicines.service';
@@ -35,7 +35,7 @@ export function GlobalSearch({
   onOpenChange: (open: boolean) => void;
 }) {
   const navigate = useNavigate();
-  const { can, canAny } = useAuth();
+  const { can, canAny, role } = useAuth();
   const [term, setTerm] = useState('');
   const [debounced, setDebounced] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -102,7 +102,7 @@ export function GlobalSearch({
     const needle = term.trim().toLowerCase();
     const flat: SearchResult[] = [];
 
-    const pages = NAV_ITEMS.filter((item) => canAny(item.permissions)).filter(
+    const pages = navItemsFor(role).filter((item) => canAny(item.permissions)).filter(
       (item) => needle.length === 0 || item.label.toLowerCase().includes(needle),
     );
     for (const item of pages.slice(0, MAX_PER_GROUP)) {
@@ -150,7 +150,7 @@ export function GlobalSearch({
     }
 
     return flat;
-  }, [term, apiEnabled, canAny, doctorsQuery.data, productsQuery.data, employeesQuery.data]);
+  }, [term, apiEnabled, canAny, role, doctorsQuery.data, productsQuery.data, employeesQuery.data]);
 
   // Keep the highlight inside the list as results change.
   useEffect(() => {

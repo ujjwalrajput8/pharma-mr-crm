@@ -1,7 +1,14 @@
-import type { Permission } from '@/types';
+import type { Permission, Role } from '@/types';
 import {
   LayoutDashboard,
   Cake,
+  CalendarClock,
+  CalendarPlus,
+  CalendarRange,
+  Clock3,
+  Gift,
+  PartyPopper,
+  Receipt,
   Users,
   Stethoscope,
   Store,
@@ -31,6 +38,8 @@ export interface NavItem {
   section?: string;
   /** Phone bottom bar, where the full label does not fit. */
   shortLabel?: string;
+  /** Opens a form (`?new=1`, `&apply=1`) — never shown as the current page. */
+  action?: boolean;
 }
 
 /**
@@ -49,7 +58,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Birthdays & Anniversaries',
     path: '/occasions',
     icon: Cake,
-    permissions: ['dashboard:view'],
+    permissions: ['occasions:view'],
     section: 'Overview',
   },
   {
@@ -105,7 +114,7 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'Masters',
   },
   {
-    label: 'Manager Access',
+    label: 'Manager & MR Access',
     path: '/manager-permissions',
     icon: Shield,
     permissions: ['users:manage'],
@@ -203,3 +212,67 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'System',
   },
 ];
+
+/**
+ * MR menu — the client's field structure: Dashboard · Submit · View · Stock. Every item
+ * hangs on one permission, so Admin switches it on / off for all MRs (Manager & MR
+ * Access → MRs). Submit links open the form; View links open the list.
+ */
+export const MR_NAV_ITEMS: NavItem[] = [
+  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, permissions: ['dashboard:view'], section: 'Dashboard' },
+  { label: 'Today', path: '/my-day', icon: Sun, permissions: ['myday:own'], section: 'Dashboard' },
+  { label: 'Birthdays & Anniversaries', shortLabel: 'Birthdays', path: '/occasions', icon: Cake, permissions: ['occasions:view'], section: 'Dashboard' },
+
+  { label: 'Monthly Tour Program', shortLabel: 'Tour Plan', path: '/tour-plan', icon: Map, permissions: ['tour-plan:own'], section: 'Submit' },
+  { label: 'DCR · Doctor Visit', shortLabel: 'DCR', path: '/visits', icon: ClipboardList, permissions: ['visits:own'], section: 'Submit' },
+  { label: 'Appointments', path: '/visits?tab=appointments', icon: CalendarClock, permissions: ['appointments:own'], section: 'Submit' },
+  { label: 'Expense', path: '/expenses?new=1', icon: Wallet, permissions: ['expenses:own'], section: 'Submit', action: true },
+  { label: 'Leave', path: '/attendance-leave?tab=leave&apply=1', icon: CalendarPlus, permissions: ['leaves:own'], section: 'Submit', action: true },
+  { label: 'Attendance', path: '/attendance-leave?tab=attendance', icon: Clock3, permissions: ['attendance:own'], section: 'Submit' },
+
+  { label: 'Sales', path: '/sales', icon: IndianRupee, permissions: ['sales:own'], section: 'View' },
+  { label: 'MSL List', shortLabel: 'MSL', path: '/doctors', icon: Stethoscope, permissions: ['doctors:own'], section: 'View' },
+  { label: 'DCR Report', path: '/reports?type=doctor-visits', icon: BarChart3, permissions: ['reports:own'], section: 'View' },
+  { label: 'Holiday', path: '/attendance-leave?tab=holidays', icon: PartyPopper, permissions: ['holidays:view'], section: 'View' },
+  { label: 'Leave Balance', path: '/attendance-leave?tab=leave', icon: CalendarRange, permissions: ['leaves:own'], section: 'View' },
+  { label: 'Expense', path: '/expenses', icon: Receipt, permissions: ['expenses:own'], section: 'View' },
+
+  { label: 'My Stock', path: '/my-stock', icon: Package, permissions: ['mystock:own'], section: 'Stock' },
+  { label: 'Sample Given', path: '/distributions', icon: Gift, permissions: ['distributions:own'], section: 'Stock' },
+];
+
+/** Admin and Managers keep the full menu; MRs get theirs. */
+export function navItemsFor(role: Role | null | undefined): NavItem[] {
+  return role === 'MR' ? MR_NAV_ITEMS : NAV_ITEMS;
+}
+
+function splitPath(path: string): { pathname: string; params: URLSearchParams } {
+  const [pathname = '', query = ''] = path.split('?');
+  return { pathname, params: new URLSearchParams(query) };
+}
+
+function matches(item: NavItem, pathname: string, search: URLSearchParams): boolean {
+  const target = splitPath(item.path);
+  if (pathname !== target.pathname && !pathname.startsWith(`${target.pathname}/`)) return false;
+  return [...target.params].every(([key, value]) => search.get(key) === value);
+}
+
+/**
+ * The menu item for the current page. Links to the same page differ by their query
+ * (`?tab=holidays`), so the most specific match wins; form links are never current.
+ */
+export function activeNavItem(items: NavItem[], pathname: string, search: string): NavItem | null {
+  const params = new URLSearchParams(search);
+  let best: NavItem | null = null;
+  let bestScore = -1;
+  for (const item of items) {
+    if (item.action || !matches(item, pathname, params)) continue;
+    const { pathname: base, params: query } = splitPath(item.path);
+    const score = base.length * 10 + [...query].length;
+    if (score > bestScore) {
+      best = item;
+      bestScore = score;
+    }
+  }
+  return best;
+}

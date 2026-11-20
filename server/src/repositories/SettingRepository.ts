@@ -34,6 +34,13 @@ export class SettingRepository {
     });
   }
 
+  public async softDelete(key: string, actorId: number): Promise<void> {
+    await this.prisma.setting.updateMany({
+      where: { key, deletedAt: null },
+      data: { deletedAt: new Date(), updatedBy: actorId },
+    });
+  }
+
   public upsert(params: {
     key: string;
     value: string;

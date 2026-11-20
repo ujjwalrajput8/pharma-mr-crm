@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { PermissionController } from '../controllers/PermissionController';
-import { setManagerPermissionsSchema } from '../dto/permission.dto';
+import { setManagerPermissionsSchema, setMrAccessSchema } from '../dto/permission.dto';
 import { AppRoles } from '../constants';
 import { authenticate } from '../middlewares/authenticate.middleware';
 import { authorize } from '../middlewares/authorize.middleware';
@@ -8,7 +8,7 @@ import { validateRequest } from '../middlewares/validate.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 
 /**
- * Admin-managed Manager permissions.
+ * Admin-managed access: per-Manager permissions and the MR menu switches (all MRs).
  */
 const router = Router();
 const controller = PermissionController.getInstance();
@@ -24,5 +24,8 @@ router.put(
   asyncHandler(controller.setManager),
 );
 router.post('/managers/:userId/reset', asyncHandler(controller.resetManager));
+router.get('/mr', asyncHandler(controller.getMrAccess));
+router.put('/mr', validateRequest(setMrAccessSchema), asyncHandler(controller.setMrAccess));
+router.post('/mr/reset', asyncHandler(controller.resetMrAccess));
 
 export default router;

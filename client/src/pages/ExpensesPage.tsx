@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   BadgeCheck,
@@ -69,6 +70,7 @@ export function ExpensesPage() {
   const toast = useToast();
 
   const [tab, setTab] = useState<TabValue>(canOwn ? 'mine' : 'team');
+  const [params, setParams] = useSearchParams();
   const [month, setMonth] = useState(currentMonthKey());
   const [statusFilter, setStatusFilter] = useState<ExpenseStatus | ''>('');
   const [formOpen, setFormOpen] = useState(false);
@@ -206,6 +208,15 @@ export function ExpensesPage() {
     },
     onError: (err) => setError(getApiErrorMessage(err)),
   });
+
+  // MR menu "Submit → Expense" links here with `?new=1`: open a blank claim once, then drop the flag.
+  useEffect(() => {
+    if (params.get('new') !== '1') return;
+    if (canOwn) openCreate();
+    const next = new URLSearchParams(params);
+    next.delete('new');
+    setParams(next, { replace: true });
+  }, [params, setParams, canOwn]);
 
   function openCreate(): void {
     setEditing(null);

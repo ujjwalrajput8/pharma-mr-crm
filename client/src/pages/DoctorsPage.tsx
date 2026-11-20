@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardPlus, Eye, FileSpreadsheet, Pencil, Plus, Star, Trash2, UserRoundCog } from 'lucide-react';
+import { BadgeCheck, CalendarHeart, ClipboardPlus, Eye, FileSpreadsheet, MapPin, Pencil, Phone, Plus, Star, Trash2, UserRoundCog } from 'lucide-react';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getApiErrorMessage } from '@/api/client';
@@ -14,8 +14,10 @@ import { MrPicker } from '@/components/assignment/MrPicker';
 import { BulkVisitDialog } from '@/components/visits/BulkVisitDialog';
 import { LogVisitDialog, type LogVisitMode } from '@/components/visits/LogVisitDialog';
 import type { AssignmentMove } from '@/services/doctors.service';
-import { Input, Select, Textarea } from '@/components/ui/Field';
-import { Modal } from '@/components/ui/Modal';
+import { Input, Textarea } from '@/components/ui/Field';
+import { FormSection, Modal } from '@/components/ui/Modal';
+import { ChoiceChips, FormFull, FormGrid } from '@/components/ui/FormKit';
+import { useDiscardGuard } from '@/hooks/useDiscardGuard';
 import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
@@ -237,6 +239,7 @@ export function DoctorsPage() {
     setEditing(null);
     setForm(emptyForm);
     setError(null);
+    setFormTouched(false);
     setOpen(true);
   }
 
@@ -244,6 +247,7 @@ export function DoctorsPage() {
     setEditing(doctor);
     setForm(toForm(doctor));
     setError(null);
+    setFormTouched(false);
     setOpen(true);
   }
 
@@ -252,6 +256,11 @@ export function DoctorsPage() {
     setEditing(null);
     setError(null);
   }
+  const [formTouched, setFormTouched] = useState(false);
+  const discard = useDiscardGuard(formTouched && open, () => {
+    setFormTouched(false);
+    closeModal();
+  });
 
   function onSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
@@ -544,7 +553,7 @@ export function DoctorsPage() {
 
       <Modal
         open={open}
-        onClose={closeModal}
+        onClose={discard.request}
         title={editing ? 'Edit Doctor' : 'Add Doctor'}
         error={error}
         description={
@@ -555,73 +564,22 @@ export function DoctorsPage() {
         className="max-w-2xl"
         footer={
           <>
-            <Button variant="secondary" onClick={closeModal}>
+            <Button variant="secondary" onClick={discard.request} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" form="create-doctor-form" loading={saving}>
+            <Button type="submit" form="create-doctor-form" loading={saving} disabled={saving}>
               {saving ? 'Saving…' : editing ? 'Save Changes' : 'Register Doctor'}
             </Button>
           </>
         }
       >
-        <form id="create-doctor-form" className="space-y-4" onSubmit={onSubmit}>
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
-              MSL Details
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input
-                label="MSL No"
-                value={editing?.mslNo ?? 'Assigned on save'}
-                hint="Given by the system (JL-001, JL-002 …)"
-                readOnly
-                disabled
-              />
-              <Input
-                label="MSL Class"
-                placeholder="A / B / C"
-                list="doctor-msl-class-options"
-                value={form.mslClass}
-                onChange={(e) => setForm((prev) => ({ ...prev, mslClass: e.target.value }))}
-              />
-              <datalist id="doctor-msl-class-options">
-                {MSL_CLASS_OPTIONS.map((option) => (
-                  <option key={option} value={option} />
-                ))}
-              </datalist>
-              <Input
-                label="Area"
-                placeholder="e.g. Boring Road"
-                value={form.area}
-                onChange={(e) => setForm((prev) => ({ ...prev, area: e.target.value }))}
-              />
-              <Select
-                label="HQ / EX"
-                value={form.areaType}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, areaType: e.target.value as DoctorAreaType | '' }))
-                }
-              >
-                <option value="">Not set</option>
-                {(Object.keys(DOCTOR_AREA_TYPE_LABEL) as DoctorAreaType[]).map((type) => (
-                  <option key={type} value={type}>
-                    {DOCTOR_AREA_TYPE_LABEL[type]}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-teal-500" />
-              Doctor Profile & Contact
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-2">
+        <form id="create-doctor-form" className="space-y-6" onSubmit={onSubmit} onChange={() => setFormTouched(true)}>
+          <FormSection title="Basic information" subtitle="Name, speciality and MSL class" icon={BadgeCheck}>
+            <FormGrid>
               <Input
                 label="Doctor's Name"
                 required
+                maxLength={150}
                 placeholder="Dr. Rajesh Sharma"
                 value={form.fullName}
                 onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
@@ -632,8 +590,31 @@ export function DoctorsPage() {
                 value={form.specialization}
                 onChange={(e) => setForm((prev) => ({ ...prev, specialization: e.target.value }))}
               />
+              <ChoiceChips
+                label="MSL Class"
+                options={MSL_CLASS_OPTIONS.map((value) => ({ value, label: `Class ${value}` }))}
+                value={form.mslClass}
+                allowClear
+                onChange={(value) => {
+                  setFormTouched(true);
+                  setForm((prev) => ({ ...prev, mslClass: value }));
+                }}
+              />
+              <Input
+                label="MSL No"
+                value={editing?.mslNo ?? 'Assigned on save'}
+                hint="Given by the system (JL-001, JL-002 …)"
+                readOnly
+                disabled
+              />
+            </FormGrid>
+          </FormSection>
+
+          <FormSection title="Contact details" subtitle="How the MR reaches the doctor" icon={Phone}>
+            <FormGrid>
               <Input
                 label="Mobile No"
+                inputMode="tel"
                 placeholder="98765 43210"
                 value={form.phone}
                 onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
@@ -645,57 +626,84 @@ export function DoctorsPage() {
                 value={form.email}
                 onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
               />
-              <Textarea
-                label="Address"
-                className="sm:col-span-2"
-                rows={2}
-                placeholder="Clinic / residence address"
-                value={form.address}
-                onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
-              />
-            </div>
-          </div>
+            </FormGrid>
+          </FormSection>
 
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-pink-500" />
-              Birthday & Anniversary
-            </h4>
-            <div className="grid gap-3 sm:grid-cols-2">
+          <FormSection title="Area & address" subtitle="Shown on every visit form and doctor picker" icon={MapPin}>
+            <FormGrid>
+              <Input
+                label="Area"
+                placeholder="e.g. Boring Road"
+                value={form.area}
+                onChange={(e) => setForm((prev) => ({ ...prev, area: e.target.value }))}
+              />
+              <ChoiceChips
+                label="HQ / EX"
+                options={(Object.keys(DOCTOR_AREA_TYPE_LABEL) as DoctorAreaType[]).map((type) => ({ value: type, label: DOCTOR_AREA_TYPE_LABEL[type] }))}
+                value={form.areaType}
+                allowClear
+                onChange={(value) => {
+                  setFormTouched(true);
+                  setForm((prev) => ({ ...prev, areaType: value as DoctorAreaType | '' }));
+                }}
+              />
+              <FormFull>
+                <Textarea
+                  label="Address"
+                  rows={2}
+                  maxLength={500}
+                  placeholder="Clinic / residence address"
+                  hint={`${form.address.length} / 500`}
+                  value={form.address}
+                  onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
+                />
+              </FormFull>
+            </FormGrid>
+          </FormSection>
+
+          <FormSection title="Occasions" subtitle="For birthday and anniversary reminders" icon={CalendarHeart}>
+            <FormGrid>
               <DatePicker
                 label="Birthday"
                 pastDates
                 placeholder="YYYY-MM-DD"
                 value={form.birthday}
-                onChange={(value) => setForm((prev) => ({ ...prev, birthday: value }))}
+                onChange={(value) => {
+                  setFormTouched(true);
+                  setForm((prev) => ({ ...prev, birthday: value }));
+                }}
               />
               <DatePicker
                 label="Anniversary"
                 pastDates
                 placeholder="YYYY-MM-DD"
                 value={form.anniversary}
-                onChange={(value) => setForm((prev) => ({ ...prev, anniversary: value }))}
+                onChange={(value) => {
+                  setFormTouched(true);
+                  setForm((prev) => ({ ...prev, anniversary: value }));
+                }}
               />
-            </div>
-          </div>
+            </FormGrid>
+          </FormSection>
 
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)]/60 p-4 space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              MR Assignment
-            </h4>
+          <FormSection title="MR assignment" subtitle="One doctor, one MR. A move asks you to confirm." icon={UserRoundCog}>
             <MrPicker
               label="Field Representative (MR)"
+              variant="inline"
               value={form.mrId ?? null}
               current={editing ? (editing.assignedMrs[0] ?? null) : undefined}
               allowUnassign
-              onChange={(id) => setForm((prev) => ({ ...prev, mrId: id ?? undefined }))}
+              onChange={(id) => {
+                setFormTouched(true);
+                setForm((prev) => ({ ...prev, mrId: id ?? undefined }));
+              }}
             />
             {editing && (form.mrId ?? null) !== (editing.assignedMrs[0]?.id ?? null) && editing.assignedMrs[0] ? (
-              <p className="text-[11px] text-[var(--color-muted)]">Saving asks you to confirm the move — history stays with {editing.assignedMrs[0].fullName}.</p>
+              <p className="mt-2 text-[11px] text-[var(--color-muted)]">Saving asks you to confirm the move — history stays with {editing.assignedMrs[0].fullName}.</p>
             ) : null}
-          </div>
+          </FormSection>
         </form>
+        {discard.dialog}
       </Modal>
 
       <DoctorImportDialog open={importOpen} onClose={() => setImportOpen(false)} />

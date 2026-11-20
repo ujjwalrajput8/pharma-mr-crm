@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import { BadRequestError, UnauthorizedError } from '../errors/AppError';
-import type { SetManagerPermissionsDto } from '../dto/permission.dto';
+import type { SetManagerPermissionsDto, SetMrAccessDto } from '../dto/permission.dto';
 import { PermissionService } from '../services/PermissionService';
 import type { AuthUser } from '../types/auth.types';
 import { ApiResponse } from '../utils/ApiResponse';
@@ -56,6 +56,20 @@ export class PermissionController {
       this.requireActor(req),
     );
     ApiResponse.success(res, state, 'Manager permissions reset to defaults');
+  };
+
+  public getMrAccess = async (req: Request, res: Response): Promise<void> => {
+    ApiResponse.success(res, await this.permissions.getMrAccess(this.requireActor(req)), 'MR access retrieved');
+  };
+
+  public setMrAccess = async (req: Request, res: Response): Promise<void> => {
+    const body = req.body as SetMrAccessDto;
+    const state = await this.permissions.setMrAccess(body.permissions, this.requireActor(req));
+    ApiResponse.success(res, state, 'MR access updated');
+  };
+
+  public resetMrAccess = async (req: Request, res: Response): Promise<void> => {
+    ApiResponse.success(res, await this.permissions.resetMrAccess(this.requireActor(req)), 'MR access reset to defaults');
   };
 
   private requireActor(req: Request): AuthUser {

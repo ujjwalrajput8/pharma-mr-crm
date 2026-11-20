@@ -12,12 +12,13 @@ const router = Router();
 const controller = StockController.getInstance();
 
 // The signed-in user's own bag — MRs included, so it sits above the
-// ADMIN/MANAGER gate that covers the warehouse routes below.
+// ADMIN/MANAGER gate that covers the warehouse routes below. The visit form reads
+// it for samples, so DCR keeps working when Admin hides the My Stock page.
 router.get(
   '/my',
   authenticate,
   authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR),
-  requirePermission('mystock:own'),
+  requirePermission('mystock:own', 'visits:own'),
   asyncHandler(controller.my),
 );
 

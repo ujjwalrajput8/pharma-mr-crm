@@ -29,7 +29,7 @@ import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Page';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { NAV_ITEMS } from '@/constants/navigation';
+import { activeNavItem, navItemsFor } from '@/constants/navigation';
 import { useStoredFileUrl } from '@/services/files.service';
 import { useUserPhoto } from '@/services/photos.service';
 import {
@@ -94,7 +94,7 @@ function initials(name?: string): string {
 }
 
 export function Header({ onToggleSidebar }: HeaderProps) {
-  const { user, logout, can } = useAuth();
+  const { user, logout, can, role } = useAuth();
   // Own photo from the app-wide list, so changing it shows here at once.
   const myPhoto = useStoredFileUrl(useUserPhoto(user?.id));
   const { theme, toggle } = useTheme();
@@ -137,10 +137,9 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   }
 
   const crumb = useMemo(() => {
-    const match = NAV_ITEMS.find((item) => location.pathname.startsWith(item.path));
     if (location.pathname.startsWith('/profile')) return 'My Profile';
-    return match?.label ?? 'Workspace';
-  }, [location.pathname]);
+    return activeNavItem(navItemsFor(role), location.pathname, location.search)?.label ?? 'Workspace';
+  }, [location.pathname, location.search, role]);
 
   useEffect(() => {
     function onDocClick(event: MouseEvent) {

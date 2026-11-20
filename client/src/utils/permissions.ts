@@ -6,6 +6,8 @@ import type { Permission, Role } from '@/types';
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ADMIN: [
     'dashboard:view',
+    'occasions:view',
+    'holidays:view',
     'approvals:team',
     'users:manage',
     'doctors:manage',
@@ -35,6 +37,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   MANAGER: [
     'dashboard:view',
+    'occasions:view',
+    'holidays:view',
     'myday:own',
     'approvals:team',
     'doctors:manage',
@@ -66,6 +70,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   MR: [
     'dashboard:view',
+    'occasions:view',
+    'holidays:view',
     'myday:own',
     'doctors:own',
     'appointments:own',

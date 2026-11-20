@@ -3,6 +3,7 @@ import { Clock, X } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { formatTime12, parseTime12To24 } from '@/utils/datetime';
 import { fieldControlClass, fieldLabelClass } from '@/components/ui/formStyles';
+import { useFloatingPanel } from '@/hooks/useFloatingPanel';
 
 interface TimePickerProps {
   label: string;
@@ -30,6 +31,9 @@ export function TimePicker({
   const display = useMemo(() => (value ? formatTime12(value) : ''), [value]);
   const [typed, setTyped] = useState(display);
   const rootRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFloatingPanel(open, fieldRef, panelRef, { align: 'end' });
 
   useEffect(() => {
     setTyped(display);
@@ -78,7 +82,7 @@ export function TimePicker({
         {label}
         {required ? <span className="text-[var(--color-danger)] font-bold">*</span> : null}
       </label>
-      <div className="relative mt-1.5">
+      <div ref={fieldRef} className="relative mt-1.5">
         <input
           id={id}
           disabled={disabled}
@@ -126,7 +130,7 @@ export function TimePicker({
         </div>
       </div>
       {open ? (
-        <div className="absolute left-0 sm:left-auto right-0 z-50 mt-1.5 w-72 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-lg)] animate-scale-in">
+        <div ref={panelRef} data-testid="time-panel" className="fixed z-50 w-72 max-w-[calc(100vw-16px)] rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-lg)] animate-scale-in">
           {/* Quick presets */}
           <div className="mb-2.5 flex flex-wrap gap-1 border-b border-[var(--color-border)] pb-2.5">
             {PRESETS.map((p) => {

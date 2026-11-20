@@ -50,8 +50,14 @@ export function AppointmentRescheduleDialog({
     const existing = unpackAppointmentRemarks(current.remarks);
     const noteText = note.trim();
     const historyLine = `Rescheduled from ${formatDisplayDate(current.date)} ${formatTime12(current.time)} → ${formatDisplayDate(date)} ${formatTime12(time)}${noteText ? `. ${noteText}` : ''}`;
+    // Only the latest reschedule line is kept — repeated reschedules used to pile up
+    // until the 2000-character limit refused the save (B-V10).
+    const kept = existing.text
+      .split('\n')
+      .filter((line) => line && !line.startsWith('Rescheduled from '))
+      .join('\n');
     const remarks = packAppointmentRemarks(
-      [existing.text, historyLine].filter(Boolean).join('\n'),
+      [kept, historyLine].filter(Boolean).join('\n').slice(0, 1800),
       existing.meta,
     );
 

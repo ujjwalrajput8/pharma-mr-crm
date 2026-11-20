@@ -5,6 +5,7 @@ import { format, addDays } from 'date-fns';
 import { cn } from '@/utils/cn';
 import { parseIsoDate, toIsoDate } from '@/utils/datetime';
 import { fieldControlClass, fieldLabelClass } from '@/components/ui/formStyles';
+import { useFloatingPanel } from '@/hooks/useFloatingPanel';
 import 'react-day-picker/style.css';
 
 interface DatePickerProps {
@@ -44,6 +45,9 @@ export function DatePicker({
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState(value);
   const rootRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFloatingPanel(open, fieldRef, panelRef, { align: 'end' });
   const selected = useMemo(() => parseIsoDate(value), [value]);
 
   useEffect(() => {
@@ -86,7 +90,7 @@ export function DatePicker({
         {label}
         {required ? <span className="text-[var(--color-danger)] font-bold">*</span> : null}
       </label>
-      <div className="relative mt-1.5">
+      <div ref={fieldRef} className="relative mt-1.5">
         <input
           id={id}
           disabled={disabled}
@@ -134,7 +138,7 @@ export function DatePicker({
         </div>
       </div>
       {open ? (
-        <div className="absolute left-0 sm:left-auto right-0 z-50 mt-1.5 w-auto rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-lg)] animate-scale-in">
+        <div ref={panelRef} data-testid="calendar-panel" className="fixed z-50 w-max rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-lg)] animate-scale-in">
           {/* Quick preset chips */}
           <div
             className={cn(

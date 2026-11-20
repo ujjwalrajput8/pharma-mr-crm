@@ -35,7 +35,9 @@ export function AttendanceLeavePage() {
     ...(can('leaves:manage') || can('attendance:manage')
       ? [{ value: 'approvals' as const, label: 'Approvals', icon: Inbox }]
       : []),
-    { value: 'holidays', label: 'Holiday Calendar', icon: PartyPopper },
+    ...(can('holidays:view') || can('holidays:manage')
+      ? [{ value: 'holidays' as const, label: 'Holiday Calendar', icon: PartyPopper }]
+      : []),
     ...(can('leave-types:manage') ? [{ value: 'policy' as const, label: 'Policy', icon: FileSliders }] : []),
   ];
 
@@ -46,6 +48,16 @@ export function AttendanceLeavePage() {
   useEffect(() => {
     if (requested && requested !== tab) setParams({ tab }, { replace: true });
   }, [requested, tab, setParams]);
+
+  // MR menu "Submit → Leave" links here with `&apply=1`: the leave form is open until it is closed.
+  const applyFromLink = params.get('apply') === '1' && can('leaves:own');
+  const closeApply = () => {
+    setApply({ open: false });
+    if (!applyFromLink) return;
+    const next = new URLSearchParams(params);
+    next.delete('apply');
+    setParams(next, { replace: true });
+  };
 
   const go = (next: AttendanceLeaveTab) => setParams({ tab: next });
   const openApply = (date?: string) => setApply({ open: true, date });
@@ -70,7 +82,7 @@ export function AttendanceLeavePage() {
         {tab === 'policy' ? <LeavePolicyPage /> : null}
       </EmbeddedPage>
 
-      <LeaveApplyDialog open={apply.open} initialDate={apply.date} onClose={() => setApply({ open: false })} />
+      <LeaveApplyDialog open={apply.open || applyFromLink} initialDate={apply.date} onClose={closeApply} />
     </div>
   );
 }

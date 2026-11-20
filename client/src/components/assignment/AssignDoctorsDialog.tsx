@@ -54,7 +54,7 @@ function AssignForm({ doctorIds, onClose, onDone }: { doctorIds: number[]; onClo
         description="Choose the MR. If a doctor already has another MR you will be asked to confirm the move."
         icon={UserRoundCog}
         onClose={onClose}
-        className="max-w-lg"
+        className="max-w-2xl"
         error={assign.isError && !moves ? getApiErrorMessage(assign.error) : null}
         footer={
           <>
@@ -65,7 +65,14 @@ function AssignForm({ doctorIds, onClose, onDone }: { doctorIds: number[]; onClo
           </>
         }
       >
-        <MrPicker value={mrId ?? null} onChange={(id) => setMrId(id)} allowUnassign required />
+        <MrPicker
+          label="Assign to"
+          variant="inline"
+          value={mrId ?? null}
+          onChange={(id) => setMrId(id)}
+          allowUnassign
+          required
+        />
       </Modal>
       <MoveConfirmDialog moves={moves} loading={assign.isPending} onCancel={() => setMoves(null)} onConfirm={(note) => assign.mutate({ confirmMove: true, note })} />
     </>

@@ -34,6 +34,8 @@ export interface AuthSessionPayload {
 
 export type Permission =
   | 'dashboard:view'
+  | 'occasions:view'
+  | 'holidays:view'
   | 'myday:own'
   | 'approvals:team'
   | 'users:manage'

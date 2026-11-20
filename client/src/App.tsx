@@ -76,7 +76,7 @@ export default function App() {
                 <Route
                   path="/occasions"
                   element={
-                    <RequirePermission permissions={['dashboard:view']}>
+                    <RequirePermission permissions={['occasions:view']}>
                       <OccasionsPage />
                     </RequirePermission>
                   }

@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Check, ChevronsUpDown, Search, X } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { fieldControlTriggerClass, fieldLabelClass } from '@/components/ui/formStyles';
+import { useFloatingPanel } from '@/hooks/useFloatingPanel';
 
 export interface SelectOption {
   value: string;
@@ -36,6 +37,9 @@ export function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFloatingPanel(open, triggerRef, panelRef, { matchWidth: true });
 
   const selected = options.find((o) => o.value === value);
 
@@ -73,6 +77,7 @@ export function SearchableSelect({
       </div>
 
       <button
+        ref={triggerRef}
         id={id}
         type="button"
         disabled={disabled}
@@ -126,7 +131,7 @@ export function SearchableSelect({
       ) : null}
 
       {open ? (
-        <div className="absolute z-50 mt-2 w-full overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] backdrop-blur-md animate-scale-in">
+        <div ref={panelRef} data-testid="select-panel" className="fixed z-50 overflow-hidden rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] backdrop-blur-md animate-scale-in">
           <div className="border-b border-[var(--color-border)] p-2 bg-[var(--color-surface-subtle)]/40">
             <div className="relative flex items-center">
               <Search size={14} className="pointer-events-none absolute left-3 text-[var(--color-muted)]" />

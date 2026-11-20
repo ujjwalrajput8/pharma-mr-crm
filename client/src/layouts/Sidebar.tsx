@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { NavLink } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   BriefcaseMedical,
   Handshake,
@@ -9,7 +9,7 @@ import {
   Stethoscope,
 } from 'lucide-react';
 import { APP_VERSION } from '@/constants/appMeta';
-import { NAV_ITEMS, type NavItem } from '@/constants/navigation';
+import { activeNavItem, navItemsFor, type NavItem } from '@/constants/navigation';
 import { useAuth } from '@/store/AuthContext';
 import { cn } from '@/utils/cn';
 
@@ -21,13 +21,13 @@ type SidebarProps = {
   onOpenSearch?: () => void;
 };
 
-/** Groups the permitted nav items by section, preserving declaration order. */
+/** Groups the permitted nav items (the role's menu) by section, preserving declaration order. */
 function useNavGroups(): Array<{ section: string; items: NavItem[] }> {
-  const { canAny } = useAuth();
+  const { canAny, role } = useAuth();
 
   return useMemo(() => {
     const groups: Array<{ section: string; items: NavItem[] }> = [];
-    for (const item of NAV_ITEMS) {
+    for (const item of navItemsFor(role)) {
       if (!canAny(item.permissions)) continue;
       const section = item.section ?? '';
       const last = groups[groups.length - 1];
@@ -35,11 +35,16 @@ function useNavGroups(): Array<{ section: string; items: NavItem[] }> {
       else groups.push({ section, items: [item] });
     }
     return groups;
-  }, [canAny]);
+  }, [canAny, role]);
 }
 
 export function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed, onOpenSearch }: SidebarProps) {
   const groups = useNavGroups();
+  const location = useLocation();
+  const active = useMemo(
+    () => activeNavItem(groups.flatMap((group) => group.items), location.pathname, location.search),
+    [groups, location.pathname, location.search],
+  );
   const navRef = useRef<HTMLElement | null>(null);
 
   // Bring the active item into view on mount — long menus otherwise hide it.
@@ -123,42 +128,38 @@ export function Sidebar({ onNavigate, collapsed = false, onToggleCollapsed, onOp
             <div className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
+                const isActive = item === active;
                 return (
-                  <NavLink
+                  <Link
                     key={item.path}
                     to={item.path}
                     onClick={() => onNavigate?.()}
                     title={collapsed ? item.label : undefined}
-                    className={({ isActive }) =>
-                      cn(
-                        'group relative flex items-center rounded-[10px] py-2 text-[12.5px] transition-all duration-150',
-                        collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
-                        isActive
-                          ? 'bg-teal-500/14 font-semibold text-white'
-                          : 'font-medium text-slate-400 hover:bg-white/[0.055] hover:text-white',
-                      )
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        {isActive ? (
-                          <span
-                            aria-hidden
-                            className="absolute top-1.5 bottom-1.5 -left-2.5 w-[3px] rounded-r-full bg-teal-400"
-                          />
-                        ) : null}
-                        <Icon
-                          size={collapsed ? 17 : 15.5}
-                          strokeWidth={isActive ? 2.2 : 1.75}
-                          className={cn(
-                            'shrink-0 transition-colors',
-                            isActive ? 'text-teal-300' : 'text-slate-500 group-hover:text-teal-300',
-                          )}
-                        />
-                        {collapsed ? null : <span className="truncate">{item.label}</span>}
-                      </>
+                    aria-current={isActive ? 'page' : undefined}
+                    className={cn(
+                      'group relative flex items-center rounded-[10px] py-2 text-[12.5px] transition-all duration-150',
+                      collapsed ? 'justify-center px-0' : 'gap-2.5 px-2.5',
+                      isActive
+                        ? 'bg-teal-500/14 font-semibold text-white'
+                        : 'font-medium text-slate-400 hover:bg-white/[0.055] hover:text-white',
                     )}
-                  </NavLink>
+                  >
+                    {isActive ? (
+                      <span
+                        aria-hidden
+                        className="absolute top-1.5 bottom-1.5 -left-2.5 w-[3px] rounded-r-full bg-teal-400"
+                      />
+                    ) : null}
+                    <Icon
+                      size={collapsed ? 17 : 15.5}
+                      strokeWidth={isActive ? 2.2 : 1.75}
+                      className={cn(
+                        'shrink-0 transition-colors',
+                        isActive ? 'text-teal-300' : 'text-slate-500 group-hover:text-teal-300',
+                      )}
+                    />
+                    {collapsed ? null : <span className="truncate">{item.label}</span>}
+                  </Link>
                 );
               })}
             </div>

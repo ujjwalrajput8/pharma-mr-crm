@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Shield } from 'lucide-react';
+import { BriefcaseMedical, Shield, UserCog } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { MrAccessPanel } from '@/components/access/MrAccessPanel';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { DataTable, Td } from '@/components/ui/DataTable';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { Tabs } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
 import {
   permissionsApi,
@@ -13,7 +16,34 @@ import {
   type ManagerPermissionSummary,
 } from '@/services/permissions.service';
 
+type AccessTab = 'managers' | 'mr';
+
+/** Manager & MR Access: per-Manager permissions, and the menu every MR gets. */
 export function ManagerPermissionsPage() {
+  const [params, setParams] = useSearchParams();
+  const tab: AccessTab = params.get('tab') === 'mr' ? 'mr' : 'managers';
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Manager & MR access"
+        description="Customize a Manager when needed, and choose what every MR sees in the menu."
+      />
+      <Tabs
+        variant="page"
+        ariaLabel="Access"
+        items={[
+          { value: 'managers', label: 'Managers', icon: UserCog },
+          { value: 'mr', label: 'MRs', icon: BriefcaseMedical },
+        ]}
+        value={tab}
+        onChange={(next) => setParams(next === 'mr' ? { tab: 'mr' } : {})}
+      />
+      {tab === 'mr' ? <MrAccessPanel /> : <ManagerAccess />}
+    </div>
+  );
+}
+
+function ManagerAccess() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
@@ -90,10 +120,7 @@ export function ManagerPermissionsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Manager permissions"
-        description="Default Manager access is fixed. Customize per ASM/RSM when needed."
-      />
+      <p className="text-xs text-[var(--color-muted)]">Default Manager access is fixed. Customize per ASM/RSM when needed.</p>
 
       {error && selectedId == null ? <Alert message={error} /> : null}
 
