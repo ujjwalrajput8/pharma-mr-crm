@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { SaleController } from '../controllers/SaleController';
-import { createSaleSchema, listSalesQuerySchema } from '../dto/sale.dto';
+import { createSaleSchema, listSalesQuerySchema, salesBreakdownQuerySchema } from '../dto/sale.dto';
 import { AppRoles } from '../constants';
 import { authenticate } from '../middlewares/authenticate.middleware';
 import { authorize } from '../middlewares/authorize.middleware';
@@ -22,5 +22,6 @@ router.get(
   asyncHandler(controller.list),
 );
 router.post('/', canUseSales, validateRequest(createSaleSchema), asyncHandler(controller.create));
+router.get('/breakdown', canUseSales, validateRequest(salesBreakdownQuerySchema, 'query'), asyncHandler(controller.breakdown));
 
 export default router;

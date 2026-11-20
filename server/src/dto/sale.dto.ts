@@ -26,3 +26,13 @@ export const listSalesQuerySchema = z.object({
 
 export type CreateSaleDto = z.infer<typeof createSaleSchema>;
 export type ListSalesQueryDto = z.infer<typeof listSalesQuerySchema>;
+
+/** GET /sales/breakdown — party-wise or product-wise totals (client note → View → Sales). */
+export const salesBreakdownQuerySchema = z.object({
+  by: z.enum(['party', 'product']),
+  from: optionalDateOnlySchema,
+  to: optionalDateOnlySchema,
+  mrId: idSchema.optional(),
+});
+
+export type SalesBreakdownQueryDto = z.infer<typeof salesBreakdownQuerySchema>;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { IndianRupee, Plus, Receipt, Target, Zap } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { IndianRupee, Package, Plus, Receipt, Target, UsersRound, Zap } from 'lucide-react';
 import { getApiErrorMessage } from '@/api/client';
 import { Button } from '@/components/ui/Button';
 import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
@@ -14,14 +15,22 @@ import { InvoiceDetailModal } from '@/components/sales/InvoiceDetailModal';
 import { InvoiceStatusBadge, PartyLabel } from '@/components/sales/InvoiceStatusBadge';
 import { OutstandingTab } from '@/components/sales/OutstandingTab';
 import { QuickPobTab } from '@/components/sales/QuickPobTab';
+import { SalesBreakdownTab } from '@/components/sales/SalesBreakdownTab';
+import { useAuth } from '@/store/AuthContext';
 import { TargetsTab } from '@/components/sales/TargetsTab';
 import { invoicesApi, type InvoiceStatus } from '@/services/invoices.service';
 import { formatINR } from '@/utils/currency';
 
-type TabKey = 'invoices' | 'pob' | 'outstanding' | 'targets';
+type TabKey = 'party' | 'product' | 'invoices' | 'pob' | 'outstanding' | 'targets';
+const TAB_KEYS: TabKey[] = ['party', 'product', 'invoices', 'pob', 'outstanding', 'targets'];
 
 export function SalesPage() {
-  const [tab, setTab] = useState<TabKey>('invoices');
+  const { role } = useAuth();
+  const [params, setParams] = useSearchParams();
+  // The tab lives in the URL; an MR lands on Party-wise (client note → View → Sales).
+  const requested = params.get('tab') as TabKey | null;
+  const tab: TabKey = requested && TAB_KEYS.includes(requested) ? requested : role === 'MR' ? 'party' : 'invoices';
+  const setTab = (next: TabKey) => setParams({ tab: next }, { replace: true });
 
   return (
     <div className="space-y-5">
@@ -31,6 +40,8 @@ export function SalesPage() {
       />
       <Tabs<TabKey>
         items={[
+          { value: 'party', label: 'Party-wise', icon: UsersRound },
+          { value: 'product', label: 'Product-wise', icon: Package },
           { value: 'invoices', label: 'Invoices', icon: Receipt },
           { value: 'pob', label: 'Quick POB', icon: Zap },
           { value: 'outstanding', label: 'Party outstanding', icon: IndianRupee },
@@ -40,6 +51,8 @@ export function SalesPage() {
         onChange={setTab}
       />
 
+      {tab === 'party' ? <SalesBreakdownTab by="party" /> : null}
+      {tab === 'product' ? <SalesBreakdownTab by="product" /> : null}
       {tab === 'invoices' ? <InvoicesTab /> : null}
       {tab === 'pob' ? <QuickPobTab /> : null}
       {tab === 'outstanding' ? <OutstandingTab /> : null}

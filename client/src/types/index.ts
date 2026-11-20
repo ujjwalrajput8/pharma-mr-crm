@@ -46,6 +46,8 @@ export type Permission =
   | 'msl-requests:own'
   | 'msl-requests:manage'
   | 'approvals:own'
+  | 'stockist-statement:own'
+  | 'stockist-statement:manage'
   | 'medicines:manage'
   | 'batches:manage'
   | 'appointments:manage'

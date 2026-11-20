@@ -33,6 +33,8 @@ export const PERMISSION_CATALOG = [
   { key: 'stores:manage', label: 'Chemists / stores', group: 'Masters' },
   { key: 'msl-requests:own', label: 'MSL add / remove requests', group: 'Masters' },
   { key: 'msl-requests:manage', label: 'Approve MSL requests', group: 'Masters' },
+  { key: 'stockist-statement:own', label: 'Stockist statements (enter)', group: 'Commercial' },
+  { key: 'stockist-statement:manage', label: 'Stockist statements (team, correct)', group: 'Commercial' },
   { key: 'medicines:manage', label: 'Products', group: 'Masters' },
   { key: 'batches:manage', label: 'Batches', group: 'Masters' },
   { key: 'mystock:own', label: 'My stock', group: 'Stock' },
@@ -66,6 +68,7 @@ export const DEFAULT_MANAGER_PERMISSIONS: readonly PermissionKey[] = [
   'doctors:own',
   'stores:manage',
   'msl-requests:manage',
+  'stockist-statement:manage',
   'medicines:manage',
   'appointments:manage',
   'appointments:own',
@@ -114,6 +117,7 @@ export const DEFAULT_MR_PERMISSIONS: readonly PermissionKey[] = [
   'expenses:own',
   'msl-requests:own',
   'approvals:own',
+  'stockist-statement:own',
   'profile:own',
 ];
 
@@ -128,7 +132,8 @@ export const DEFAULT_ADMIN_PERMISSIONS: readonly PermissionKey[] = PERMISSION_CA
     k !== 'leaves:own' &&
     k !== 'expenses:own' &&
     k !== 'msl-requests:own' &&
-    k !== 'approvals:own',
+    k !== 'approvals:own' &&
+    k !== 'stockist-statement:own',
 );
 
 /**
@@ -147,6 +152,7 @@ export const MR_ACCESS_ITEMS = [
   { key: 'expenses:own', label: 'Expense', section: 'Submit' },
   { key: 'leaves:own', label: 'Leave & leave balance', section: 'Submit' },
   { key: 'attendance:own', label: 'Attendance', section: 'Submit' },
+  { key: 'stockist-statement:own', label: 'Monthly / Quarterly / Yearly', section: 'Stockist Statement' },
   { key: 'sales:own', label: 'Sales', section: 'View' },
   { key: 'doctors:own', label: 'MSL List', section: 'View' },
   { key: 'reports:own', label: 'DCR Report', section: 'View' },

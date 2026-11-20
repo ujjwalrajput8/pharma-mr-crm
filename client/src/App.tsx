@@ -34,6 +34,9 @@ import { ExpensesPage } from '@/pages/ExpensesPage';
 import { EmployeeProfilePage } from '@/pages/EmployeeProfilePage';
 import { OccasionsPage } from '@/pages/OccasionsPage';
 import { MslListPage } from '@/pages/MslListPage';
+import { MslRequestsPage } from '@/pages/MslRequestsPage';
+import { MyApprovalsPage } from '@/pages/MyApprovalsPage';
+import { StockistStatementPage } from '@/pages/StockistStatementPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -195,6 +198,30 @@ export default function App() {
                   element={
                     <RequirePermission permissions={['doctors:manage', 'doctors:own']}>
                       <DoctorsPage />
+                    </RequirePermission>
+                  }
+                />
+                <Route
+                  path="/msl-requests"
+                  element={
+                    <RequirePermission permissions={['msl-requests:own', 'msl-requests:manage']}>
+                      <MslRequestsPage />
+                    </RequirePermission>
+                  }
+                />
+                <Route
+                  path="/stockist-statement"
+                  element={
+                    <RequirePermission permissions={['stockist-statement:own', 'stockist-statement:manage']}>
+                      <StockistStatementPage />
+                    </RequirePermission>
+                  }
+                />
+                <Route
+                  path="/my-approvals"
+                  element={
+                    <RequirePermission permissions={['approvals:own']}>
+                      <MyApprovalsPage />
                     </RequirePermission>
                   }
                 />

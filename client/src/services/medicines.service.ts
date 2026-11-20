@@ -12,6 +12,8 @@ export interface Medicine {
   composition?: string | null;
   packSize: string | null;
   mrp: number;
+  /** Price to stockist (stockist statement value). */
+  pts?: number | string | null;
   batchNumber?: string | null;
   expiryDate?: string | null;
   sampleAvailable: boolean;

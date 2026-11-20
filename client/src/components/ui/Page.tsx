@@ -50,12 +50,15 @@ export function PageHeader({
 export function Card({
   children,
   className,
+  'data-testid': testId,
 }: {
   children: ReactNode;
   className?: string;
+  'data-testid'?: string;
 }) {
   return (
     <div
+      data-testid={testId}
       className={cn(
         'overflow-hidden rounded-[var(--radius)] border border-[var(--color-border)] bg-[var(--color-surface)] shadow-xs transition-shadow duration-200',
         className,

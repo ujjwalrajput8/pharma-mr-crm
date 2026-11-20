@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { AuthController } from '../controllers/AuthController';
+import { Config } from '../config';
 import {
   changePasswordSchema,
   loginSchema,
@@ -22,11 +23,12 @@ const controller = AuthController.getInstance();
 /**
  * Strict per-IP limiter for credential guessing. The account-level lockout
  * (5 wrong passwords → 15 min) handles a distributed attack on one account;
- * this handles one IP hammering many accounts.
+ * this handles one IP hammering many accounts. LOGIN_RATE_LIMIT_MAX can raise it
+ * (e.g. automated test runs from one machine); 20 per 15 minutes otherwise.
  */
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: Config.getInstance().getNumber('LOGIN_RATE_LIMIT_MAX', 20),
   standardHeaders: true,
   legacyHeaders: false,
   message: {

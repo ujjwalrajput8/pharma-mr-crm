@@ -12,7 +12,10 @@ import { permissionsApi, type MrAccessItem } from '@/services/permissions.servic
 const SECTION_NOTE: Record<string, string> = {
   Dashboard: 'Home screens',
   Submit: 'What the MR fills in',
+  'Stockist Statement': 'Monthly entry; quarterly and yearly worked out',
   View: 'Lists and reports the MR can open',
+  'MSL Management': 'Add / remove requests — the Manager approves',
+  Approval: 'Status of what the MR sent for approval',
   Stock: 'Sample bag',
 };
 

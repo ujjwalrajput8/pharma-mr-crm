@@ -28,6 +28,7 @@ import reportsRoutes from '../routes/reports.routes';
 import salesRoutes from '../routes/sales.routes';
 import settingsRoutes from '../routes/settings.routes';
 import stockRoutes from '../routes/stock.routes';
+import stockistStatementsRoutes from '../routes/stockist-statements.routes';
 import storesRoutes from '../routes/stores.routes';
 import targetsRoutes from '../routes/targets.routes';
 import territoriesRoutes from '../routes/territories.routes';
@@ -68,6 +69,7 @@ export function createApiRouter(): Router {
     ['stores', storesRoutes],
     ['msl-requests', mslRequestsRoutes],
     ['my-approvals', myApprovalsRoutes],
+    ['stockist-statements', stockistStatementsRoutes],
     ['medicines', medicinesRoutes],
     ['appointments', appointmentsRoutes],
     ['visits', visitsRoutes],

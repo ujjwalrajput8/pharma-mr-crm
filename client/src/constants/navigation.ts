@@ -3,11 +3,15 @@ import {
   LayoutDashboard,
   Cake,
   CalendarClock,
+  CalendarDays,
   CalendarPlus,
   CalendarRange,
   Clock3,
+  FileSpreadsheet,
   Gift,
+  ListChecks,
   PartyPopper,
+  Plane,
   Warehouse,
   Receipt,
   Users,
@@ -143,6 +147,14 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'Masters',
   },
   {
+    // MRs' add / remove requests for their MSL list (client note → Approval → MSL).
+    label: 'MSL Requests',
+    path: '/msl-requests',
+    icon: ListChecks,
+    permissions: ['msl-requests:manage'],
+    section: 'Masters',
+  },
+  {
     label: 'Products',
     path: '/medicines',
     icon: Pill,
@@ -192,6 +204,13 @@ export const NAV_ITEMS: NavItem[] = [
     section: 'Commercial',
   },
   {
+    label: 'Stockist Statements',
+    path: '/stockist-statement',
+    icon: FileSpreadsheet,
+    permissions: ['stockist-statement:manage'],
+    section: 'Commercial',
+  },
+  {
     label: 'Reports',
     path: '/reports',
     icon: BarChart3,
@@ -215,7 +234,8 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 /**
- * MR menu — the client's field structure: Dashboard · Submit · View · Stock. Every item
+ * MR menu — the client's field structure: Dashboard · Submit · Stockist Statement · View ·
+ * MSL Management · Approval · Stock. Every item
  * hangs on one permission, so Admin switches it on / off for all MRs (Manager & MR
  * Access → MRs). Submit links open the form; View links open the list.
  */
@@ -233,12 +253,25 @@ export const MR_NAV_ITEMS: NavItem[] = [
   { label: 'Leave', path: '/attendance-leave?tab=leave&apply=1', icon: CalendarPlus, permissions: ['leaves:own'], section: 'Submit', action: true },
   { label: 'Attendance', path: '/attendance-leave?tab=attendance', icon: Clock3, permissions: ['attendance:own'], section: 'Submit' },
 
+  { label: 'Monthly', path: '/stockist-statement', icon: CalendarDays, permissions: ['stockist-statement:own'], section: 'Stockist Statement' },
+  { label: 'Quarterly', path: '/stockist-statement?view=quarterly', icon: CalendarRange, permissions: ['stockist-statement:own'], section: 'Stockist Statement' },
+  { label: 'Yearly', path: '/stockist-statement?view=yearly', icon: FileSpreadsheet, permissions: ['stockist-statement:own'], section: 'Stockist Statement' },
+
   { label: 'Sales', path: '/sales', icon: IndianRupee, permissions: ['sales:own'], section: 'View' },
   { label: 'MSL List', shortLabel: 'MSL', path: '/msl', icon: Stethoscope, permissions: ['doctors:own'], section: 'View' },
   { label: 'DCR Report', path: '/reports?type=dcr', icon: BarChart3, permissions: ['reports:own'], section: 'View' },
   { label: 'Holiday', path: '/attendance-leave?tab=holidays', icon: PartyPopper, permissions: ['holidays:view'], section: 'View' },
   { label: 'Leave Balance', path: '/attendance-leave?tab=leave', icon: CalendarRange, permissions: ['leaves:own'], section: 'View' },
   { label: 'Expense', path: '/expenses', icon: Receipt, permissions: ['expenses:own'], section: 'View' },
+
+  { label: 'Doctor', path: '/msl-requests', icon: Stethoscope, permissions: ['msl-requests:own'], section: 'MSL Management' },
+  { label: 'Chemist', path: '/msl-requests?party=CHEMIST', icon: Pill, permissions: ['msl-requests:own'], section: 'MSL Management' },
+  { label: 'Stockist', path: '/msl-requests?party=STOCKIST', icon: Warehouse, permissions: ['msl-requests:own'], section: 'MSL Management' },
+
+  { label: 'Monthly Tour Plan', path: '/my-approvals?kind=tour-plan', icon: Map, permissions: ['approvals:own'], section: 'Approval' },
+  { label: 'Expense', path: '/my-approvals?kind=expense', icon: Wallet, permissions: ['approvals:own'], section: 'Approval' },
+  { label: 'MSL', path: '/my-approvals?kind=msl', icon: ListChecks, permissions: ['approvals:own'], section: 'Approval' },
+  { label: 'Leave', path: '/my-approvals?kind=leave', icon: Plane, permissions: ['approvals:own'], section: 'Approval' },
 
   { label: 'My Stock', path: '/my-stock', icon: Package, permissions: ['mystock:own'], section: 'Stock' },
   { label: 'Sample Given', path: '/distributions', icon: Gift, permissions: ['distributions:own'], section: 'Stock' },
