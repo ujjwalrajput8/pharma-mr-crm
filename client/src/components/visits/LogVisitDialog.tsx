@@ -37,6 +37,7 @@ import {
 import { addMinutesToHHmm, minutesBetween, toIsoDate } from '@/utils/datetime';
 import { DoctorPicker, type PickedDoctor } from './DoctorPicker';
 import { SamplePicker, type SampleLine } from './SamplePicker';
+import { VisitDetailsDialog } from './VisitDetailsDialog';
 
 export type LogVisitMode =
   | { kind: 'direct'; doctor?: PickedDoctor; unlisted?: boolean; mrId?: number }
@@ -68,16 +69,13 @@ export function LogVisitDialog({
   mode,
   onClose,
   onSaved,
-  onOpenVisit,
 }: {
   mode: LogVisitMode | null;
   onClose: () => void;
   onSaved?: (visit: Visit | null) => void;
-  /** "Open visit" on a duplicate. */
-  onOpenVisit?: (visitId: number) => void;
 }) {
   if (!mode) return null;
-  return <LogVisitForm mode={mode} onClose={onClose} onSaved={onSaved} onOpenVisit={onOpenVisit} />;
+  return <LogVisitForm mode={mode} onClose={onClose} onSaved={onSaved} />;
 }
 
 /**
@@ -89,12 +87,10 @@ function LogVisitForm({
   mode,
   onClose,
   onSaved,
-  onOpenVisit,
 }: {
   mode: LogVisitMode;
   onClose: () => void;
   onSaved?: (visit: Visit | null) => void;
-  onOpenVisit?: (visitId: number) => void;
 }) {
   const { user, role } = useAuth();
   const toast = useToast();
@@ -142,6 +138,8 @@ function LogVisitForm({
   const [samples, setSamples] = useState<SampleLine[]>([]);
   const [touched, setTouched] = useState(false);
   const [duplicateId, setDuplicateId] = useState<number | null>(null);
+  // "Open visit" on a duplicate shows the existing visit on top of this form (every door).
+  const [viewingId, setViewingId] = useState<number | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => {
     setTouched(true);
@@ -293,11 +291,9 @@ function LogVisitForm({
               <TriangleAlert size={15} className="shrink-0" />
               {getApiErrorMessage(save.error)}
             </span>
-            {onOpenVisit ? (
-              <Button size="sm" variant="soft" onClick={() => onOpenVisit(duplicateId)}>
-                Open visit
-              </Button>
-            ) : null}
+            <Button size="sm" variant="soft" onClick={() => setViewingId(duplicateId)}>
+              Open visit
+            </Button>
           </div>
         ) : null}
 
@@ -482,6 +478,7 @@ function LogVisitForm({
         ) : null}
       </div>
       {guard.dialog}
+      <VisitDetailsDialog visitId={viewingId} onClose={() => setViewingId(null)} />
     </Modal>
   );
 }
