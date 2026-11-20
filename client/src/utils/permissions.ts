@@ -68,6 +68,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'expenses:own',
     'expenses:manage',
     'targets:manage',
+    'msl-requests:manage',
     'profile:own',
   ],
   MR: [
@@ -89,6 +90,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'attendance:own',
     'leaves:own',
     'expenses:own',
+    'msl-requests:own',
+    'approvals:own',
     'profile:own',
   ],
 };
