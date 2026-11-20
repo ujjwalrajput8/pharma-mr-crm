@@ -8,6 +8,7 @@ export const reportTypes = [
   'mr-performance',
   'mr-detail',
   'doctor-visits',
+  'dcr',
   'appointments',
   'distributions',
   'stock',

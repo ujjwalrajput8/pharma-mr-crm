@@ -25,7 +25,7 @@ export function MobileNav() {
       permitted('/tour-plan'),
       permitted('/attendance-leave'),
       permitted('/visits'),
-      permitted('/doctors'),
+      permitted('/msl') ?? permitted('/doctors'),
     ].filter((item): item is NavItem => item !== null);
 
     // De-dupe (defensive) and cap at five slots.

@@ -21,7 +21,7 @@ export class StoreService {
   public async list(query: ListStoresQueryDto) {
     const { items, total } = await this.stores.list(query);
     return {
-      items,
+      items: items.map(({ assignments, ...store }) => ({ ...store, assignedMr: assignments[0]?.mr ?? null })),
       meta: {
         page: query.page,
         limit: query.limit,

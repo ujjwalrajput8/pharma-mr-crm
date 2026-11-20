@@ -4,6 +4,29 @@ import type { ApiSuccess } from '@/types';
 export type VisitSource = 'APPOINTMENT' | 'DIRECT';
 export type VisitPurpose = 'DETAILING' | 'FOLLOW_UP' | 'SAMPLE_DROP' | 'ORDER_POB' | 'RELATIONSHIP' | 'OTHER';
 export type InterestLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+/** Who the DCR call was on. */
+export type VisitParty = 'DOCTOR' | 'CHEMIST' | 'STOCKIST';
+export type StorePurpose =
+  | 'ORDER_POB'
+  | 'STOCK_CHECK'
+  | 'PRODUCT_AVAILABILITY'
+  | 'PAYMENT'
+  | 'STOCK_STATEMENT'
+  | 'EXPIRY_RETURNS'
+  | 'RELATIONSHIP'
+  | 'OTHER';
+
+export const STORE_VISIT_PURPOSES: Array<{ value: StorePurpose; label: string }> = [
+  { value: 'ORDER_POB', label: 'Order / POB' },
+  { value: 'STOCK_CHECK', label: 'Stock check' },
+  { value: 'PRODUCT_AVAILABILITY', label: 'Product availability' },
+  { value: 'PAYMENT', label: 'Payment' },
+  { value: 'STOCK_STATEMENT', label: 'Stock statement' },
+  { value: 'EXPIRY_RETURNS', label: 'Expiry / returns' },
+  { value: 'RELATIONSHIP', label: 'Relationship' },
+  { value: 'OTHER', label: 'Other' },
+];
+export const PARTY_LABEL: Record<VisitParty, string> = { DOCTOR: 'Doctor', CHEMIST: 'Chemist', STOCKIST: 'Stockist' };
 
 export const VISIT_PURPOSES: Array<{ value: VisitPurpose; label: string }> = [
   { value: 'DETAILING', label: 'Detailing' },
@@ -44,12 +67,16 @@ export interface Visit {
   doctorId: number | null;
   mrId: number;
   source: VisitSource;
+  partyType: VisitParty;
+  /** Chemist / stockist calls. */
+  store: { id: number; name: string; type: 'CHEMIST' | 'STOCKIST'; ownerName: string | null; city: string | null; addressLine1: string | null } | null;
+  orderValue: number | null;
   visitDate: string;
   visitTime: string | null;
   checkInTime: string | null;
   checkOutTime: string | null;
   meetingDurationMin: number | null;
-  purpose: VisitPurpose | null;
+  purpose: VisitPurpose | StorePurpose | null;
   discussionNotes: string | null;
   doctorFeedback: string | null;
   visitOutcome: string | null;
@@ -75,7 +102,15 @@ export interface VisitListMeta {
   limit: number;
   total: number;
   totalPages: number;
-  counts: { all: number; direct: number; fromAppointment: number; unlistedPending: number };
+  counts: {
+    all: number;
+    direct: number;
+    fromAppointment: number;
+    unlistedPending: number;
+    doctor: number;
+    chemist: number;
+    stockist: number;
+  };
 }
 
 export interface VisitListParams {
@@ -86,6 +121,7 @@ export interface VisitListParams {
   from?: string;
   to?: string;
   source?: VisitSource;
+  partyType?: VisitParty;
   offList?: boolean;
   reviewed?: boolean;
   corrected?: boolean;
@@ -121,6 +157,21 @@ export interface LogVisitPayload {
   remarks?: string;
   products?: VisitProductInput[];
   samples?: VisitSampleInput[];
+  latitude?: number;
+  longitude?: number;
+  clientUuid?: string;
+}
+
+export interface StoreCallPayload {
+  storeId: number;
+  mrId?: number;
+  visitDate: string;
+  visitTime: string;
+  purpose?: StorePurpose;
+  discussionNotes?: string;
+  remarks?: string;
+  orderValue?: number;
+  products?: VisitProductInput[];
   latitude?: number;
   longitude?: number;
   clientUuid?: string;
@@ -164,12 +215,13 @@ export type CorrectVisitPayload = Partial<{
   visitTime: string;
   checkInTime: string | null;
   checkOutTime: string | null;
-  purpose: VisitPurpose | null;
+  purpose: VisitPurpose | StorePurpose | null;
   discussionNotes: string | null;
   doctorFeedback: string | null;
   visitOutcome: string | null;
   nextFollowUp: string | null;
   remarks: string | null;
+  orderValue: number | null;
   products: VisitProductInput[];
 }> & { reason: string };
 
@@ -197,6 +249,10 @@ export const visitsApi = {
   },
   async create(payload: LogVisitPayload): Promise<Visit & { replayed: boolean }> {
     const { data } = await api.post<ApiSuccess<Visit & { replayed: boolean }>>('/visits', payload);
+    return data.data;
+  },
+  async storeCall(payload: StoreCallPayload): Promise<Visit & { replayed: boolean }> {
+    const { data } = await api.post<ApiSuccess<Visit & { replayed: boolean }>>('/visits/store-call', payload);
     return data.data;
   },
   async bulk(payload: {
@@ -232,5 +288,14 @@ export const visitsApi = {
 };
 
 export function purposeLabel(value: string | null | undefined): string {
-  return VISIT_PURPOSES.find((p) => p.value === value)?.label ?? (value ? value : '—');
+  return (
+    VISIT_PURPOSES.find((p) => p.value === value)?.label ??
+    STORE_VISIT_PURPOSES.find((p) => p.value === value)?.label ??
+    (value ? value : '—')
+  );
+}
+
+/** Doctor, chemist or stockist name — whoever the call was on. */
+export function partyName(visit: Pick<Visit, 'doctor' | 'store'>): string {
+  return visit.doctor?.fullName ?? visit.store?.name ?? '—';
 }

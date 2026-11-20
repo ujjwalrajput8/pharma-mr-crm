@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { AppRoles, StockTxnTypes, UserStatuses } from '../constants';
-import type {
-  BulkVisitDto,
-  CorrectVisitDto,
-  ListVisitsQueryDto,
-  LookupDoctorsQueryDto,
-  ReviewVisitDto,
-  SampleCorrectionDto,
-  VisitProductInput,
-  VisitSampleInput,
+import {
+  STORE_VISIT_PURPOSES,
+  VISIT_PURPOSES,
+  type BulkVisitDto,
+  type CorrectVisitDto,
+  type CreateStoreCallDto,
+  type ListVisitsQueryDto,
+  type LookupDoctorsQueryDto,
+  type ReviewVisitDto,
+  type SampleCorrectionDto,
+  type VisitProductInput,
+  type VisitSampleInput,
 } from '../dto/visit.dto';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../errors/AppError';
 import { PrismaService } from '../prisma/PrismaService';
@@ -24,6 +27,10 @@ import { TeamScopeService } from './TeamScopeService';
 
 type Tx = Prisma.TransactionClient;
 export type VisitSourceValue = 'APPOINTMENT' | 'DIRECT';
+type Party = 'DOCTOR' | 'CHEMIST' | 'STOCKIST';
+/** The permission an MR needs to log / correct a call on each party (Admin's MR switches). */
+const PARTY_PERMISSION: Record<Party, string> = { DOCTOR: 'visits:own', CHEMIST: 'chemist-visits:own', STOCKIST: 'stockist-visits:own' };
+const PARTY_NOUN: Record<Party, string> = { DOCTOR: 'doctor', CHEMIST: 'chemist', STOCKIST: 'stockist' };
 
 const OPEN_APPOINTMENT = ['PENDING', 'RESCHEDULED', 'REQUESTED', 'CONFIRMED'] as const;
 /** Manager / Admin may log or correct this far back (D1); an MR has `visit.backDateDays`. */
@@ -94,6 +101,7 @@ const doctorSelect = {
 
 const visitInclude = {
   doctor: { select: doctorSelect },
+  chemist: { select: { id: true, name: true, type: true, ownerName: true, city: true, addressLine1: true } },
   mr: { select: { id: true, fullName: true, email: true, photoUrl: true } },
   offListReviewedBy: { select: { id: true, fullName: true } },
   appointment: { select: { id: true, date: true, time: true, purpose: true, status: true } },
@@ -143,6 +151,7 @@ export class VisitService {
     actor: AuthUser,
     options: { source: VisitSourceValue; appointmentId?: number; bulkRunId?: string },
   ): Promise<{ visitId: number; replayed: boolean; offList: boolean; appointmentId: number | null }> {
+    this.assertCanLog(actor, 'DOCTOR');
     const target = await this.resolveTarget(actor, input.mrId);
     const visitDate = parseDateOnly(input.visitDate);
     await this.assertDateAllowed(actor, visitDate);
@@ -308,8 +317,98 @@ export class VisitService {
     return { visitId: outcome.visitId, replayed: false, offList, appointmentId: outcome.appointmentId };
   }
 
+  /**
+   * A chemist / stockist call (M2.2). Same rules as a doctor visit — date window, one
+   * call per MR + store + day (advisory lock), clientUuid replay, audit in the same
+   * transaction, never deleted — but no samples and no appointment. Any active store
+   * may be called on; the store's type decides the party.
+   */
+  public async recordStoreCall(input: CreateStoreCallDto, actor: AuthUser): Promise<{ visitId: number; replayed: boolean }> {
+    const store = await this.prisma.medicalStore.findFirst({
+      where: { id: input.storeId, deletedAt: null },
+      select: { id: true, name: true, type: true, status: true },
+    });
+    if (!store) throw new NotFoundError('Chemist / stockist not found');
+    const party: Party = store.type === 'STOCKIST' ? 'STOCKIST' : 'CHEMIST';
+    this.assertCanLog(actor, party);
+    if (store.status !== 'ACTIVE') throw new BadRequestError(`${store.name} is inactive — no new calls`);
+    const target = await this.resolveTarget(actor, input.mrId);
+    const visitDate = parseDateOnly(input.visitDate);
+    await this.assertDateAllowed(actor, visitDate);
+
+    if (input.clientUuid) {
+      const earlier = await this.prisma.visit.findUnique({
+        where: { clientUuid: input.clientUuid },
+        select: { id: true, mrId: true, offList: true, appointmentId: true },
+      });
+      if (earlier) return { visitId: this.replay(earlier, target.id).visitId, replayed: true };
+    }
+    const products = this.productRows(input);
+
+    let outcome: { visitId: number } | { replayId: number };
+    try {
+      outcome = await this.prisma.$transaction(async (tx) => {
+        await this.lockSlot(tx, target.id, `S${store.id}`, input.visitDate);
+        if (input.clientUuid) {
+          const again = await tx.visit.findUnique({ where: { clientUuid: input.clientUuid }, select: { id: true, mrId: true } });
+          if (again) {
+            if (again.mrId !== target.id) throw new ConflictError('This form was already saved for someone else');
+            return { replayId: again.id };
+          }
+        }
+        const duplicate = await tx.visit.findFirst({
+          where: { mrId: target.id, chemistId: store.id, visitDate, deletedAt: null },
+          select: { id: true },
+        });
+        if (duplicate) {
+          throw new ConflictError(`${store.name} already has a call on ${niceDate(visitDate)} — open it or correct it instead`, {
+            existingVisitId: duplicate.id,
+          });
+        }
+        const visit = await tx.visit.create({
+          data: {
+            partyType: party,
+            chemistId: store.id,
+            mrId: target.id,
+            visitDate,
+            visitTime: parseTime(input.visitTime),
+            checkInTime: parseTime(input.visitTime),
+            purpose: input.purpose ?? null,
+            discussionNotes: input.discussionNotes ?? null,
+            remarks: input.remarks ?? null,
+            orderValue: input.orderValue ?? null,
+            inLat: input.latitude ?? null,
+            inLng: input.longitude ?? null,
+            clientUuid: input.clientUuid ?? null,
+            source: 'DIRECT',
+            createdBy: actor.id,
+            updatedBy: actor.id,
+            products: { create: products.map((p) => ({ ...p, createdBy: actor.id, updatedBy: actor.id })) },
+          },
+          select: { id: true },
+        });
+        await this.audits.log(
+          {
+            userId: actor.id,
+            action: 'VISIT_CREATED',
+            entity: 'Visit',
+            entityId: String(visit.id),
+            after: { source: 'DIRECT', partyType: party, mrId: target.id, storeId: store.id, visitDate: input.visitDate, orderValue: input.orderValue ?? null },
+            metadata: { store: store.name, mr: target.fullName },
+          },
+          tx,
+        );
+        return { visitId: visit.id };
+      }, TX_OPTIONS);
+    } catch (error) {
+      throw this.friendlyWriteError(error);
+    }
+    return 'replayId' in outcome ? { visitId: outcome.replayId, replayed: true } : { visitId: outcome.visitId, replayed: false };
+  }
+
   /** Bulk: one DIRECT visit per doctor, each in its own transaction (partial success). */
   public async bulk(dto: BulkVisitDto, actor: AuthUser) {
+    this.assertCanLog(actor, 'DOCTOR');
     const target = await this.resolveTarget(actor, dto.mrId);
     const visitDate = parseDateOnly(dto.visitDate);
     await this.assertDateAllowed(actor, visitDate);
@@ -403,6 +502,7 @@ export class VisitService {
     const where: Prisma.VisitWhereInput = {
       ...base,
       ...(query.source ? { source: query.source } : {}),
+      ...(query.partyType ? { partyType: query.partyType } : {}),
       ...(query.offList !== undefined ? { offList: query.offList } : {}),
       ...(query.reviewed !== undefined
         ? { offListReviewedAt: query.reviewed ? { not: null } : null }
@@ -411,7 +511,7 @@ export class VisitService {
         ? { lastCorrectedAt: query.corrected ? { not: null } : null }
         : {}),
     };
-    const [items, total, all, direct, fromAppointment, unlistedPending] = await Promise.all([
+    const [items, total, all, direct, fromAppointment, unlistedPending, doctorCalls, chemistCalls, stockistCalls] = await Promise.all([
       this.prisma.visit.findMany({
         where,
         orderBy: [{ visitDate: 'desc' }, { visitTime: 'desc' }, { id: 'desc' }],
@@ -424,6 +524,9 @@ export class VisitService {
       this.prisma.visit.count({ where: { ...base, source: 'DIRECT' } }),
       this.prisma.visit.count({ where: { ...base, source: 'APPOINTMENT' } }),
       this.prisma.visit.count({ where: { ...base, offList: true, offListReviewedAt: null } }),
+      this.prisma.visit.count({ where: { ...base, partyType: 'DOCTOR' } }),
+      this.prisma.visit.count({ where: { ...base, partyType: 'CHEMIST' } }),
+      this.prisma.visit.count({ where: { ...base, partyType: 'STOCKIST' } }),
     ]);
     const samples = await this.samplesFor(items.map((v) => v.id));
     const flags = await this.flagsFor(actor);
@@ -434,7 +537,7 @@ export class VisitService {
         limit: query.limit,
         total,
         totalPages: Math.max(1, Math.ceil(total / query.limit)),
-        counts: { all, direct, fromAppointment, unlistedPending },
+        counts: { all, direct, fromAppointment, unlistedPending, doctor: doctorCalls, chemist: chemistCalls, stockist: stockistCalls },
       },
     };
   }
@@ -506,6 +609,15 @@ export class VisitService {
 
   public async correct(id: number, dto: CorrectVisitDto, actor: AuthUser) {
     const visit = await this.requireVisible(id, actor);
+    const party = visit.partyType as Party;
+    this.assertCanLog(actor, party);
+    if (party !== 'DOCTOR' && dto.doctorId !== undefined) {
+      throw new BadRequestError(`A ${PARTY_NOUN[party]} call has no doctor`);
+    }
+    const purposes: readonly string[] = party === 'DOCTOR' ? VISIT_PURPOSES : STORE_VISIT_PURPOSES;
+    if (dto.purpose && !purposes.includes(dto.purpose)) {
+      throw new BadRequestError(`That purpose is not for a ${PARTY_NOUN[party]} call`);
+    }
     const today = todayDateOnly();
     if (actor.role === AppRoles.MR) {
       if (visit.mrId !== actor.id) throw new ForbiddenError('You can only correct your own visits');
@@ -520,7 +632,7 @@ export class VisitService {
 
     const current = this.correctable(visit);
     const next: Record<string, unknown> = {};
-    const fields = ['visitTime', 'checkInTime', 'checkOutTime', 'purpose', 'discussionNotes', 'doctorFeedback', 'visitOutcome', 'nextFollowUp', 'remarks', 'visitDate', 'doctorId'] as const;
+    const fields = ['visitTime', 'checkInTime', 'checkOutTime', 'purpose', 'discussionNotes', 'doctorFeedback', 'visitOutcome', 'nextFollowUp', 'remarks', 'visitDate', 'doctorId', 'orderValue'] as const;
     for (const field of fields) {
       if (dto[field] === undefined) continue;
       const value = dto[field] ?? null;
@@ -561,7 +673,16 @@ export class VisitService {
 
     try {
       await this.prisma.$transaction(async (tx) => {
-        if (next.visitDate !== undefined || next.doctorId !== undefined) {
+        if (party !== 'DOCTOR' && next.visitDate !== undefined && visit.chemistId) {
+          await this.lockSlot(tx, visit.mrId, `S${visit.chemistId}`, formatDateOnly(newDate));
+          const clash = await tx.visit.findFirst({
+            where: { id: { not: visit.id }, mrId: visit.mrId, chemistId: visit.chemistId, visitDate: newDate, deletedAt: null },
+            select: { id: true },
+          });
+          if (clash) {
+            throw new ConflictError(`That ${PARTY_NOUN[party]} already has a call on ${niceDate(newDate)}`, { existingVisitId: clash.id });
+          }
+        } else if (next.visitDate !== undefined || next.doctorId !== undefined) {
           await this.lockSlot(tx, visit.mrId, newDoctorId!, formatDateOnly(newDate));
           const clash = await tx.visit.findFirst({
             where: { id: { not: visit.id }, mrId: visit.mrId, doctorId: newDoctorId, visitDate: newDate, deletedAt: null },
@@ -585,6 +706,7 @@ export class VisitService {
             ...(next.doctorFeedback !== undefined ? { doctorFeedback: next.doctorFeedback as string | null } : {}),
             ...(next.visitOutcome !== undefined ? { visitOutcome: next.visitOutcome as string | null } : {}),
             ...(next.remarks !== undefined ? { remarks: next.remarks as string | null } : {}),
+            ...(next.orderValue !== undefined ? { orderValue: next.orderValue as number | null } : {}),
             ...(next.nextFollowUp !== undefined ? { nextFollowUp: next.nextFollowUp ? parseDateOnly(String(next.nextFollowUp)) : null } : {}),
             ...(next.visitDate !== undefined ? { visitDate: newDate } : {}),
             ...(next.doctorId !== undefined
@@ -846,9 +968,16 @@ export class VisitService {
     return doctor;
   }
 
-  /** Serialises writers of the same MR + doctor + day until the transaction ends. */
-  private async lockSlot(tx: Tx, mrId: number, doctorId: number, day: string) {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${VISIT_LOCK_CLASS}::int, hashtext(${`${mrId}:${doctorId}:${day}`}))`;
+  /** Serialises writers of the same MR + party (doctor id, or "S" + store id) + day until the transaction ends. */
+  private async lockSlot(tx: Tx, mrId: number, party: number | string, day: string) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${VISIT_LOCK_CLASS}::int, hashtext(${`${mrId}:${party}:${day}`}))`;
+  }
+
+  /** An MR needs the switch for that kind of call; Managers / Admin log for their team. */
+  private assertCanLog(actor: AuthUser, party: Party): void {
+    const granted = actor.permissions ?? [];
+    if (granted.includes(PARTY_PERMISSION[party]) || granted.includes('visits:manage')) return;
+    throw new ForbiddenError(`You do not have access to ${PARTY_NOUN[party]} calls`);
   }
 
   private replay(
@@ -965,6 +1094,7 @@ export class VisitService {
       visitOutcome: visit.visitOutcome,
       nextFollowUp: visit.nextFollowUp ? formatDateOnly(visit.nextFollowUp) : null,
       remarks: visit.remarks,
+      orderValue: visit.orderValue != null ? Number(visit.orderValue) : null,
       products: this.productKey(visit.products),
     };
   }
@@ -994,6 +1124,7 @@ export class VisitService {
               { doctor: { area: { contains: search, mode: 'insensitive' } } },
               { mr: { fullName: { contains: search, mode: 'insensitive' } } },
               { doctor: { mslNo: { contains: search, mode: 'insensitive' } } },
+              { chemist: { name: { contains: search, mode: 'insensitive' } } },
             ],
           }
         : {}),
@@ -1090,6 +1221,9 @@ export class VisitService {
       doctorId: visit.doctorId,
       mrId: visit.mrId,
       source: visit.source,
+      partyType: visit.partyType,
+      store: visit.chemist,
+      orderValue: visit.orderValue != null ? Number(visit.orderValue) : null,
       visitDate: formatDateOnly(visit.visitDate),
       visitTime: formatTime(visit.visitTime),
       checkInTime: formatTime(visit.checkInTime),

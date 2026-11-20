@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { CalendarClock, ClipboardList, Plus, Search } from 'lucide-react';
+import { CalendarClock, ClipboardList, Pill, Plus, Search, Warehouse } from 'lucide-react';
 import { AppointmentsPage } from '@/pages/AppointmentsPage';
 import { LogVisitDialog, type LogVisitMode } from '@/components/visits/LogVisitDialog';
+import { LogStoreCallDialog, type StoreCallMode } from '@/components/visits/LogStoreCallDialog';
 import { VisitDetailsDialog } from '@/components/visits/VisitDetailsDialog';
 import { ReviewVisitDialog, SampleCorrectionDialog } from '@/components/visits/VisitActionDialogs';
 import { Avatar } from '@/components/ui/Avatar';
@@ -13,12 +14,21 @@ import { Badge, Card, EmbeddedPage, EmptyState, PageHeader } from '@/components/
 import { Tabs } from '@/components/ui/Tabs';
 import { useAuth } from '@/store/AuthContext';
 import { appointmentsApi } from '@/services/appointments.service';
-import { purposeLabel, visitsApi, type Visit, type VisitListParams } from '@/services/visits.service';
+import {
+  PARTY_LABEL,
+  partyName,
+  purposeLabel,
+  visitsApi,
+  type Visit,
+  type VisitListParams,
+  type VisitParty,
+} from '@/services/visits.service';
 import { formatDisplayDate, toIsoDate } from '@/utils/datetime';
 
 type MainTab = 'log' | 'appointments';
 type View = 'all' | 'direct' | 'appointment' | 'unlisted';
 type Range = 'today' | 'week' | 'month' | 'all';
+type PartyFilter = 'ALL' | VisitParty;
 const PAGE_SIZE = 20;
 
 function rangeOf(range: Range): { from?: string; to?: string } {
@@ -40,18 +50,49 @@ export function VisitsPage() {
   const [params, setParams] = useSearchParams();
   const tab: MainTab = params.get('tab') === 'appointments' ? 'appointments' : 'log';
   const [logMode, setLogMode] = useState<LogVisitMode | null>(null);
+  const [storeMode, setStoreMode] = useState<StoreCallMode | null>(null);
   const canAppointments = can('appointments:own') || can('appointments:manage');
+  const team = can('visits:manage');
+  const canDoctor = can('visits:own') || team;
+  const canChemist = can('chemist-visits:own') || team;
+  const canStockist = can('stockist-visits:own') || team;
+
+  // MR menu "DCR · Chemist / Stockist visit" links here with ?log=CHEMIST|STOCKIST.
+  const linked = params.get('log');
+  const linkedMode: StoreCallMode | null =
+    linked === 'CHEMIST' && canChemist ? { kind: 'store', type: 'CHEMIST' } : linked === 'STOCKIST' && canStockist ? { kind: 'store', type: 'STOCKIST' } : null;
+  const closeStore = () => {
+    setStoreMode(null);
+    if (!linked) return;
+    const next = new URLSearchParams(params);
+    next.delete('log');
+    setParams(next, { replace: true });
+  };
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Visits & Appointments"
-        description="Every doctor call — logged directly or from an appointment. Visits are corrected, never deleted."
+        description="Every DCR call — doctors, chemists and stockists, logged directly or from an appointment. Calls are corrected, never deleted."
         actions={
           tab === 'log' ? (
-            <Button onClick={() => setLogMode({ kind: 'direct' })}>
-              <Plus size={16} /> Log visit
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {canDoctor ? (
+                <Button onClick={() => setLogMode({ kind: 'direct' })}>
+                  <Plus size={16} /> Log visit
+                </Button>
+              ) : null}
+              {canChemist ? (
+                <Button variant="secondary" onClick={() => setStoreMode({ kind: 'store', type: 'CHEMIST' })}>
+                  <Pill size={15} /> Chemist call
+                </Button>
+              ) : null}
+              {canStockist ? (
+                <Button variant="secondary" onClick={() => setStoreMode({ kind: 'store', type: 'STOCKIST' })}>
+                  <Warehouse size={15} /> Stockist call
+                </Button>
+              ) : null}
+            </div>
           ) : undefined
         }
       />
@@ -70,17 +111,27 @@ export function VisitsPage() {
           <AppointmentsPage />
         </EmbeddedPage>
       ) : (
-        <VisitLog initialView={params.get('view') === 'unlisted' ? 'unlisted' : 'all'} onLog={setLogMode} />
+        <VisitLog initialView={params.get('view') === 'unlisted' ? 'unlisted' : 'all'} onLog={setLogMode} onStoreLog={setStoreMode} />
       )}
       <LogVisitDialog mode={logMode} onClose={() => setLogMode(null)} />
+      <LogStoreCallDialog mode={storeMode ?? linkedMode} onClose={closeStore} />
     </div>
   );
 }
 
-function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: LogVisitMode) => void }) {
+function VisitLog({
+  initialView,
+  onLog,
+  onStoreLog,
+}: {
+  initialView: View;
+  onLog: (mode: LogVisitMode) => void;
+  onStoreLog: (mode: StoreCallMode) => void;
+}) {
   const { can, role } = useAuth();
   const manager = can('visits:manage');
   const [view, setView] = useState<View>(initialView);
+  const [party, setParty] = useState<PartyFilter>('ALL');
   const [range, setRange] = useState<Range>('month');
   const [mrId, setMrId] = useState<number | ''>('');
   const [search, setSearch] = useState('');
@@ -96,10 +147,11 @@ function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: Log
       ...(view === 'unlisted' ? {} : rangeOf(range)),
       ...(view === 'direct' ? { source: 'DIRECT' as const } : view === 'appointment' ? { source: 'APPOINTMENT' as const } : {}),
       ...(view === 'unlisted' ? { offList: true, ...(manager ? { reviewed: false } : {}) } : {}),
+      ...(party !== 'ALL' ? { partyType: party } : {}),
       ...(mrId ? { mrId } : {}),
       ...(search.trim() ? { search: search.trim() } : {}),
     }),
-    [page, view, range, mrId, search, manager],
+    [page, view, range, party, mrId, search, manager],
   );
   const visits = useQuery({ queryKey: ['visits', 'list', query], queryFn: () => visitsApi.list(query) });
   const mrs = useQuery({ queryKey: ['appointments', 'assignable-mrs'], queryFn: () => appointmentsApi.listAssignableMrs(), enabled: manager });
@@ -110,13 +162,18 @@ function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: Log
   const actions = (v: Visit) => (
     <div className="flex flex-wrap items-center justify-end gap-1">
       <Button variant="ghost" size="sm" onClick={() => setOpenId(v.id)}>View</Button>
-      {v.can.correct ? <Button variant="ghost" size="sm" onClick={() => onLog({ kind: 'correct', visit: v })}>Correct</Button> : null}
+      {v.can.correct ? (
+        <Button variant="ghost" size="sm" onClick={() => (v.partyType === 'DOCTOR' ? onLog({ kind: 'correct', visit: v }) : onStoreLog({ kind: 'store-correct', visit: v }))}>
+          Correct
+        </Button>
+      ) : null}
       {v.can.correctSamples && v.distributions.length > 0 ? <Button variant="ghost" size="sm" onClick={() => setSamplesFor(v)}>Samples</Button> : null}
       {v.can.review ? <Button variant="soft" size="sm" onClick={() => setReviewFor(v)}>Review</Button> : null}
     </div>
   );
   const badges = (v: Visit) => (
     <span className="flex flex-wrap gap-1">
+      {v.partyType !== 'DOCTOR' ? <Badge tone="primary" dot={false}>{PARTY_LABEL[v.partyType]}</Badge> : null}
       <Badge tone={v.source === 'DIRECT' ? 'primary' : 'neutral'} dot={false}>{v.source === 'DIRECT' ? 'Direct' : 'Appointment'}</Badge>
       {v.offList ? <Badge tone="warning" dot={false}>{v.review ? 'Unlisted · reviewed' : 'Unlisted'}</Badge> : null}
       {v.lastCorrectedAt ? <Badge tone="neutral" dot={false}>Corrected</Badge> : null}
@@ -138,6 +195,17 @@ function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: Log
           ]}
         />
         <div className="flex flex-wrap items-center gap-2">
+          <ChoiceChips
+            size="sm"
+            options={[
+              { value: 'ALL', label: 'Everyone' },
+              { value: 'DOCTOR', label: `Doctors${counts ? ` · ${counts.doctor}` : ''}` },
+              { value: 'CHEMIST', label: `Chemists${counts ? ` · ${counts.chemist}` : ''}` },
+              { value: 'STOCKIST', label: `Stockists${counts ? ` · ${counts.stockist}` : ''}` },
+            ]}
+            value={party}
+            onChange={(v) => { setParty((v || 'ALL') as PartyFilter); reset(); }}
+          />
           {view !== 'unlisted' ? (
             <ChoiceChips
               size="sm"
@@ -169,7 +237,7 @@ function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: Log
             <input
               value={search}
               onChange={(e) => { setSearch(e.target.value); reset(); }}
-              placeholder="Doctor, MSL no., area or MR"
+              placeholder="Doctor, chemist, stockist, MSL no., area or MR"
               className="w-full bg-transparent text-xs text-[var(--color-ink)] outline-none placeholder:text-[var(--color-muted)]/60"
               aria-label="Search visits"
             />
@@ -193,10 +261,10 @@ function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: Log
               <thead className="border-b border-[var(--color-border)] text-[11px] font-semibold tracking-wide text-[var(--color-muted)] uppercase">
                 <tr>
                   <th className="px-4 py-2.5">Date</th>
-                  <th className="px-4 py-2.5">Doctor</th>
+                  <th className="px-4 py-2.5">Call on</th>
                   {role !== 'MR' ? <th className="px-4 py-2.5">MR</th> : null}
                   <th className="px-4 py-2.5">Purpose</th>
-                  <th className="px-4 py-2.5">Samples</th>
+                  <th className="px-4 py-2.5">Samples / order</th>
                   <th className="px-4 py-2.5">Type</th>
                   <th className="px-4 py-2.5 text-right">Actions</th>
                 </tr>
@@ -209,8 +277,12 @@ function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: Log
                       <span className="block text-[11.5px] text-[var(--color-muted)]">{v.checkInTime ?? v.visitTime}</span>
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <span className="font-semibold text-[var(--color-ink)]">{v.doctor?.fullName ?? '—'}</span>
-                      <span className="block text-[11.5px] text-[var(--color-muted)]">{[v.doctor?.mslNo ? `MSL ${v.doctor.mslNo}` : null, v.doctor?.area].filter(Boolean).join(' · ')}</span>
+                      <span className="font-semibold text-[var(--color-ink)]">{partyName(v)}</span>
+                      {v.store ? (
+                        <span className="block text-[11.5px] text-[var(--color-muted)]">{[PARTY_LABEL[v.partyType], v.store.city].filter(Boolean).join(' · ')}</span>
+                      ) : (
+                        <span className="block text-[11.5px] text-[var(--color-muted)]">{[v.doctor?.mslNo ? `MSL ${v.doctor.mslNo}` : null, v.doctor?.area].filter(Boolean).join(' · ')}</span>
+                      )}
                       {v.doctor?.address ? <span className="block max-w-xs truncate text-[11px] text-[var(--color-muted)]/90">{v.doctor.address}</span> : null}
                     </td>
                     {role !== 'MR' ? (
@@ -222,7 +294,9 @@ function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: Log
                       </td>
                     ) : null}
                     <td className="px-4 py-3 align-top">{purposeLabel(v.purpose)}</td>
-                    <td className="px-4 py-3 align-top tabular-nums">{v.distributions.reduce((sum, s) => sum + s.quantity, 0) || '—'}</td>
+                    <td className="px-4 py-3 align-top tabular-nums">
+                      {v.partyType === 'DOCTOR' ? v.distributions.reduce((sum, s) => sum + s.quantity, 0) || '—' : v.orderValue != null ? `₹${v.orderValue.toLocaleString('en-IN')}` : '—'}
+                    </td>
                     <td className="px-4 py-3 align-top">{badges(v)}</td>
                     <td className="px-4 py-3 align-top">{actions(v)}</td>
                   </tr>
@@ -235,7 +309,7 @@ function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: Log
               <li key={v.id} className="space-y-2 px-4 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="truncate text-[14px] font-semibold text-[var(--color-ink)]">{v.doctor?.fullName ?? '—'}</p>
+                    <p className="truncate text-[14px] font-semibold text-[var(--color-ink)]">{partyName(v)}</p>
                     <p className="text-[11.5px] text-[var(--color-muted)]">
                       {formatDisplayDate(v.visitDate)} · {v.checkInTime ?? v.visitTime}
                       {role !== 'MR' && v.mr ? ` · ${v.mr.fullName}` : ''}
@@ -246,6 +320,7 @@ function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: Log
                 <p className="text-[12px] text-[var(--color-muted)]">
                   {purposeLabel(v.purpose)}
                   {v.distributions.length ? ` · ${v.distributions.reduce((sum, s) => sum + s.quantity, 0)} samples` : ''}
+                  {v.orderValue != null ? ` · order ₹${v.orderValue.toLocaleString('en-IN')}` : ''}
                 </p>
                 {actions(v)}
               </li>
@@ -264,7 +339,7 @@ function VisitLog({ initialView, onLog }: { initialView: View; onLog: (mode: Log
       <VisitDetailsDialog
         visitId={openId}
         onClose={() => setOpenId(null)}
-        onCorrect={(v) => { setOpenId(null); onLog({ kind: 'correct', visit: v }); }}
+        onCorrect={(v) => { setOpenId(null); if (v.partyType === 'DOCTOR') onLog({ kind: 'correct', visit: v }); else onStoreLog({ kind: 'store-correct', visit: v }); }}
         onCorrectSamples={(v) => { setOpenId(null); setSamplesFor(v); }}
         onReview={(v) => { setOpenId(null); setReviewFor(v); }}
       />

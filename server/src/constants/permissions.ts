@@ -7,6 +7,7 @@ export const PERMISSION_CATALOG = [
   { key: 'dashboard:view', label: 'Dashboard', group: 'Overview' },
   { key: 'occasions:view', label: 'Birthdays & anniversaries', group: 'Overview' },
   { key: 'myday:own', label: 'My Day (field)', group: 'Field' },
+  { key: 'approvals:own', label: 'My approval status', group: 'Field' },
   { key: 'approvals:team', label: 'Approvals inbox', group: 'Field' },
   { key: 'attendance:own', label: 'Own attendance check-in', group: 'Field' },
   { key: 'attendance:manage', label: 'Manage team attendance', group: 'Field' },
@@ -16,6 +17,8 @@ export const PERMISSION_CATALOG = [
   { key: 'appointments:manage', label: 'Team appointments', group: 'Field' },
   { key: 'visits:own', label: 'Own visits / DCR', group: 'Field' },
   { key: 'visits:manage', label: 'Team visits', group: 'Field' },
+  { key: 'chemist-visits:own', label: 'Own chemist calls (DCR)', group: 'Field' },
+  { key: 'stockist-visits:own', label: 'Own stockist calls (DCR)', group: 'Field' },
   { key: 'leaves:own', label: 'Apply / view own leave', group: 'People' },
   { key: 'leaves:manage', label: 'Approve team leave', group: 'People' },
   { key: 'employees:view', label: 'Employee directory & profiles', group: 'People' },
@@ -28,6 +31,8 @@ export const PERMISSION_CATALOG = [
   { key: 'doctors:manage', label: 'Manage doctors', group: 'Masters' },
   { key: 'territories:manage', label: 'Territories (HQ / beats)', group: 'Masters' },
   { key: 'stores:manage', label: 'Chemists / stores', group: 'Masters' },
+  { key: 'msl-requests:own', label: 'MSL add / remove requests', group: 'Masters' },
+  { key: 'msl-requests:manage', label: 'Approve MSL requests', group: 'Masters' },
   { key: 'medicines:manage', label: 'Products', group: 'Masters' },
   { key: 'batches:manage', label: 'Batches', group: 'Masters' },
   { key: 'mystock:own', label: 'My stock', group: 'Stock' },
@@ -60,11 +65,14 @@ export const DEFAULT_MANAGER_PERMISSIONS: readonly PermissionKey[] = [
   'doctors:manage',
   'doctors:own',
   'stores:manage',
+  'msl-requests:manage',
   'medicines:manage',
   'appointments:manage',
   'appointments:own',
   'visits:manage',
   'visits:own',
+  'chemist-visits:own',
+  'stockist-visits:own',
   'tour-plan:manage',
   'tour-plan:own',
   'distributions:manage',
@@ -93,6 +101,8 @@ export const DEFAULT_MR_PERMISSIONS: readonly PermissionKey[] = [
   'doctors:own',
   'appointments:own',
   'visits:own',
+  'chemist-visits:own',
+  'stockist-visits:own',
   'tour-plan:own',
   'distributions:own',
   'medicine-issues:own',
@@ -102,6 +112,8 @@ export const DEFAULT_MR_PERMISSIONS: readonly PermissionKey[] = [
   'attendance:own',
   'leaves:own',
   'expenses:own',
+  'msl-requests:own',
+  'approvals:own',
   'profile:own',
 ];
 
@@ -114,7 +126,9 @@ export const DEFAULT_ADMIN_PERMISSIONS: readonly PermissionKey[] = PERMISSION_CA
     k !== 'attendance:own' &&
     k !== 'mystock:own' &&
     k !== 'leaves:own' &&
-    k !== 'expenses:own',
+    k !== 'expenses:own' &&
+    k !== 'msl-requests:own' &&
+    k !== 'approvals:own',
 );
 
 /**
@@ -127,6 +141,8 @@ export const MR_ACCESS_ITEMS = [
   { key: 'occasions:view', label: 'Birthdays & Anniversaries', section: 'Dashboard' },
   { key: 'tour-plan:own', label: 'Monthly Tour Program', section: 'Submit' },
   { key: 'visits:own', label: 'DCR · Doctor visit', section: 'Submit' },
+  { key: 'chemist-visits:own', label: 'DCR · Chemist visit', section: 'Submit' },
+  { key: 'stockist-visits:own', label: 'DCR · Stockist visit', section: 'Submit' },
   { key: 'appointments:own', label: 'Appointments', section: 'Submit' },
   { key: 'expenses:own', label: 'Expense', section: 'Submit' },
   { key: 'leaves:own', label: 'Leave & leave balance', section: 'Submit' },
@@ -135,6 +151,8 @@ export const MR_ACCESS_ITEMS = [
   { key: 'doctors:own', label: 'MSL List', section: 'View' },
   { key: 'reports:own', label: 'DCR Report', section: 'View' },
   { key: 'holidays:view', label: 'Holiday', section: 'View' },
+  { key: 'msl-requests:own', label: 'Doctor / Chemist / Stockist add & remove', section: 'MSL Management' },
+  { key: 'approvals:own', label: 'Status of my requests', section: 'Approval' },
   { key: 'mystock:own', label: 'My Stock', section: 'Stock' },
   { key: 'distributions:own', label: 'Sample Given', section: 'Stock' },
 ] as const satisfies readonly { key: PermissionKey; label: string; section: string }[];

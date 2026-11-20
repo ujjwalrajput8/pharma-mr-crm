@@ -3,6 +3,7 @@ import { VisitController } from '../controllers/VisitController';
 import {
   bulkVisitSchema,
   correctVisitSchema,
+  createStoreCallSchema,
   createVisitSchema,
   listVisitsQuerySchema,
   reviewVisitSchema,
@@ -18,15 +19,23 @@ import { asyncHandler } from '../utils/asyncHandler';
 const router = Router();
 const controller = VisitController.getInstance();
 
+// The DCR: doctor, chemist and stockist calls. Each write checks its own switch.
 router.use(
   authenticate,
   authorize(AppRoles.ADMIN, AppRoles.MANAGER, AppRoles.MR),
-  requirePermission('visits:own', 'visits:manage'),
+  requirePermission('visits:own', 'visits:manage', 'chemist-visits:own', 'stockist-visits:own'),
 );
+const doctorCalls = requirePermission('visits:own', 'visits:manage');
 
 router.get('/', validateRequest(listVisitsQuerySchema, 'query'), asyncHandler(controller.list));
-router.post('/', validateRequest(createVisitSchema), asyncHandler(controller.create));
-router.post('/bulk', validateRequest(bulkVisitSchema), asyncHandler(controller.bulk));
+router.post('/', doctorCalls, validateRequest(createVisitSchema), asyncHandler(controller.create));
+router.post('/bulk', doctorCalls, validateRequest(bulkVisitSchema), asyncHandler(controller.bulk));
+router.post(
+  '/store-call',
+  requirePermission('chemist-visits:own', 'stockist-visits:own', 'visits:manage'),
+  validateRequest(createStoreCallSchema),
+  asyncHandler(controller.storeCall),
+);
 router.get('/:id', asyncHandler(controller.get));
 router.get('/:id/history', asyncHandler(controller.history));
 router.patch('/:id', validateRequest(correctVisitSchema), asyncHandler(controller.correct));

@@ -3,7 +3,7 @@ import { ClipboardList, History, MapPin, PackageCheck, PackageMinus, ShieldCheck
 import { Badge } from '@/components/ui/Page';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { purposeLabel, visitsApi, type Visit, type VisitHistoryEntry } from '@/services/visits.service';
+import { PARTY_LABEL, partyName, purposeLabel, visitsApi, type Visit, type VisitHistoryEntry } from '@/services/visits.service';
 import { formatDisplayDate } from '@/utils/datetime';
 
 const ACTION_LABEL: Record<string, string> = {
@@ -57,7 +57,7 @@ export function VisitDetailsDialog({
   return (
     <Modal
       open
-      title={v?.doctor ? v.doctor.fullName : 'Visit'}
+      title={v ? partyName(v) : 'Visit'}
       description={v ? `${formatDisplayDate(v.visitDate)} · ${v.visitTime ?? ''} · ${v.mr?.fullName ?? ''}` : 'Loading…'}
       icon={ClipboardList}
       onClose={onClose}
@@ -75,7 +75,7 @@ export function VisitDetailsDialog({
                 Sample correction
               </Button>
             ) : null}
-            {v.can.correct && onCorrect ? <Button onClick={() => onCorrect(v)}>Correct visit</Button> : null}
+            {v.can.correct && onCorrect ? <Button onClick={() => onCorrect(v)}>{v.partyType === 'DOCTOR' ? 'Correct visit' : 'Correct call'}</Button> : null}
           </>
         ) : null
       }
@@ -85,6 +85,7 @@ export function VisitDetailsDialog({
       ) : (
         <div className="space-y-5" data-testid="visit-details">
           <div className="flex flex-wrap gap-1.5">
+            {v.partyType !== 'DOCTOR' ? <Badge tone="primary">{PARTY_LABEL[v.partyType]} call</Badge> : null}
             <Badge tone={v.source === 'DIRECT' ? 'primary' : 'neutral'}>{v.source === 'DIRECT' ? 'Direct' : 'From appointment'}</Badge>
             {v.offList ? <Badge tone="warning">{v.review ? `Unlisted · ${v.review.action?.toLowerCase()}` : 'Unlisted · review pending'}</Badge> : null}
             {v.lastCorrectedAt ? <Badge tone="neutral">Corrected</Badge> : null}
@@ -97,6 +98,13 @@ export function VisitDetailsDialog({
                 {v.doctor.address ? <span className="flex items-start gap-1 text-[12px] text-[var(--color-muted)]"><MapPin size={12} className="mt-0.5" />{v.doctor.address}</span> : null}
               </Row>
             ) : null}
+            {v.store ? (
+              <Row label={PARTY_LABEL[v.partyType]}>
+                <span className="font-semibold">{v.store.name}</span>
+                <span className="block text-[12px] text-[var(--color-muted)]">{[v.store.ownerName, v.store.addressLine1, v.store.city].filter(Boolean).join(' · ')}</span>
+              </Row>
+            ) : null}
+            {v.orderValue != null ? <Row label="Order value">₹{v.orderValue.toLocaleString('en-IN')}</Row> : null}
             <Row label="Time">{[v.checkInTime, v.checkOutTime].filter(Boolean).join(' – ') || v.visitTime}{v.meetingDurationMin ? ` · ${v.meetingDurationMin} min` : ''}</Row>
             <Row label="Purpose">{purposeLabel(v.purpose)}</Row>
             {v.products.length ? (

@@ -28,7 +28,10 @@ export type NotificationKind =
   /** An MR logged a visit to a doctor not in their list — the manager reviews it. */
   | 'VISIT_UNLISTED'
   /** Evening nudge: planned doctor calls of today's approved plan not logged yet. */
-  | 'PLANNED_CALLS_PENDING';
+  | 'PLANNED_CALLS_PENDING'
+  /** An MR asked to add / remove a doctor, chemist or stockist — the manager decides. */
+  | 'MSL_REQUEST'
+  | 'MSL_DECIDED';
 
 export type NotificationTone = 'primary' | 'success' | 'warning' | 'danger' | 'neutral';
 

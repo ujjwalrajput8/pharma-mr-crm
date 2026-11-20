@@ -49,6 +49,8 @@ export type Permission =
   | 'appointments:own'
   | 'visits:manage'
   | 'visits:own'
+  | 'chemist-visits:own'
+  | 'stockist-visits:own'
   | 'tour-plan:manage'
   | 'tour-plan:own'
   | 'distributions:manage'

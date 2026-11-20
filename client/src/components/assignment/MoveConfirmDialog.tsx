@@ -19,26 +19,30 @@ function MrCard({ title, mr }: { title: string; mr: AssignmentMove['from'] | nul
 /**
  * "Move Dr. X from Neha to Rahul?" — shows who has the doctor now, who gets them,
  * and what stays with the old MR (nothing is moved, cancelled or deleted).
+ * Chemists / stockists use it too (`noun`); they only carry tour plan calls.
  */
 export function MoveConfirmDialog({
   moves,
   loading,
   onCancel,
   onConfirm,
+  noun = 'doctor',
 }: {
   moves: AssignmentMove[] | null;
   loading?: boolean;
   onCancel: () => void;
   onConfirm: (note: string) => void;
+  noun?: string;
 }) {
   const [note, setNote] = useState('');
   if (!moves) return null;
   const one = moves.length === 1 ? moves[0]! : null;
+  const isDoctor = noun === 'doctor';
   return (
     <Modal
       open
-      title={one ? `Move ${one.doctorName}?` : `Move ${moves.length} doctors?`}
-      description="The doctor changes MR. Their history stays where it is."
+      title={one ? `Move ${one.doctorName}?` : `Move ${moves.length} ${noun}s?`}
+      description={`The ${noun} changes MR. Their history stays where it is.`}
       icon={UserRoundCog}
       badge="Confirm"
       onClose={onCancel}
@@ -49,7 +53,7 @@ export function MoveConfirmDialog({
             Cancel
           </Button>
           <Button onClick={() => onConfirm(note.trim())} loading={loading} data-testid="confirm-move">
-            {one ? 'Move doctor' : `Move ${moves.length} doctors`}
+            {one ? `Move ${noun}` : `Move ${moves.length} ${noun}s`}
           </Button>
         </>
       }
@@ -76,18 +80,22 @@ export function MoveConfirmDialog({
         <div className="rounded-xl bg-[var(--color-surface-subtle)] p-3">
           <p className="mb-2 text-[11px] font-semibold text-[var(--color-ink)]/80">Stays with the old MR — nothing is moved or deleted</p>
           <ul className="space-y-1.5 text-[12.5px] text-[var(--color-ink)]">
-            <li className="flex items-center gap-2">
-              <CalendarClock size={14} className="text-[var(--color-muted)]" />
-              {sum(moves, 'pendingAppointments')} pending appointment(s)
-            </li>
+            {isDoctor ? (
+              <li className="flex items-center gap-2">
+                <CalendarClock size={14} className="text-[var(--color-muted)]" />
+                {sum(moves, 'pendingAppointments')} pending appointment(s)
+              </li>
+            ) : null}
             <li className="flex items-center gap-2">
               <Route size={14} className="text-[var(--color-muted)]" />
               {sum(moves, 'planCalls')} tour plan call(s) this month
             </li>
-            <li className="flex items-center gap-2">
-              <ClipboardList size={14} className="text-[var(--color-muted)]" />
-              {sum(moves, 'visits')} past visit(s)
-            </li>
+            {isDoctor ? (
+              <li className="flex items-center gap-2">
+                <ClipboardList size={14} className="text-[var(--color-muted)]" />
+                {sum(moves, 'visits')} past visit(s)
+              </li>
+            ) : null}
           </ul>
         </div>
         <Textarea

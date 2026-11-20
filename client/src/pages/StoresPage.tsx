@@ -1,19 +1,31 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { Plus, UserRoundCog } from 'lucide-react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { getApiErrorMessage } from '@/api/client';
+import { AssignStoresDialog } from '@/components/assignment/AssignStoresDialog';
 import { Button } from '@/components/ui/Button';
+import { ChoiceChips } from '@/components/ui/FormKit';
+import { Tabs } from '@/components/ui/Tabs';
 import { DataTable, TablePagination, TableToolbar, Td } from '@/components/ui/DataTable';
 import { useClientTable } from '@/hooks/useClientTable';
 import { Input } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { Alert, Card, EmptyState, PageHeader } from '@/components/ui/Page';
+import { Alert, Badge, Card, EmptyState, PageHeader } from '@/components/ui/Page';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
-import { storesApi, type CreateStorePayload } from '@/services/stores.service';
+import {
+  STORE_TYPE_LABEL,
+  storesApi,
+  type CreateStorePayload,
+  type MedicalStore,
+  type StoreType,
+} from '@/services/stores.service';
+
+type TypeTab = 'all' | StoreType;
 
 const emptyForm: CreateStorePayload = {
   name: '',
+  type: 'CHEMIST',
   gstNumber: '',
   ownerName: '',
   drugLicenseNumber: '',
@@ -28,14 +40,18 @@ export function StoresPage() {
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<CreateStorePayload>(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [assignFor, setAssignFor] = useState<MedicalStore[] | null>(null);
+  const [typeTab, setTypeTab] = useState<TypeTab>('all');
 
   const storesQuery = useQuery({
     queryKey: ['stores'],
     queryFn: () => storesApi.list(),
   });
+  const all = useMemo(() => storesQuery.data ?? [], [storesQuery.data]);
+  const shown = useMemo(() => (typeTab === 'all' ? all : all.filter((s) => s.type === typeTab)), [all, typeTab]);
 
   const table = useClientTable({
-    data: storesQuery.data ?? [],
+    data: shown,
     searchKeys: ['name', 'ownerName', 'gstNumber', 'drugLicenseNumber', 'city'],
     initialSortKey: 'name',
   });
@@ -79,6 +95,7 @@ export function StoresPage() {
     event.preventDefault();
     createMutation.mutate({
       name: form.name,
+      type: form.type,
       gstNumber: form.gstNumber || undefined,
       ownerName: form.ownerName || undefined,
       drugLicenseNumber: form.drugLicenseNumber || undefined,
@@ -90,8 +107,8 @@ export function StoresPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Medical Stores"
-        description="Partner store directory with GST and contact details."
+        title="Chemists & Stockists"
+        description="Store directory with GST and licence details, and which MR's MSL list has each one."
         actions={
           <Button onClick={openForm}>
             <Plus size={16} />
@@ -101,6 +118,17 @@ export function StoresPage() {
       />
 
       {error && !open ? <Alert message={error} /> : null}
+
+      <Tabs
+        ariaLabel="Store type"
+        items={[
+          { value: 'all', label: 'All', count: all.length },
+          { value: 'CHEMIST', label: 'Chemists', count: all.filter((s) => s.type === 'CHEMIST').length },
+          { value: 'STOCKIST', label: 'Stockists', count: all.filter((s) => s.type === 'STOCKIST').length },
+        ]}
+        value={typeTab}
+        onChange={setTypeTab}
+      />
 
       <Card>
         <TableToolbar
@@ -112,6 +140,7 @@ export function StoresPage() {
           columns={[
             { key: 'name', label: 'Store', sortable: true },
             { key: 'ownerName', label: 'Owner', sortable: true },
+            { key: 'mr', label: 'MR (MSL list)' },
             { key: 'gstNumber', label: 'GST', sortable: true },
             { key: 'drugLicenseNumber', label: 'License', sortable: true },
             { key: 'city', label: 'City', sortable: true },
@@ -136,22 +165,32 @@ export function StoresPage() {
         >
           {table.rows.map((store) => (
             <tr key={store.id} className="border-b border-[var(--color-border)] last:border-0">
-              <Td className="font-medium">{store.name}</Td>
+              <Td className="font-medium">
+                <div>{store.name}</div>
+                <Badge tone={store.type === 'STOCKIST' ? 'primary' : 'neutral'}>{STORE_TYPE_LABEL[store.type]}</Badge>
+              </Td>
               <Td>
                 <div>{store.ownerName ?? '—'}</div>
                 <div className="text-[var(--color-muted)]">{store.phone ?? ''}</div>
               </Td>
+              <Td>{store.assignedMr ? store.assignedMr.fullName : <span className="text-[var(--color-muted)]">Not assigned</span>}</Td>
               <Td>{store.gstNumber ?? '—'}</Td>
               <Td>{store.drugLicenseNumber ?? '—'}</Td>
               <Td>{store.city ?? '—'}</Td>
               <Td>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => setDeleteTarget({ id: store.id, name: store.name })}
-                >
-                  Delete
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setAssignFor([store])} aria-label={`Assign MR for ${store.name}`}>
+                    <UserRoundCog size={14} />
+                    Assign MR
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => setDeleteTarget({ id: store.id, name: store.name })}
+                  >
+                    Delete
+                  </Button>
+                </div>
               </Td>
             </tr>
           ))}
@@ -193,6 +232,16 @@ export function StoresPage() {
               <span className="h-2 w-2 rounded-full bg-[var(--color-primary)]" />
               Store & Licensing Information
             </h4>
+            <ChoiceChips
+              label="Type"
+              required
+              options={[
+                { value: 'CHEMIST', label: 'Chemist' },
+                { value: 'STOCKIST', label: 'Stockist' },
+              ]}
+              value={form.type ?? 'CHEMIST'}
+              onChange={(value) => setForm((prev) => ({ ...prev, type: (value || 'CHEMIST') as StoreType }))}
+            />
             <div className="grid gap-3 sm:grid-cols-2">
               <Input
                 label="Medical Store Name"
@@ -244,6 +293,8 @@ export function StoresPage() {
           </div>
         </form>
       </Modal>
+
+      <AssignStoresDialog stores={assignFor} onClose={() => setAssignFor(null)} onDone={() => setAssignFor(null)} />
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}

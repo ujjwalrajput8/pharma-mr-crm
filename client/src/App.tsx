@@ -33,6 +33,7 @@ import { TerritoriesPage } from '@/pages/TerritoriesPage';
 import { ExpensesPage } from '@/pages/ExpensesPage';
 import { EmployeeProfilePage } from '@/pages/EmployeeProfilePage';
 import { OccasionsPage } from '@/pages/OccasionsPage';
+import { MslListPage } from '@/pages/MslListPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -198,6 +199,14 @@ export default function App() {
                   }
                 />
                 <Route
+                  path="/msl"
+                  element={
+                    <RequirePermission permissions={['doctors:own']}>
+                      <MslListPage />
+                    </RequirePermission>
+                  }
+                />
+                <Route
                   path="/doctors/:id"
                   element={
                     <RequirePermission permissions={['doctors:manage', 'doctors:own']}>
@@ -238,7 +247,7 @@ export default function App() {
                 <Route
                   path="/visits"
                   element={
-                    <RequirePermission permissions={['visits:manage', 'visits:own', 'appointments:manage', 'appointments:own']}>
+                    <RequirePermission permissions={['visits:manage', 'visits:own', 'chemist-visits:own', 'stockist-visits:own', 'appointments:manage', 'appointments:own']}>
                       <VisitsPage />
                     </RequirePermission>
                   }

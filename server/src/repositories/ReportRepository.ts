@@ -437,4 +437,88 @@ export class ReportRepository {
       })),
     };
   }
+
+  /**
+   * Daily Call Report: every doctor / chemist / stockist call in the range (oldest day
+   * first), samples given (net of corrections) and order value, plus the tour plan
+   * calls that have no call logged that day.
+   */
+  public async dcrReport(from: Date, to: Date, filters?: { mrId?: number; mrIds?: number[] }) {
+    const scope = mrScope(filters, 'mrId');
+    const visits = await this.prisma.visit.findMany({
+      where: { deletedAt: null, visitDate: { gte: from, lte: to }, ...scope },
+      orderBy: [{ visitDate: 'asc' }, { visitTime: 'asc' }, { id: 'asc' }],
+      take: 2000,
+      select: {
+        id: true,
+        mrId: true,
+        visitDate: true,
+        visitTime: true,
+        partyType: true,
+        doctorId: true,
+        chemistId: true,
+        purpose: true,
+        orderValue: true,
+        discussionNotes: true,
+        remarks: true,
+        mr: { select: { fullName: true } },
+        doctor: { select: { fullName: true, area: true } },
+        chemist: { select: { name: true, city: true } },
+        products: { where: { deletedAt: null }, select: { medicine: { select: { name: true } } } },
+      },
+    });
+    const sampleRows = visits.length
+      ? await this.prisma.stockTxn.groupBy({
+          by: ['refId', 'txnType'],
+          where: { refType: 'VISIT', refId: { in: visits.map((v) => v.id) }, txnType: { in: [StockTxnTypes.SAMPLE_GIVEN, StockTxnTypes.RETURN, StockTxnTypes.LOST] } },
+          _sum: { qty: true },
+        })
+      : [];
+    const samples = new Map<number, number>();
+    for (const row of sampleRows) {
+      if (row.refId == null) continue;
+      const qty = row._sum.qty ?? 0;
+      samples.set(row.refId, (samples.get(row.refId) ?? 0) + (row.txnType === StockTxnTypes.SAMPLE_GIVEN ? qty : -qty));
+    }
+
+    const planned = await this.prisma.tourPlanCall.findMany({
+      where: { tourPlanDay: { planDate: { gte: from, lte: to }, tourPlan: { deletedAt: null, ...mrScope(filters, 'userId') } } },
+      select: { doctorId: true, chemistId: true, tourPlanDay: { select: { planDate: true, tourPlan: { select: { userId: true } } } } },
+    });
+    const done = new Set(visits.map((v) => `${v.mrId}:${v.visitDate.toISOString().slice(0, 10)}:${v.doctorId ?? `S${v.chemistId}`}`));
+    const missed = planned.filter((call) => {
+      const day = call.tourPlanDay.planDate.toISOString().slice(0, 10);
+      const party = call.doctorId ?? (call.chemistId != null ? `S${call.chemistId}` : null);
+      return party != null && !done.has(`${call.tourPlanDay.tourPlan.userId}:${day}:${party}`);
+    }).length;
+
+    const label = { DOCTOR: 'Doctor', CHEMIST: 'Chemist', STOCKIST: 'Stockist' } as const;
+    const rows = visits.map((v) => ({
+      date: v.visitDate.toISOString().slice(0, 10),
+      time: `${String(v.visitTime.getUTCHours()).padStart(2, '0')}:${String(v.visitTime.getUTCMinutes()).padStart(2, '0')}`,
+      mr: v.mr.fullName,
+      party: label[v.partyType],
+      name: v.doctor?.fullName ?? v.chemist?.name ?? '—',
+      area: v.doctor?.area ?? v.chemist?.city ?? '',
+      purpose: v.purpose ?? '',
+      products: v.products.map((p) => p.medicine.name).join(', '),
+      samples: samples.get(v.id) ?? 0,
+      orderValue: v.orderValue != null ? Number(v.orderValue) : 0,
+      notes: v.discussionNotes ?? v.remarks ?? '',
+    }));
+    const count = (party: string) => rows.filter((r) => r.party === party).length;
+    return {
+      summary: {
+        calls: rows.length,
+        doctorCalls: count('Doctor'),
+        chemistCalls: count('Chemist'),
+        stockistCalls: count('Stockist'),
+        fieldDays: new Set(rows.map((r) => `${r.mr}:${r.date}`)).size,
+        samplesGiven: rows.reduce((sum, r) => sum + r.samples, 0),
+        orderValue: rows.reduce((sum, r) => sum + r.orderValue, 0),
+        plannedCallsMissed: missed,
+      },
+      rows,
+    };
+  }
 }

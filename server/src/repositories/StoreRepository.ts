@@ -36,9 +36,11 @@ export class StoreRepository {
     page: number;
     limit: number;
     search?: string;
-  }): Promise<{ items: MedicalStore[]; total: number }> {
+    type?: MedicalStore['type'];
+  }) {
     const where: Prisma.MedicalStoreWhereInput = {
       deletedAt: null,
+      ...(params.type ? { type: params.type } : {}),
       ...(params.search
         ? {
             OR: [
@@ -57,6 +59,14 @@ export class StoreRepository {
         orderBy: { name: 'asc' },
         skip: (params.page - 1) * params.limit,
         take: params.limit,
+        include: {
+          // The MR whose MSL list has it (at most one active row).
+          assignments: {
+            where: { isActive: true, deletedAt: null },
+            take: 1,
+            select: { mr: { select: { id: true, fullName: true } } },
+          },
+        },
       }),
       this.prisma.medicalStore.count({ where }),
     ]);

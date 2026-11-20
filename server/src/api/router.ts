@@ -19,6 +19,8 @@ import leavesRoutes from '../routes/leaves.routes';
 import ledgerRoutes from '../routes/ledger.routes';
 import medicineIssuesRoutes from '../routes/medicine-issues.routes';
 import medicinesRoutes from '../routes/medicines.routes';
+import mslRequestsRoutes from '../routes/msl-requests.routes';
+import myApprovalsRoutes from '../routes/my-approvals.routes';
 import myDayRoutes from '../routes/my-day.routes';
 import notificationsRoutes from '../routes/notifications.routes';
 import permissionsRoutes from '../routes/permissions.routes';
@@ -64,6 +66,8 @@ export function createApiRouter(): Router {
     ['tour-plans', tourPlansRoutes],
     ['my-day', myDayRoutes],
     ['stores', storesRoutes],
+    ['msl-requests', mslRequestsRoutes],
+    ['my-approvals', myApprovalsRoutes],
     ['medicines', medicinesRoutes],
     ['appointments', appointmentsRoutes],
     ['visits', visitsRoutes],

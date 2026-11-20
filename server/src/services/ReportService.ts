@@ -144,6 +144,11 @@ export class ReportService {
       };
     }
 
+    if (query.type === 'dcr') {
+      const dcr = await this.reports.dcrReport(range.from, range.to, mrScopeFilter);
+      return { type: query.type, range: rangeMeta, summary: dcr.summary, rows: dcr.rows };
+    }
+
     if (query.type === 'doctor-visits') {
       const rows = await this.reports.doctorVisitReport(
         range.from,

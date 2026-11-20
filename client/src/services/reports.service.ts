@@ -8,6 +8,7 @@ export type ReportType =
   | 'mr-performance'
   | 'mr-detail'
   | 'doctor-visits'
+  | 'dcr'
   | 'appointments'
   | 'distributions'
   | 'stock'

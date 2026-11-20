@@ -285,7 +285,8 @@ export class DoctorAssignmentService {
     };
   }
 
-  private async requireAssignableMr(mrId: number) {
+  /** Active MR or a clear error — shared with StoreAssignmentService. */
+  public async requireAssignableMr(mrId: number) {
     const user = await this.prisma.user.findFirst({
       where: { id: mrId, deletedAt: null },
       select: { id: true, fullName: true, role: true, status: true },
@@ -297,8 +298,8 @@ export class DoctorAssignmentService {
     return user;
   }
 
-  /** Name, code and the reporting line above each user (up to RSM level). */
-  private async briefs(ids: Array<number | undefined>, db: Db = this.prisma): Promise<Map<number, MrBrief>> {
+  /** Name, code and the reporting line above each user (up to RSM level). Shared with stores. */
+  public async briefs(ids: Array<number | undefined>, db: Db = this.prisma): Promise<Map<number, MrBrief>> {
     const wanted = [...new Set(ids.filter((id): id is number => id != null))];
     const out = new Map<number, MrBrief>();
     if (wanted.length === 0) return out;

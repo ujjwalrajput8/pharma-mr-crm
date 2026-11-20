@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { VisitService } from '../services/VisitService';
 import { ApiResponse } from '../utils/ApiResponse';
 import type {
+  CreateStoreCallDto,
   BulkVisitDto,
   CorrectVisitDto,
   CreateVisitDto,
@@ -50,6 +51,18 @@ export class VisitController {
       res,
       { ...visit, replayed: result.replayed },
       result.replayed ? 'Visit already saved' : 'Visit logged',
+      result.replayed ? HttpStatus.OK : HttpStatus.CREATED,
+    );
+  };
+
+  public storeCall = async (req: Request, res: Response): Promise<void> => {
+    const actor = this.requireUser(req);
+    const result = await this.visits.recordStoreCall(req.body as CreateStoreCallDto, actor);
+    const visit = await this.visits.get(result.visitId, actor);
+    ApiResponse.success(
+      res,
+      { ...visit, replayed: result.replayed },
+      result.replayed ? 'Call already saved' : 'Call logged',
       result.replayed ? HttpStatus.OK : HttpStatus.CREATED,
     );
   };

@@ -20,6 +20,7 @@ const adminReports: Array<{ value: ReportType; label: string }> = [
   { value: 'monthly', label: 'Monthly Report' },
   { value: 'mr-performance', label: 'MR Performance' },
   { value: 'mr-detail', label: 'MR Detail Report' },
+  { value: 'dcr', label: 'DCR Report (all calls)' },
   { value: 'doctor-visits', label: 'Doctor Visit Report' },
   { value: 'appointments', label: 'Appointment Report' },
   { value: 'distributions', label: 'Medicine Distribution Report' },
@@ -31,6 +32,7 @@ const mrReports: Array<{ value: ReportType; label: string }> = [
   { value: 'daily', label: 'My Daily Report' },
   { value: 'monthly', label: 'My Monthly Report' },
   { value: 'mr-detail', label: 'My Performance Report' },
+  { value: 'dcr', label: 'My DCR Report' },
   { value: 'doctor-visits', label: 'My Visit Report' },
   { value: 'appointments', label: 'My Appointment Report' },
   { value: 'distributions', label: 'My Sample Report' },
@@ -41,7 +43,7 @@ export function ReportsPage() {
   const { can } = useAuth();
   const isAdmin = can('reports:all');
   const options = isAdmin ? adminReports : mrReports;
-  // MR menu "DCR Report" opens `?type=doctor-visits`; an unknown type falls back to the first.
+  // MR menu "DCR Report" opens `?type=dcr`; an unknown type falls back to the first.
   const [params] = useSearchParams();
   const linked = options.find((option) => option.value === params.get('type'))?.value;
   const [type, setType] = useState<ReportType>(linked ?? options[0]?.value ?? 'daily');

@@ -10,6 +10,19 @@ export const VISIT_PURPOSES = [
   'RELATIONSHIP',
   'OTHER',
 ] as const;
+/** Chemist / stockist calls (M2.2). */
+export const STORE_VISIT_PURPOSES = [
+  'ORDER_POB',
+  'STOCK_CHECK',
+  'PRODUCT_AVAILABILITY',
+  'PAYMENT',
+  'STOCK_STATEMENT',
+  'EXPIRY_RETURNS',
+  'RELATIONSHIP',
+  'OTHER',
+] as const;
+export const ALL_VISIT_PURPOSES = [...new Set([...VISIT_PURPOSES, ...STORE_VISIT_PURPOSES])] as [string, ...string[]];
+export const VISIT_PARTIES = ['DOCTOR', 'CHEMIST', 'STOCKIST'] as const;
 /** Bulk is a UI action, not a source — every bulk row is its own DIRECT visit. */
 export const VISIT_SOURCES = ['APPOINTMENT', 'DIRECT'] as const;
 export const INTEREST_LEVELS = ['LOW', 'MEDIUM', 'HIGH'] as const;
@@ -94,6 +107,27 @@ export const createVisitSchema = z
   })
   .superRefine(visitRules);
 
+const orderValueSchema = z.coerce.number().min(0).max(10_000_000);
+
+/** POST /visits/store-call — a chemist or stockist call. No samples; optional order value. */
+export const createStoreCallSchema = z
+  .object({
+    storeId: idSchema,
+    mrId: idSchema.optional(),
+    visitDate: dateOnlySchema,
+    visitTime: clockSchema,
+    purpose: z.enum(STORE_VISIT_PURPOSES).optional(),
+    discussionNotes: z.string().max(5000).optional(),
+    remarks: z.string().max(5000).optional(),
+    orderValue: orderValueSchema.optional(),
+    products: z.array(visitProductSchema).max(30).optional(),
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+    clientUuid: z.string().uuid().optional(),
+  })
+  .strict()
+  .superRefine(visitRules);
+
 /** POST /visits/bulk — one common entry for many doctors. No samples in bulk. */
 export const bulkVisitSchema = z
   .object({
@@ -119,9 +153,11 @@ export const correctVisitSchema = z
     visitTime: clockSchema.optional(),
     checkInTime: clockSchema.nullable().optional(),
     checkOutTime: clockSchema.nullable().optional(),
-    purpose: z.enum(VISIT_PURPOSES).nullable().optional(),
+    /** Checked against the call's party in the service (doctor vs chemist / stockist purposes). */
+    purpose: z.enum(ALL_VISIT_PURPOSES).nullable().optional(),
     discussionNotes: z.string().max(5000).nullable().optional(),
     doctorFeedback: z.string().max(5000).nullable().optional(),
+    orderValue: orderValueSchema.nullable().optional(),
     visitOutcome: z.string().max(100).nullable().optional(),
     nextFollowUp: dateOnlySchema.nullable().optional(),
     remarks: z.string().max(5000).nullable().optional(),
@@ -170,6 +206,7 @@ export const listVisitsQuerySchema = z.object({
   from: dateOnlySchema.optional(),
   to: dateOnlySchema.optional(),
   source: z.enum(VISIT_SOURCES).optional(),
+  partyType: z.enum(VISIT_PARTIES).optional(),
   offList: booleanQuery,
   /** With offList: false = still waiting for the manager. */
   reviewed: booleanQuery,
@@ -184,6 +221,7 @@ export const lookupDoctorsQuerySchema = z.object({
 
 export type CreateVisitDto = z.infer<typeof createVisitSchema>;
 export type BulkVisitDto = z.infer<typeof bulkVisitSchema>;
+export type CreateStoreCallDto = z.infer<typeof createStoreCallSchema>;
 export type CorrectVisitDto = z.infer<typeof correctVisitSchema>;
 export type SampleCorrectionDto = z.infer<typeof sampleCorrectionSchema>;
 export type ReviewVisitDto = z.infer<typeof reviewVisitSchema>;
